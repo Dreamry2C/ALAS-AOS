@@ -365,7 +365,7 @@
     <string name="dialog_shizuku_switch_to_root">Switch to Root</string>
     <string name="dialog_shizuku_skip_check">Skip check (not recommended)</string>
     <string name="dialog_shizuku_not_running_title">Shizuku Not Running</string>
-    <string name="dialog_shizuku_not_running_message">Shizuku is installed but the service is not running. Please open Shizuku and start the service.</string>
+    <string name="dialog_shizuku_not_running_message">Shizuku is installed but the service is not running. It must be reactivated after every phone reboot: open shizuku-m and tap Start (no WLAN or computer needed), then return to this app and it will continue automatically.</string>
     <string name="dialog_shizuku_open_app">Open Shizuku</string>
     <string name="dialog_sui_detected_title">Sui Detected</string>
     <string name="dialog_sui_detected_message">Sui is providing the Shizuku service with root privileges. This app may not work correctly; please verify by actual testing.</string>

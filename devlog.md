@@ -4,6 +4,12 @@
 
 ## 未发版
 
+### 2026-09-16 · M3-c 收官 ✅：生命周期防护压测全绿（杀 Java 进程 ≤3s 全树自尽）+ 重启引导文案对齐决策 #11
+
+- **划卡归零正赛（DoD 核心项）**：`run-as kill <appPid>` 只杀 Java 进程（模拟最近任务划卡的最坏面——native 子树不随包名被杀），**≤3 秒内 proot/wrapper/gui 全灭**——stdin 管道 EOF → wrapper 监控线程 `_cleanup` → 杀 runner+gui 双进程组 → proot tracee 尽失退出。叠加 M3-b 的 `am force-stop` 零残留（uid 级全杀），两条死亡路径都闭环。
+- **重启引导（roadmap 阶段三第 5 条）**：机制沿用 M2-d readiness 弹窗（NotRunning→打开 shizuku-m→NeedAuth→请求授权→自动 bind 建屏，当时 DoD 已实证）；本次把 NotRunning 文案从通用「打开 Shizuku 启动服务」升级为**决策 #11 的每次开机 30 秒手动链**（「每次重启手机后都需要重新激活：打开 shizuku-m 点『启动』（无需连接 WLAN 或电脑），启动成功后返回本应用即可自动继续」，EN 同步）。**真机重启端到端验证待用户授权**（不私自私下重启手机）。
+- **结论**：阶段三 DoD 中「划掉 App 无残留 Python/proot/桥进程」✅；「开屏热更新→外部浏览器开 22267」✅（M3-b）；「重启手机经引导恢复可挂机状态」=机制+文案落地，实测待用户。
+
 ### 2026-09-16 · M3-b 收官 ✅：FGS 拉 proot + 自愈清锁 + 热更新（快进路径）+ wrapper 监管 WebUI 真机全绿
 
 - **链路（roadmap 阶段三第 3 条全落地）**：AppRoot 侦测 Provision Ready → `proot/ProotHost`（新包）→ 自愈清锁（proot-tmp 整目录重来 + .git/*.lock + reloadalas）→ 写死 DNS（`etc/resolv.conf` 烘焙是悬空软链，删链写 AliDNS）→ `AlasOverlay`（资产 `alas/` 按字节幂等铺 /opt/alas）→ seed_config（maaal 桥配置播种 alas.json）→ `AlasUpdater`（proot 内跑 `seeds/maaal_update.sh`）→ ProcessBuilder 拉起 `libproot.so … python3 wrapper.py` 长跑会话。
