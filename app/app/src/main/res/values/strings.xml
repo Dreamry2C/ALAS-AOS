@@ -150,6 +150,13 @@
     <string name="overlay_host_privileged">特权进程：%1$s</string>
     <string name="overlay_host_bridge">桥服务：%1$s</string>
     <string name="overlay_host_display">虚拟屏：%1$s</string>
+    <string name="overlay_alas_status">ALAS 调度器：%1$s</string>
+    <string name="overlay_alas_running">运行中 · pid %1$d</string>
+    <string name="overlay_alas_stopped">已停止</string>
+    <string name="overlay_alas_unreachable">环境未就绪</string>
+    <string name="overlay_alas_start">开始挂机</string>
+    <string name="overlay_alas_stop">停止挂机</string>
+    <string name="overlay_alas_log_empty">暂无日志</string>
     <string name="host_state_connected">已连接</string>
     <string name="host_state_disconnected">未连接</string>
     <string name="host_state_ok">正常</string>

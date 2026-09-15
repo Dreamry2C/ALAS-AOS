@@ -154,6 +154,13 @@
     <string name="overlay_host_privileged">Privileged process: %1$s</string>
     <string name="overlay_host_bridge">Bridge: %1$s</string>
     <string name="overlay_host_display">Virtual display: %1$s</string>
+    <string name="overlay_alas_status">ALAS scheduler: %1$s</string>
+    <string name="overlay_alas_running">Running · pid %1$d</string>
+    <string name="overlay_alas_stopped">Stopped</string>
+    <string name="overlay_alas_unreachable">Environment not ready</string>
+    <string name="overlay_alas_start">Start ALAS</string>
+    <string name="overlay_alas_stop">Stop ALAS</string>
+    <string name="overlay_alas_log_empty">No logs yet</string>
     <string name="host_state_connected">connected</string>
     <string name="host_state_disconnected">disconnected</string>
     <string name="host_state_ok">OK</string>

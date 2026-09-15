@@ -4,6 +4,12 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-16] wrapper /status 时间戳是 guest 本地时（proot 无 TZ=UTC）——比设备 CST 慢 8h，别误判"旧会话复活"
+
+- **现象**：重装包装机后 1 分钟 curl `/status`，`gui_started_at=2026-09-15T20:08:59`（昨天！），第一反应"旧 proot 会话逃过 install -r 的杀进程，划卡归零结论要翻案"。
+- **根本原因**：proot 会话环境只设 `LANG=C.UTF-8` 无 `TZ`，guest 内 `datetime.fromtimestamp()` 按 UTC 格式化；设备是 CST(UTC+8)，所以"昨天 20:08"其实就是"刚才 04:08 CST"。ALAS 日志行时间戳同理全慢 8h。
+- **解决方案**：读 guest 侧时间先换算 UTC；判会话新旧看 **ps 进程树**（proot 的父 pid = 当前 app pid 即新会话），别看绝对时间。生产无副作用（内部逻辑全部用单调时钟/时间戳差值），纯排障心智陷阱。
+
 ## [2026-09-15] run-as（runas_app 域）禁止 socket——真机 harness 要用 shell 域，不是 run-as
 
 - **现象**：`run-as com.maaal.spikea` 起的 shell 里，proot 客户机进程 `socket()` 直接 `PermissionError [Errno 1]`（TCP/UDP/UNIX 全灭）；但 `id` 明明显示带 `3003(inet)` 组。
