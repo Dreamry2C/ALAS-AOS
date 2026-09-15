@@ -12,16 +12,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,14 +28,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maafw.BuildConfig
 import com.aliothmoon.maafw.R
+import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
+import org.koin.compose.koinInject
 
-/** ALAS WebUI：Termux 内 pywebio（gui.py）监听的本机回环地址 */
+/** ALAS WebUI：App 内置环境监听的本机回环地址 */
 private const val ALAS_WEBUI_URL = "http://127.0.0.1:22267"
 
 /**
@@ -61,21 +62,31 @@ private const val SCOPE_HEIGHT_FIX_JS =
     """
 
 /**
- * ALAS tab：全屏 WebView 容器，承载 Termux 里跑的 ALAS WebUI
+ * ALAS tab：全屏 WebView 容器，承载 App 内置环境里的 ALAS WebUI
  *
  * [active] 标记当前是否为 pager 可见页：ALAS 页不在前台时（pager 仍预组合着它）
  * 不该抢返回键。WebUI 历史能后退就 goBack，否则把返回键让回原有导航逻辑
+ *
+ * 本页可见且特权连接就绪时自动补一次「开始」链路建虚拟屏（HostState 内幂等，
+ * 断线重连后随 privilegedConnected 翻转会再触发）
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun AlasScreen(
     active: Boolean,
     modifier: Modifier = Modifier,
+    hostState: HostState = koinInject(),
 ) {
     var loadFailed by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
-    val context = LocalContext.current
+    val hostSnapshot by hostState.snapshot.collectAsStateWithLifecycle()
+
+    LaunchedEffect(active, hostSnapshot.privilegedConnected) {
+        if (active && hostSnapshot.privilegedConnected) {
+            hostState.ensureEnvironmentStarted()
+        }
+    }
 
     BackHandler(enabled = active && canGoBack) {
         webView?.let {
@@ -159,29 +170,13 @@ fun AlasScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Spacer(Modifier.height(MaaDesignTokens.Spacing.lg))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
+                Button(
+                    onClick = {
+                        loadFailed = false
+                        webView?.loadUrl(ALAS_WEBUI_URL)
+                    },
                 ) {
-                    // 拉起 Termux 主 activity；setup_env 装过 .bashrc 钩子后，
-                    // Termux 一打开即自动起 sshd + WebUI（wake-lock），用户无需敲命令
-                    OutlinedButton(
-                        onClick = {
-                            val intent = context.packageManager.getLaunchIntentForPackage("com.termux")
-                            if (intent != null) {
-                                context.startActivity(intent)
-                            }
-                        },
-                    ) {
-                        Text(stringResource(R.string.alas_webui_start_termux))
-                    }
-                    Button(
-                        onClick = {
-                            loadFailed = false
-                            webView?.loadUrl(ALAS_WEBUI_URL)
-                        },
-                    ) {
-                        Text(stringResource(R.string.alas_webui_retry))
-                    }
+                    Text(stringResource(R.string.alas_webui_retry))
                 }
             }
         }

@@ -14,10 +14,7 @@ import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.aliothmoon.maafw.domain.RunMode
 import com.aliothmoon.maafw.overlay.OverlayViewModelOwner
-import com.aliothmoon.maafw.runner.RunnerPhase
-import com.aliothmoon.maafw.runner.RunnerPort
-import com.aliothmoon.maafw.runner.isBusy
-import com.aliothmoon.maafw.runner.toLogText
+import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.settings.AppSettingsGateway
 import com.aliothmoon.maafw.theme.MaaFwTheme
 import kotlinx.coroutines.CoroutineScope
@@ -32,12 +29,12 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 /**
- * 后台模式的运行期屏保
+ * 后台模式的环境期屏保
  *
  */
 class ScreenSaverOverlayManager(
     private val context: Context,
-    private val runnerPort: RunnerPort,
+    private val hostState: HostState,
     private val appSettings: AppSettingsGateway,
 ) {
 
@@ -51,22 +48,18 @@ class ScreenSaverOverlayManager(
     private val viewModelOwner = OverlayViewModelOwner()
 
     private var composeView: ComposeView? = null
-    private var phaseJob: Job? = null
-    private var logJob: Job? = null
+    private var hostJob: Job? = null
 
     private val _isShowing = MutableStateFlow(false)
     val isShowing: StateFlow<Boolean> = _isShowing.asStateFlow()
-
-    /** 屏保上滚动那一行；只保最新一条，历史留在运行日志里 */
-    private val latestLog = MutableStateFlow<String?>(null)
 
     fun setup() {
         scope.launch {
             appSettings.runMode.collect { mode ->
                 when (mode) {
-                    RunMode.BACKGROUND -> observePhase()
+                    RunMode.BACKGROUND -> observeHost()
                     RunMode.FOREGROUND -> {
-                        stopObservingPhase()
+                        stopObservingHost()
                         hide()
                     }
                 }
@@ -74,30 +67,30 @@ class ScreenSaverOverlayManager(
         }
     }
 
-    // ── 执行态 ──
+    // ── 环境态 ──
 
-    private fun observePhase() {
-        if (phaseJob != null) return
-        phaseJob = scope.launch {
-            var previous: RunnerPhase = runnerPort.state.value.phase
-            runnerPort.state.collect { state ->
-                val current = state.phase
+    private fun observeHost() {
+        if (hostJob != null) return
+        hostJob = scope.launch {
+            var wasUp = hostState.snapshot.value.environmentUp
+            hostState.snapshot.collect { snapshot ->
+                val up = snapshot.environmentUp
                 when {
                     // 开关只管「自动盖」；手动盖上的那次不受它影响
-                    !previous.isBusy && current.isBusy ->
+                    !wasUp && up ->
                         if (appSettings.screenSaverEnabled.value) show()
 
-                    // 结束就撤，别让用户回来面对一块黑屏还得先滑一下
-                    previous.isBusy && !current.isBusy -> hide()
+                    // 环境撤了就收，别让用户回来面对一块黑屏还得先滑一下
+                    wasUp && !up -> hide()
                 }
-                previous = current
+                wasUp = up
             }
         }
     }
 
-    private fun stopObservingPhase() {
-        phaseJob?.cancel()
-        phaseJob = null
+    private fun stopObservingHost() {
+        hostJob?.cancel()
+        hostJob = null
     }
 
     // ── 显隐 ──
@@ -115,7 +108,6 @@ class ScreenSaverOverlayManager(
             .onSuccess {
                 composeView = view
                 viewModelOwner.start()
-                startLogRelay()
                 _isShowing.value = true
                 Timber.d("Screen saver shown")
             }
@@ -127,21 +119,10 @@ class ScreenSaverOverlayManager(
         val view = composeView ?: return@withContext
         composeView = null
         _isShowing.value = false
-        logJob?.cancel()
-        logJob = null
-        // 清掉，否则下一轮盖上的瞬间显示的是上一轮的尾句
-        latestLog.value = null
         viewModelOwner.stop()
         runCatching { windowManager.removeView(view) }
             .onSuccess { Timber.d("Screen saver dismissed") }
             .onFailure { Timber.e(it, "Failed to remove screen saver") }
-    }
-
-    private fun startLogRelay() {
-        logJob?.cancel()
-        logJob = scope.launch {
-            runnerPort.events.collect { latestLog.value = it.toLogText() }
-        }
     }
 
     private fun createView(): ComposeView = ComposeView(context).apply {
@@ -153,7 +134,8 @@ class ScreenSaverOverlayManager(
             val themeStyle by appSettings.themeStyle.collectAsState()
             MaaFwTheme(themeStyle = themeStyle, darkTheme = true) {
                 ScreenSaverView(
-                    latestLog = latestLog,
+                    // 桥没有日志通道，恒 null：View 落回 screensaver_idle 兜底文案
+                    latestLog = MutableStateFlow<String?>(null),
                     onUnlock = { scope.launch { hide() } },
                 )
             }

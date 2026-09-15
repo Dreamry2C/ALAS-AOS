@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -31,29 +30,23 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maafw.R
-import com.aliothmoon.maafw.runner.RunnerPhase
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaTheme
 
 /**
- * 前台模式的常驻悬浮球
+ * 常驻悬浮球：环境活着期间的唯一入口
  *
- * 尺寸压到 32dp：它盖在目标应用画面上，再大就开始妨碍识别区域了
- * 运行中做呼吸动画——静止的小圆点在满屏画面里根本注意不到
+ * 尺寸压到 32dp：它盖在其他应用画面上，再大就开始碍事了
+ * 环境活着时做呼吸动画——静止的小圆点在满屏画面里根本注意不到
  */
 @Composable
 fun FloatBall(
-    phase: RunnerPhase,
+    running: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = MaaTheme.palette
-    val target = when (phase) {
-        RunnerPhase.Running -> palette.success.content
-        RunnerPhase.Preparing, RunnerPhase.Stopping -> palette.warning.content
-        is RunnerPhase.Unavailable -> MaterialTheme.colorScheme.error
-        RunnerPhase.Idle -> MaterialTheme.colorScheme.primary
-    }
+    val target = if (running) palette.success.content else MaterialTheme.colorScheme.primary
     val color by animateColorAsState(target.copy(alpha = 0.85f), tween(300))
 
     val breathing by rememberInfiniteTransition().animateFloat(
@@ -63,13 +56,7 @@ fun FloatBall(
     )
 
     val description = stringResource(
-        when (phase) {
-            RunnerPhase.Idle -> R.string.overlay_ball_idle
-            RunnerPhase.Preparing -> R.string.overlay_ball_preparing
-            RunnerPhase.Running -> R.string.overlay_ball_running
-            RunnerPhase.Stopping -> R.string.overlay_ball_stopping
-            is RunnerPhase.Unavailable -> R.string.overlay_ball_unavailable
-        },
+        if (running) R.string.overlay_ball_running else R.string.overlay_ball_idle,
     )
 
     Surface(
@@ -78,20 +65,16 @@ fun FloatBall(
             .size(BALL_SIZE)
             .clip(CircleShape)
             .border(MaaDesignTokens.Separator.thickness, Color.White.copy(alpha = 0.15f), CircleShape)
-            .then(if (phase == RunnerPhase.Running) Modifier.alpha(breathing) else Modifier)
+            .then(if (running) Modifier.alpha(breathing) else Modifier)
             .semantics { contentDescription = description },
         shape = CircleShape,
         color = color,
-        // 球盖在目标应用上需要体量感；不跟 Semi 卡片的 0 elevation
+        // 球盖在其他应用上需要体量感；不跟 Semi 卡片的 0 elevation
         shadowElevation = 1.dp,
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Icon(
-                imageVector = when (phase) {
-                    RunnerPhase.Running -> Icons.Outlined.PlayArrow
-                    is RunnerPhase.Unavailable -> Icons.Outlined.Warning
-                    else -> Icons.Outlined.Check
-                },
+                imageVector = if (running) Icons.Outlined.PlayArrow else Icons.Outlined.Check,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(MaaDesignTokens.IconSize.sm),

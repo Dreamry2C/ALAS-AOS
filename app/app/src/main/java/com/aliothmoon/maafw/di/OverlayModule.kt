@@ -13,7 +13,7 @@ val overlayModule = module {
     single {
         OverlayController(
             context = androidContext() as android.app.Application,
-            runnerPort = get(),
+            hostState = get(),
             appSettings = get(),
             borderOverlayManager = get(),
             viewModelOwner = get(),
@@ -23,7 +23,7 @@ val overlayModule = module {
     single {
         ScreenSaverOverlayManager(
             context = androidContext(),
-            runnerPort = get(),
+            hostState = get(),
             appSettings = get(),
         )
     }

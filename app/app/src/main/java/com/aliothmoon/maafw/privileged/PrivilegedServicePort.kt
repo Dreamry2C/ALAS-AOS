@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
  * 两者的失败原因与恢复手段都不一样，合成一个接口之后调用方分不清该重授还是该重连
  *
  * 生产实现是 [RemoteServiceManager]（它持 binder 与 linkToDeath，本就该是单例），
- * 由 Koin 显式注入，不做默认参数：默认值挂生产实现会让 RunnerPort
+ * 由 Koin 显式注入，不做默认参数：默认值挂生产实现会让接口
  * 看着可替换其实不可能替换
  */
 interface PrivilegedServicePort {
