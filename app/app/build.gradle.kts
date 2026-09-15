@@ -9,6 +9,14 @@ plugins {
 android {
     namespace = "com.aliothmoon.maafw"
 
+    sourceSets {
+        named("main") {
+            // proot 九件套（libproot/libproot-loader/libtalloc/busybox/shim 等，Spike A 钉版产物）；
+            // 与 src/main/jniLibs/（MaaFramework 拉取件，gitignore）分开放，本目录是构建输入要入库
+            jniLibs.srcDir("src/main/prootLibs")
+        }
+    }
+
     defaultConfig {
         externalNativeBuild {
             cmake {

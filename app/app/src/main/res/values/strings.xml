@@ -135,6 +135,7 @@
     <string name="notification_host_title">ALAS 运行环境守护中</string>
     <string name="notification_host_content_ok">虚拟屏 #%1$d · 桥服务正常</string>
     <string name="notification_host_content_degraded">虚拟屏 #%1$d · 桥服务不可达</string>
+    <string name="notification_host_content_proot">内置 ALAS 环境运行中（未建虚拟屏）</string>
 
     <!-- 悬浮控制层 -->
     <string name="accessibility_service_description">前台模式下同时按音量 + 与音量 − 唤起控制面板。只拦按键，不读取屏幕内容</string>
@@ -268,6 +269,10 @@
     <!-- ALAS tab：WebUI 容器 -->
     <string name="alas_webui_not_running">ALAS 服务由 App 内置环境提供，首次启动需完成初始化；若长时间未恢复，请检查运行环境后重试</string>
     <string name="alas_webui_retry">重试连接</string>
+    <string name="proot_phase_preparing">正在准备运行环境…</string>
+    <string name="proot_phase_updating">正在热更新 ALAS…</string>
+    <string name="proot_phase_starting">正在启动 ALAS 服务…</string>
+    <string name="proot_phase_failed">ALAS 环境启动失败：%1$s</string>
 
     <!-- option 编辑器 -->
     <string name="option_input_invalid">输入不合法</string>

@@ -14,33 +14,39 @@ import androidx.core.app.NotificationCompat
 import com.aliothmoon.maafw.MainActivity
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.constant.DefaultDisplayConfig
+import com.aliothmoon.maafw.proot.ProotHost
+import com.aliothmoon.maafw.proot.ProotSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 
 /**
- * 虚拟屏存续期间把 app 进程钉成前台
+ * 虚拟屏存续期间 + proot 会话（ALAS 内置环境）活跃期间把 app 进程钉成前台
  *
  * 不是为了显示状态——是为了活着：app 进程一死，特权进程的看门狗随即自杀并释放虚拟屏，
+ * proot 长跑会话也随之失去父进程（wrapper 靠 stdin 管道破裂自尽，但 WebView/控制面已没人持有），
  * 表现成「环境跑一半自己没了」。实测 MIUI 的 ProcessManager 会对 Adj=905 的空进程
  * 直接 force-stop（`SwipeUpClean: force-stop <pkg> Adj=905`），前台服务是唯一挡得住的一层
  *
- * 观察源是 [HostState.snapshot]：虚拟屏在（displayId 有效）就常驻，屏撤了自己走。
+ * 观察源是 [HostState.snapshot] 与 [ProotHost.state]：虚拟屏在（displayId 有效）或
+ * proot 会话活跃（准备/更新/启动/运行）就常驻，两边都撤了自己走。
  * 桥可达性只上文案，不作为退出判据——桥短暂抖动不该把保活撤掉
  *
  * 只提供 [start] 不提供外部 stop：`startForegroundService` 之后若 `stopService` 抢在
  * onCreate 之前到达，系统会因 startForeground 未调用直接杀进程。终态退出由本服务自己
- * 观察 [HostState.snapshot] 完成
+ * 观察两份状态完成
  */
 class RunForegroundService : Service() {
 
     private val hostState: HostState by inject()
+    private val prootHost: ProotHost by inject()
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var observeJob: Job? = null
@@ -51,9 +57,9 @@ class RunForegroundService : Service() {
         super.onCreate()
         ensureChannel()
         // 必须先 startForeground 再判终态：慢一步就是 ForegroundServiceDidNotStartInTimeException
-        val initial = hostState.snapshot.value
-        startAsForeground(buildNotification(initial))
-        if (initial.vdDisplayId == DefaultDisplayConfig.DISPLAY_NONE) {
+        val initial = hostState.snapshot.value to prootHost.state.value
+        startAsForeground(buildNotification(initial.first, initial.second))
+        if (isTerminal(initial.first, initial.second)) {
             stopNow()
             return
         }
@@ -63,8 +69,9 @@ class RunForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // 系统可能只走 onStartCommand；FGS 提升要在这里再保一次
         val snapshot = hostState.snapshot.value
-        startAsForeground(buildNotification(snapshot))
-        if (snapshot.vdDisplayId == DefaultDisplayConfig.DISPLAY_NONE) {
+        val proot = prootHost.state.value
+        startAsForeground(buildNotification(snapshot, proot))
+        if (isTerminal(snapshot, proot)) {
             stopNow()
         } else {
             observe()
@@ -84,14 +91,18 @@ class RunForegroundService : Service() {
     }
 
     private suspend fun observeSnapshot() {
-        hostState.snapshot.collectLatest { snapshot ->
-            if (snapshot.vdDisplayId == DefaultDisplayConfig.DISPLAY_NONE) {
+        combine(hostState.snapshot, prootHost.state, ::Pair).collectLatest { (snapshot, proot) ->
+            if (isTerminal(snapshot, proot)) {
                 stopNow()
                 return@collectLatest
             }
-            notify(buildNotification(snapshot))
+            notify(buildNotification(snapshot, proot))
         }
     }
+
+    /** 终态：虚拟屏撤了且 proot 会话也不在活跃阶段，保活没有存在意义 */
+    private fun isTerminal(snapshot: HostSnapshot, proot: ProotSnapshot): Boolean =
+        snapshot.vdDisplayId == DefaultDisplayConfig.DISPLAY_NONE && !proot.sessionActive
 
     private fun stopNow() {
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -120,16 +131,22 @@ class RunForegroundService : Service() {
         }
     }
 
-    private fun buildNotification(snapshot: HostSnapshot): Notification {
-        val contentRes = if (snapshot.bridgeReachable) {
-            R.string.notification_host_content_ok
+    private fun buildNotification(snapshot: HostSnapshot, proot: ProotSnapshot): Notification {
+        val content = if (snapshot.vdDisplayId != DefaultDisplayConfig.DISPLAY_NONE) {
+            val contentRes = if (snapshot.bridgeReachable) {
+                R.string.notification_host_content_ok
+            } else {
+                R.string.notification_host_content_degraded
+            }
+            getString(contentRes, snapshot.vdDisplayId)
         } else {
-            R.string.notification_host_content_degraded
+            // 只剩 proot 会话在岗（内置 ALAS 环境跑着但还没建屏）
+            getString(R.string.notification_host_content_proot)
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.notification_host_title))
-            .setContentText(getString(contentRes, snapshot.vdDisplayId))
+            .setContentText(content)
             .setContentIntent(contentIntent())
             .setOngoing(true)
             .setRequestPromotedOngoing(notificationManager.canRequestPromotedOngoing())

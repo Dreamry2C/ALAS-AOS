@@ -208,3 +208,26 @@
 - **现象**（提交前自查拦下，未出货）：M3-a 解压流水线初版把 rootfs 解到 `AppPaths.ROOT`（`getExternalFilesDir(null)` = /sdcard/Android/data/...）。
 - **根本原因**：① /sdcard 是 FUSE 模拟存储，**不支持 `Os.symlink`**——ubuntu-base 有 740 个符号链接，第一个就炸（EPERM）；② /sdcard 挂载 noexec，guest 二进制无处可跑；③ Spike A 已实证：targetSdk 35 上 app 直接 `execve(filesDir/...)` 被拒，但 **proot 从内部 filesDir 跑 guest 全 PASS**——内部 filesDir（/data/data/<pkg>/files）才是合法位置。
 - **解决方案**：解压目标改 `context.filesDir/rootfs`；日志/导出继续用外部私有目录（AppPaths.ROOT）不受影响。判据速查：凡是"要 exec 或要 symlink"的数据，一律内部 filesDir；外部存储只放纯数据。
+
+## [2026-09-16] 「服务就绪」判据必须打到真实服务端口：wrapper 活着 ≠ WebUI 能服务
+
+- **现象**：M3-b 首版 ProotHost 以 wrapper(22400) 可达即置 RUNNING → AlasScreen 自动重载 WebView → 卡进错误页；彼时 gui.py 进程虽在但 uvicorn 还在 import（需数秒），22267 connection refused。
+- **根本原因**：wrapper 先于 gui 就绪；`gui_alive=true` 只表示子进程活着，不代表端口在听。
+- **解决方案**：RUNNING 语义改为 **wrapper /status 与 WebUI 首页双 200**（`awaitServices` 双探）；状态机里的"就绪"永远锚定最终用户打的那个端口。同类教训通用：任何"依赖服务就绪"判定，探针必须打到最后一环。
+
+## [2026-09-16] git.lyoko.io 慢网实测 83KB/s：深度 shallow fetch 不能当启动阻塞，快进路径必须零下载
+
+- **现象**：M3-b 首跑热更新 `git fetch --depth 50`（9675 objects）在设备 WiFi 下 ~83KB/s，撞 240s 超时被杀；浅克隆 fetch **不可续传**，每次重试从零开始——慢网下永远更新不完。
+- **根本原因**：ALAS 树大（资产多），depth 50 首包百 MB 级；阻塞式热更新在弱网退化成"每次启动白等 4 分钟"。
+- **解决方案**：`maaal_update.sh` 加 **ls-remote 快进路径**——先 `git ls-remote`（秒级）比对远端 HEAD 与本地 commit（state 文件/BUILD_MANIFEST 钉版），一致直接 UNCHANGED 零下载（真机二启 5s 到 wrapper 就绪）；首次真更新降级 `--depth 1` 单提交树，后续 fetch 按需加深。断网/超时照旧降级不阻塞。弱网大更新续传/后台化留阶段五容灾课题。
+
+## [2026-09-16] app/.gitignore 的 jniLibs 排除会误伤自建 native 库：proot 件移 prootLibs + srcDir
+
+- **现象**：proot 九件套拷入 `app/src/main/jniLibs/` 后 git 完全看不到（`git check-ignore` 命中 `app/.gitignore:41`）。
+- **根本原因**：该规则为 MaaFramework 拉取件（`scripts/setup_maa_framework.py` 产物）而设，按目录整棵排除；目录级排除无法用 `!` 反向包含其子项。
+- **解决方案**：自建钉版产物移 `app/app/src/main/prootLibs/`，`build.gradle.kts` 加 `jniLibs.srcDir("src/main/prootLibs")` 并入打包（APK 内 `lib/arm64-v8a/libproot.so` 已核）；规则边界=拉取件 jniLibs 不入库、构建输入 prootLibs 必入库。
+
+## [2026-09-16] adb 安装链两坑：管道退出码被 tail 吞掉 + adb 不吃 MSYS 路径
+
+- **现象**：① `adb install -r <apk> | tail -1 && am start …`——install 失败（stat 不到文件）但管道退出码是 tail 的 0，`am start` 照跑，旧包被重启造成"新代码已上机"假象；② `adb install /d/VSCodeCache/...` 报 `failed to stat`——Windows adb.exe 不解析 MSYS 挂载路径。
+- **解决方案**：安装命令独立成行、不看管道退出码（判据=输出含 `Success`）；给 Windows 侧工具（adb/python/gradle）一律传 `D:\...` 或 `D:/...` 形式路径（AGENTS.md"只吃 Windows 路径"的又一实例）；`cd app` 后相对路径会叠成 `app/app/app/...`，跨目录操作用绝对路径。

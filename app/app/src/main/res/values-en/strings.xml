@@ -139,6 +139,7 @@
     <string name="notification_host_title">Guarding ALAS environment</string>
     <string name="notification_host_content_ok">Virtual display #%1$d · bridge OK</string>
     <string name="notification_host_content_degraded">Virtual display #%1$d · bridge unreachable</string>
+    <string name="notification_host_content_proot">Built-in ALAS environment running (no virtual display)</string>
 
     <!-- Floating control layer -->
     <string name="accessibility_service_description">Press volume up and down together to open the control panel in primary-display mode. Only key events are filtered; screen content is never read.</string>
@@ -272,6 +273,10 @@
     <!-- ALAS tab: WebUI container -->
     <string name="alas_webui_not_running">ALAS is served by the app\'s built-in environment. The first launch needs initialization; if it stays down, check the runtime environment and retry</string>
     <string name="alas_webui_retry">Retry connection</string>
+    <string name="proot_phase_preparing">Preparing runtime environment…</string>
+    <string name="proot_phase_updating">Hot-updating ALAS…</string>
+    <string name="proot_phase_starting">Starting ALAS service…</string>
+    <string name="proot_phase_failed">Failed to start ALAS environment: %1$s</string>
 
     <!-- Option editor -->
     <string name="option_input_invalid">Invalid input</string>

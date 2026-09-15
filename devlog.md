@@ -4,6 +4,17 @@
 
 ## 未发版
 
+### 2026-09-16 · M3-b 收官 ✅：FGS 拉 proot + 自愈清锁 + 热更新（快进路径）+ wrapper 监管 WebUI 真机全绿
+
+- **链路（roadmap 阶段三第 3 条全落地）**：AppRoot 侦测 Provision Ready → `proot/ProotHost`（新包）→ 自愈清锁（proot-tmp 整目录重来 + .git/*.lock + reloadalas）→ 写死 DNS（`etc/resolv.conf` 烘焙是悬空软链，删链写 AliDNS）→ `AlasOverlay`（资产 `alas/` 按字节幂等铺 /opt/alas）→ seed_config（maaal 桥配置播种 alas.json）→ `AlasUpdater`（proot 内跑 `seeds/maaal_update.sh`）→ ProcessBuilder 拉起 `libproot.so … python3 wrapper.py` 长跑会话。
+- **热更新设计定型**：`/opt/alas` 烘焙时 `.git` 被剔除（build-rootfs.sh:277），首次更新=git init + fetch；脚本协议 `UPDATED/UNCHANGED/FAILED` 三态单行，App 降级不阻塞。**ls-remote 快进路径**（先 60s `git ls-remote` 取远端 HEAD，一致则零下载）——真机二启 **5 秒** 到 wrapper 就绪（对比首跑深度 fetch 83KB/s 撞 240s 超时，见 debug.md 新坑）；首次真更新降级为 `--depth 1` 单提交树。UPDATED 后 App 重放 overlay（patches/module + patches/assets + rpc.py）+ 重跑 assets_fix（幂等 + 漂移自检，Button 找不到非零退出→警告"建议重下整包"不阻塞）。
+- **wrapper.py 升格为 WebUI 监管者**：spawn gui.py 子进程（独立进程组，输出 → `log/gui.out`），崩溃自动重拉（退避 5s→60s，活过 5 分钟复位），`_cleanup` 先置 `_closing` 再杀 runner+gui 双进程组；`/status` 增 gui_alive/gui_pid。stdin 管道破裂自尽链路不变（M3-c 正赛）。
+- **FGS 语义扩展**：RunForegroundService 观察 HostState.snapshot **combine** ProotHost.state——虚拟屏在**或** proot 会话活跃（PREPARING/UPDATING/STARTING/RUNNING）即钉前台；新增通知文案「内置 ALAS 环境运行中（未建虚拟屏）」。
+- **真机验证（HONOR PPG-AN00）**：首跑热更新超时降级→会话照常起；二启 5s 快进（`.maaal_alas_commit`=92c07aa 与远端一致）；wrapper `/status` gui_alive=true；WebUI 22267 HTTP 200（PyWebIO 页）；config/alas.json 桥配置五键正确；FGS id=1001 在岗；**`am force-stop` 后 proot/python/gui 零残留**（DoD 划卡项提前实证）；杀掉 gui 后 wrapper 10s 退避重拉成功（新 pid，WebUI 复 200）；**WebView 开屏自动载入 ALAS 控制台**（截图 `.tmp/m3b-screen2.png`）。
+- **工程修正三则（均入 debug.md）**：① RUNNING 语义必须=wrapper+WebUI 双端口可达，否则 WebView 自动重载抢在 uvicorn import 前几秒吃 connection refused 卡死错误页；② jniLibs 被 app/.gitignore 排除（MaaFramework 拉取件规则）→ proot 九件套移 `src/main/prootLibs/` + sourceSets srcDir 入库；③ adb 安装链 `install | tail && …` 的退出码是 tail 的（失败被吞）+ adb 只吃 Windows 路径。
+- **jniLibs 九件套入库**（`app/app/src/main/prootLibs/arm64-v8a/`，3.9MB，Spike A 钉版：libproot/libproot-loader/libtalloc/libbusybox(+_app)/libspike_shim/libandroid-selinux/libandroid-shmem/libpcre2-8）。
+- **双头管理（WebUI 启停按钮 vs wrapper/悬浮窗）按 Spike D 建议留阶段四决策**，devlog 与 wrapper docstring 均已标注；M1-d harness 后台任务已停（22267 让位生产会话），油数验收改走生产链。
+
 ### 2026-09-16 · M3-a 收官 ✅：首启 rootfs 解压流水线（进度条门）真机全绿 + 幻影键修正
 
 - **代码（`f8d8cbe`）**：`provision/RootfsProvisioner`（状态机 Checking/NotBundled/LowDisk/Extracting/Ready/Failed）+ `ui/setup/ProvisionScreen` + AppRoot 门（未 Ready 整屏接管，开发包未内置可跳过）+ `di/ProvisionModule`。真机：~90s 解出 971MB（315MB 压缩包），进度条平滑，二启秒过门。
