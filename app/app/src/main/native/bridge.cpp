@@ -19,6 +19,23 @@ static jobject nativeGetFrameBufferBitmap(JNIEnv *env, jclass clazz) {
     return CreateFrameBufferBitmap(env);
 }
 
+static jbyteArray nativeGetFrameBufferBytes(JNIEnv *env, jclass clazz) {
+    (void) clazz;
+    FrameInfo frame = GetLockedPixels();
+    if (!frame.data || frame.length == 0) {
+        UnlockPixels(frame);
+        return nullptr;
+    }
+    // 与 CreateFrameBufferBitmap 同一意图：持锁时间压进一次拷贝，拷完立即解锁
+    jbyteArray bytes = env->NewByteArray(static_cast<jsize>(frame.length));
+    if (bytes) {
+        env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(frame.length),
+                                reinterpret_cast<const jbyte *>(frame.data));
+    }
+    UnlockPixels(frame);
+    return bytes;
+}
+
 static void nativeSetPreviewSurface(JNIEnv *env, jclass clazz, jobject jSurface) {
     (void) clazz;
     SetPreviewSurface(env, jSurface);
@@ -48,6 +65,7 @@ static JNINativeMethod gMethods[] = {
         {"releaseNativeCapturer", "()V",                         reinterpret_cast<void *>(nativeReleaseNativeCapturer)},
         {"setPreviewSurface",     "(Ljava/lang/Object;)V",       reinterpret_cast<void *>(nativeSetPreviewSurface)},
         {"getFrameBufferBitmap",  "()Landroid/graphics/Bitmap;", reinterpret_cast<void *>(nativeGetFrameBufferBitmap)},
+        {"getFrameBufferBytes",   "()[B",                      reinterpret_cast<void *>(nativeGetFrameBufferBytes)},
         {"getFrameCount",         "()J",                         reinterpret_cast<void *>(nativeGetFrameCount)},
 };
 

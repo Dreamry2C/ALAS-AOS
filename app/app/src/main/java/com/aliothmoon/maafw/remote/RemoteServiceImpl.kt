@@ -9,6 +9,7 @@ import com.aliothmoon.maafw.constant.DefaultDisplayConfig
 import com.aliothmoon.maafw.constant.DisplayMode
 import com.aliothmoon.maafw.remote.internal.ActivityUtils
 import com.aliothmoon.maafw.remote.internal.AppWatchdog
+import com.aliothmoon.maafw.remote.internal.BridgeServer
 import com.aliothmoon.maafw.remote.internal.PermissionGrantHelper
 import com.aliothmoon.maafw.service.AccessibilityHelperService
 import com.aliothmoon.maafw.remote.internal.PowerController
@@ -41,6 +42,7 @@ class RemoteServiceImpl : RemoteService.Stub() {
     init {
         RemoteBootTrace.mark("CTOR_START")
         Workarounds.apply()
+        runCatching { BridgeServer.start() }.onFailure { Ln.e("$TAG: BridgeServer start failed", it) }
         Runtime.getRuntime().addShutdownHook(
             Thread { runCatching(::cleanup) }.apply { name = "remote-shutdown-hook" }
         )
@@ -294,6 +296,7 @@ class RemoteServiceImpl : RemoteService.Stub() {
      * 它自己按 flag 文件判要不要动手，没改过时是空操作
      */
     private fun cleanup() {
+        step("bridge server") { BridgeServer.stop() }
         step("screen size") { ScreenManager.destroy() }
         step("power") { PowerController.destroy() }
         step("primary display") { PrimaryDisplayManager.stop() }
