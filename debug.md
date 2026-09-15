@@ -4,6 +4,12 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-16] 待机屏灭的连锁反应：无线调试掉线 + VD 无帧 + nativeLibraryDir 的正确拿法
+
+- **现象**：手机待机（物理屏 OFF）期间——①adb 5555 拒连（无线调试休眠掉线），唤醒后 `adb connect` 即回；②桥 screencap 返回 `no frame available`，`dumpsys display` 里 VD 不在列——但 app/proot/WebUI/桥全部健在；③`run-as` 里 glob `/data/app/~~*/<pkg>-*/lib/arm64` 展开不了（目录不可遍历），proot 一次性执行拿不到 nativeLibraryDir。
+- **根本原因**：①②同根因=休眠。VD 由 readiness 链按需建（前台+shizuku 就绪才 bind 建屏），待机无前台则无 VD——**不是故障**，唤醒后自动恢复。③/data/app 子目录对 app uid 不可列举（但 app 进程自己知道路径）。
+- **解决方案**：体检脚本 screencap 项区分——`no frame available` + 物理屏 `state OFF` = WARN（待机，唤醒复检），其余才 FAIL。nativeLibraryDir 从运行中进程的 cmdline 拿：`tr '\0' ' ' < /proc/<prootPid>/cmdline`（argv[0] 即 libproot.so 绝对路径，proot pid 用 `ps -A | grep libproot.so`）。
+
 ## [2026-09-16] adb 操作三坑：引号两层剥离 / 多设备必须 `-s` / run-as 碰不了 /sdcard 外部私有目录
 
 - **现象**：①`adb shell run-as <pkg> sh -c 'ls files/; ...'` 实际只裸跑了 `ls`（列的是 run-as 家目录），后面命令散落成独立 adb 命令在 `/` 下跑；②压测中途 `adb shell` 突然报 `more than one device/emulator`——设备列表多出一台 `127.0.0.1:16385`（SM_S9080，非本链设备）；③`run-as <pkg> ls /sdcard/Android/data/<pkg>/files/` Permission denied——哪怕那是该 app 自己的外部私有目录。
