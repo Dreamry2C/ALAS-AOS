@@ -65,6 +65,7 @@ import com.aliothmoon.maafw.BuildConfig
 import com.aliothmoon.maafw.domain.RemoteBackend
 import com.aliothmoon.maafw.domain.ThemeMode
 import com.aliothmoon.maafw.privileged.PermissionManager
+import com.aliothmoon.maafw.proot.ProotHost
 import com.aliothmoon.maafw.provision.ProvisionState
 import com.aliothmoon.maafw.provision.RootfsProvisioner
 import com.aliothmoon.maafw.settings.SettingsEvent
@@ -135,6 +136,12 @@ fun AppRoot(
     var provisionSkipped by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { provisioner.start() }
     val showProvision = provisionState !is ProvisionState.Ready && !provisionSkipped
+
+    // 部署就绪即起内置 ALAS 环境（自愈清锁→热更新→wrapper/WebUI；ProotHost 内幂等）
+    val prootHost: ProotHost = koinInject()
+    LaunchedEffect(provisionState) {
+        if (provisionState is ProvisionState.Ready) prootHost.ensureStarted()
+    }
 
     val darkTheme = when (settingsState.themeMode) {
         ThemeMode.System -> isSystemInDarkTheme()

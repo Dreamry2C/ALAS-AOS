@@ -33,6 +33,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maafw.BuildConfig
 import com.aliothmoon.maafw.R
+import com.aliothmoon.maafw.proot.ProotHost
+import com.aliothmoon.maafw.proot.ProotPhase
 import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import org.koin.compose.koinInject
@@ -76,15 +78,25 @@ fun AlasScreen(
     active: Boolean,
     modifier: Modifier = Modifier,
     hostState: HostState = koinInject(),
+    prootHost: ProotHost = koinInject(),
 ) {
     var loadFailed by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     val hostSnapshot by hostState.snapshot.collectAsStateWithLifecycle()
+    val prootState by prootHost.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(active, hostSnapshot.privilegedConnected) {
         if (active && hostSnapshot.privilegedConnected) {
             hostState.ensureEnvironmentStarted()
+        }
+    }
+
+    // 内置环境转 RUNNING（首启/热更新/崩溃重拉完成）时自动重载，不用用户点重试
+    LaunchedEffect(prootState.phase) {
+        if (prootState.phase == ProotPhase.RUNNING) {
+            loadFailed = false
+            webView?.loadUrl(ALAS_WEBUI_URL)
         }
     }
 
@@ -164,8 +176,16 @@ fun AlasScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
+                // 文案跟内置环境状态走：准备/热更新/启动中给进度语，失败给原因，其余才是兜底
+                val statusText = when (prootState.phase) {
+                    ProotPhase.PREPARING -> stringResource(R.string.proot_phase_preparing)
+                    ProotPhase.UPDATING -> stringResource(R.string.proot_phase_updating)
+                    ProotPhase.STARTING -> stringResource(R.string.proot_phase_starting)
+                    ProotPhase.FAILED -> stringResource(R.string.proot_phase_failed, prootState.detail)
+                    else -> stringResource(R.string.alas_webui_not_running)
+                }
                 Text(
-                    text = stringResource(R.string.alas_webui_not_running),
+                    text = statusText,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
@@ -173,6 +193,9 @@ fun AlasScreen(
                 Button(
                     onClick = {
                         loadFailed = false
+                        if (prootState.phase == ProotPhase.FAILED || prootState.phase == ProotPhase.IDLE) {
+                            prootHost.ensureStarted()
+                        }
                         webView?.loadUrl(ALAS_WEBUI_URL)
                     },
                 ) {

@@ -2,16 +2,19 @@
 
 ## 当前阶段
 
-**阶段二（宿主外壳）已收官**：M2-a 基线绿 → M2-b 减法剔除（−19.6k 行）→ M2-c 特权进程内 Kotlin 桥（TCP 22300 五端点）→ M2-d HostState 接管外壳状态 + 悬浮球/FGS 脱钩 RunnerPort，DoD 真机验证 6/6（2026-09-16）。**下一步：阶段三（管道穿透与生命周期）**。阶段一 M1 已交付：rootfs 构建链 GHA 四连迭代至绿，v4 artifact 为交付基准；M1-d 真机复验 WebUI/MANIFEST 已过，**油数 100 帧验收待用户把游戏点到出击菜单页**。
+**阶段三进行中**：M3-a（首启解压流水线）✅、**M3-b（FGS 拉 proot + 自愈清锁 + 热更新快进路径 + wrapper 监管 WebUI）✅ 真机全绿**——开屏→热更新（二启 5s 快进）→ WebView 自动载入 ALAS 控制台；force-stop 零残留；gui 崩溃自动重拉。**下一步：M3-c（生命周期防护正赛：stdin 管道破裂自尽/进程组全杀/划卡归零复核 + 重启引导）**。阶段一 M1 已交付：rootfs 构建链 GHA 四连迭代至绿，v4 artifact 为交付基准；M1-d 真机复验 WebUI/MANIFEST 已过，**油数验收改走生产链（待用户把游戏点到出击菜单页）**。
 
 - 开发宪法：`docs/roadmap-v3.md`（13 项决策、阶段〇–五、风险登记）。
 - 阶段二工作底稿：`docs/stage2-maafwapp-inventory.md`（减法三栏清单 / 新桥设计 / VD flag 核查）。
-- 任何不清楚之处：先读 roadmap，再读 `handoff/` 最新文件（当前 `2026-09-16-m2.md`）。
+- 任何不清楚之处：先读 roadmap，再读 `handoff/` 最新文件（当前 `2026-09-16-m3b.md`）。
 
 ## 仓库结构（现状）
 
-- `app/` — 阶段二主战场：MaaFwApp fork 复活副本（b2b0f54 + m0 WebView 6 处改动固化 + 构建修复：Aliyun 镜像、floatingx-compose 显式声明）。
-- `rootfs/` — 阶段一资产：`build/build-rootfs.sh`（GHA ARM64 构建脚本）、`patches/`（ALAS 补丁集，含 `module/device/method/maaal.py` 桥客户端）。
+- `app/` — 阶段二/三主战场：MaaFwApp fork 复活副本（b2b0f54 + m0 WebView 6 处改动固化 + 构建修复）。阶段三新增：
+  - `app/src/main/java/.../provision/`（首启 rootfs 解压，M3-a）与 `.../proot/`（ProotHost 会话宿主 / AlasOverlay 资产覆盖 / AlasUpdater 热更新，M3-b）。
+  - `app/src/main/prootLibs/arm64-v8a/`（proot 九件套，Spike A 钉版入库）+ `app/src/main/assets/alas/`（wrapper/runner/seed/maaal_update.sh/rpc.py + patches 全量，运行时幂等铺 /opt/alas）。
+  - `app/src/main/assets/rootfs/`（rootfs.tar.xz 随包，gitignore 不入库；BUILD_MANIFEST 入库）。
+- `rootfs/` — 阶段一资产：`build/build-rootfs.sh`（GHA ARM64 构建脚本）、`patches/`（ALAS 补丁集，含 `module/device/method/maaal.py` 桥客户端）、`overlays/`（wrapper.py 监管 WebUI 版 / runner.py / rpc.py）、`seeds/`（deploy.yaml 七锁 / seed_config.py / maaal_update.sh 热更新脚本）。
 - `.github/workflows/` — rootfs 构建 workflow（手动触发；`ALAS_REF` 默认 master 浮动，manifest 记录解析后 commit）。
 - `docs/` — `roadmap-v3.md`、`stage2-maafwapp-inventory.md`、`spike-d-wrapper-surface.md`。
 - `spike/` — 阶段〇交付：`a-proot-exec/`（Spike A/C 工程+报告）、`e-adb-virtual-display/`（Spike E/B′）。

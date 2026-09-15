@@ -64,6 +64,7 @@ require_file "$ASSETS/overlays/runner.py"
 require_file "$ASSETS/build/spike-f-ocr-gate.py"
 require_file "$ASSETS/patches/assets_fix.py"
 require_file "$ASSETS/seeds/deploy.yaml"
+require_file "$ASSETS/seeds/maaal_update.sh"
 require_file "$ASSETS/shims/jellyfish.py"
 require_file "$ASSETS/models/ocr/det.onnx"
 require_file "$ASSETS/models/ocr/rec.onnx"
@@ -193,6 +194,10 @@ install -D -m 0644 "$ASSETS/seeds/deploy.yaml" "$ROOTFS_DIR/opt/alas/config/depl
 # 实例配置生成器：运行时实例播种由阶段三调用（ALAS CWD=仓库根；脚本内 ALAS 根取
 # MAAAL_ALAS_ROOT 环境变量，调用方需 export MAAAL_ALAS_ROOT=/opt/alas）
 install -D -m 0644 "$ASSETS/seeds/seed_config.py" "$ROOTFS_DIR/opt/alas/seeds/seed_config.py"
+
+# ALAS 热更新脚本：设备端唯一更新通道（内置更新器已被 AutoUpdate:false 锁死），
+# 阶段三 App 侧 AlasUpdater 经 proot 拉起；协议见脚本头注释
+install -D -m 0755 "$ASSETS/seeds/maaal_update.sh" "$ROOTFS_DIR/opt/alas/seeds/maaal_update.sh"
 
 # PP-OCR 模型三件套 → /opt/alas/models/ocr/
 # 注意：这是 v3 自定义路径（非 ALAS 上游约定）——in-proc 版 module/ocr/rpc.py 默认按
