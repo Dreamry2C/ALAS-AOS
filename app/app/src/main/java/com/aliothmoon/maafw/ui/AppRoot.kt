@@ -178,6 +178,7 @@ fun AppRoot(
             onInstall = { permissionManager.refresh() },
             onOpenApp = { permissionManager.openShizuku(context) },
             onRequestAuth = { scope.launch { permissionManager.requestRemoteAccess() } },
+            onUninstall = { permissionManager.uninstallShizuku(context) },
             onDismiss = { scope.launch { permissionManager.skipShizukuCheck() } },
             onSwitchToRoot = { settingsViewModel.onIntent(SettingsIntent.SetBackend(RemoteBackend.ROOT)) },
             isRequesting = isGranting,

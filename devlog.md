@@ -4,6 +4,18 @@
 
 ## 未发版
 
+### 2026-09-16 · M4-c 收官 ✅：载入开屏淡出（不再闪错误脸）+ 悬浮窗分工文案
+
+- **开屏无感（roadmap 阶段四第 1 条补完）**：AlasScreen 原逻辑是首帧 `loadUrl` 撞服务未起 → `onReceivedError` → 直接上错误面板（「重试连接」按钮脸），启动链走完再自动重载——用户每次开 App 先吃一张错误脸。改为 **`pageReady` 语义**：`onPageStarted` 归零、`onPageFinished && !loadFailed` 置位；`!pageReady` 期间盖全屏 overlay（`AnimatedVisibility` + `fadeOut` 淡出），overlay 分两档——真失败（phase==FAILED，或服务该活而页进不来）才给错误面板+重试，启动链还在走（PREPARING/UPDATING/STARTING，含首帧必然失败的 loadUrl）一律给 `CircularProgressIndicator` + 阶段文案的**载入开屏**。真机连拍实证：t+4s 帧抓到淡出中段（控制台已渲染、载入层半透明渐隐），t+16s 完整控制台。
+- **分工文案（roadmap 阶段四第 5 条应用内侧）**：悬浮窗「开始挂机」下加一行小字 caption「高频操作在此面板；完整配置请回应用内的 ALAS 控制台」（EN 同步），面板布局实机截图核验。README 侧的分工说明随发版前 README 一起写。
+
+### 2026-09-16 · M4-b 收官 ✅：官方版 Shizuku 冲突引导（flavor 检测 + 去卸载闭环）
+
+- **背景事实**（SHIZUKU-M.md）：shizuku-m 与官方版**同包名** `moe.shizuku.privileged.api`、签名不同——装了官方版则 shizuku-m 覆盖安装必失败；且 binder 层两者不可分，`isShizukuAvailable()` 认不出谁是谁。判别口=包 label：官方版 `Shizuku`，shizuku-m 的 `app_name` 改成了 `Shizuku-m`。
+- **代码**：`ShizukuReadinessStage.OfficialConflict`（新档）+ `ShizukuFlavor`（NONE/OFFICIAL/MOD）；`PermissionManager.probeShizukuStage` 重构——未授权时先查 flavor：**OFFICIAL 一律劝换**（哪怕官方版正在跑且可授权，授权投资前劝退；逃生口=「跳过检查」），MOD 才走原有 NeedAuth/NotRunning 分级。`uninstallShizuku()`= `ACTION_DELETE` 系统卸载框，卸完回来 onResume 自动 refresh → NotInstalled 档接着引导装 shizuku-m，闭环。
+- **弹窗**：「检测到官方版 Shizuku」——说明同包异签不可覆盖装、官方版每次重启要 WLAN 配对而 shizuku-m 可离线自连、卸载不影响本应用数据；确认键「去卸载官方版」，中性键切 Root，dismiss 跳过检查。字符串三键 ZH/EN 同步。
+- **验证限制**：真机装着已授权的 shizuku-m，冲突分支只能逻辑评审 + 构建 + 烟测（装包重开 readiness 仍 Ready、环境自动起、无回归）；真机演练需卸 shizuku-m 装官方版，破坏性操作留阶段五多 ROM 矩阵一起做。
+
 ### 2026-09-16 · M4-a 收官 ✅：悬浮窗直连 wrapper 薄 HTTP —— 调度器状态行 + 开始/停止挂机 + 半透明日志板
 
 - **代码**：`proot/AlasRunController.kt`（新）——4s 轮询 wrapper 薄 HTTP（GET /status → reachable/runnerAlive/pid/guiAlive/logLines；POST /start、/stop（busy 置位，读超时 12s 覆盖 SIGTERM→3s→SIGKILL）；GET /logs?tail=80 纯文本），Koin 单例挂 `postCreate` 全程轮询，Mutex 互斥刷新。`OverlayPanel` 改版：三行环境状态 + 「ALAS 调度器」状态行（环境未就绪/运行中·pid/已停止）+ 半透明黑底日志板（Monospace 10sp/行高 13，`LaunchedEffect(linesCount, lines.size)` 自动沉底，空显「暂无日志」，weight(1f) 吃满剩余）+ 全宽「开始挂机/停止挂机」（enabled=reachable && !busy，按 runnerAlive 切换）+ 原「回到应用/环境启停」行。字符串七键 ZH/EN 同步；DI：prootModule 注册 controller、OverlayModule 注入、MaaFwApp.postCreate `start()`。

@@ -8,6 +8,9 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -81,6 +85,7 @@ fun AlasScreen(
     prootHost: ProotHost = koinInject(),
 ) {
     var loadFailed by remember { mutableStateOf(false) }
+    var pageReady by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     val hostSnapshot by hostState.snapshot.collectAsStateWithLifecycle()
@@ -131,10 +136,13 @@ fun AlasScreen(
 
                         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                             loadFailed = false
+                            pageReady = false
                         }
 
                         override fun onPageFinished(view: WebView, url: String?) {
                             canGoBack = view.canGoBack()
+                            // 主文档失败不算就绪（onReceivedError 已置位），开屏就不淡出
+                            if (!loadFailed) pageReady = true
                             // 见 SCOPE_HEIGHT_FIX_JS：本机 vh=0，补像素高度
                             view.evaluateJavascript(SCOPE_HEIGHT_FIX_JS, null)
                         }
@@ -159,13 +167,18 @@ fun AlasScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        if (loadFailed) {
+        AnimatedVisibility(
+            visible = !pageReady,
+            modifier = Modifier.fillMaxSize(),
+            enter = EnterTransition.None,
+            exit = fadeOut(),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
                     .pointerInput(Unit) {
-                        // 挡住穿透到 WebView 自带的错误页上的漏点，只留重试按钮可点
+                        // 挡住穿透到 WebView 上的漏点，载入/错误时只留重试按钮可点
                         awaitPointerEventScope {
                             while (true) {
                                 awaitPointerEvent().changes.forEach { it.consume() }
@@ -176,30 +189,49 @@ fun AlasScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                // 文案跟内置环境状态走：准备/热更新/启动中给进度语，失败给原因，其余才是兜底
-                val statusText = when (prootState.phase) {
-                    ProotPhase.PREPARING -> stringResource(R.string.proot_phase_preparing)
-                    ProotPhase.UPDATING -> stringResource(R.string.proot_phase_updating)
-                    ProotPhase.STARTING -> stringResource(R.string.proot_phase_starting)
-                    ProotPhase.FAILED -> stringResource(R.string.proot_phase_failed, prootState.detail)
-                    else -> stringResource(R.string.alas_webui_not_running)
+                // 只有这两种算真失败：启动链自己挂了，或服务明明该活着页却进不来
+                val failureText = when {
+                    prootState.phase == ProotPhase.FAILED ->
+                        stringResource(R.string.proot_phase_failed, prootState.detail)
+
+                    loadFailed && (prootState.phase == ProotPhase.IDLE ||
+                        prootState.phase == ProotPhase.RUNNING) ->
+                        stringResource(R.string.alas_webui_not_running)
+
+                    else -> null
                 }
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Spacer(Modifier.height(MaaDesignTokens.Spacing.lg))
-                Button(
-                    onClick = {
-                        loadFailed = false
-                        if (prootState.phase == ProotPhase.FAILED || prootState.phase == ProotPhase.IDLE) {
-                            prootHost.ensureStarted()
-                        }
-                        webView?.loadUrl(ALAS_WEBUI_URL)
-                    },
-                ) {
-                    Text(stringResource(R.string.alas_webui_retry))
+                if (failureText == null) {
+                    // 载入开屏：首次 loadUrl 撞上服务未起是必然事件，不给用户看错误脸
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(MaaDesignTokens.Spacing.lg))
+                    Text(
+                        text = when (prootState.phase) {
+                            ProotPhase.PREPARING -> stringResource(R.string.proot_phase_preparing)
+                            ProotPhase.UPDATING -> stringResource(R.string.proot_phase_updating)
+                            ProotPhase.STARTING -> stringResource(R.string.proot_phase_starting)
+                            else -> stringResource(R.string.alas_webui_loading)
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                } else {
+                    Text(
+                        text = failureText,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Spacer(Modifier.height(MaaDesignTokens.Spacing.lg))
+                    Button(
+                        onClick = {
+                            loadFailed = false
+                            if (prootState.phase == ProotPhase.FAILED || prootState.phase == ProotPhase.IDLE) {
+                                prootHost.ensureStarted()
+                            }
+                            webView?.loadUrl(ALAS_WEBUI_URL)
+                        },
+                    ) {
+                        Text(stringResource(R.string.alas_webui_retry))
+                    }
                 }
             }
         }

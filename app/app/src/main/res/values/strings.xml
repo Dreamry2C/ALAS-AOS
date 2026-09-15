@@ -157,6 +157,7 @@
     <string name="overlay_alas_start">开始挂机</string>
     <string name="overlay_alas_stop">停止挂机</string>
     <string name="overlay_alas_log_empty">暂无日志</string>
+    <string name="overlay_alas_hint">高频操作在此面板；完整配置请回应用内的 ALAS 控制台</string>
     <string name="host_state_connected">已连接</string>
     <string name="host_state_disconnected">未连接</string>
     <string name="host_state_ok">正常</string>
@@ -276,6 +277,7 @@
     <!-- ALAS tab：WebUI 容器 -->
     <string name="alas_webui_not_running">ALAS 服务由 App 内置环境提供，首次启动需完成初始化；若长时间未恢复，请检查运行环境后重试</string>
     <string name="alas_webui_retry">重试连接</string>
+    <string name="alas_webui_loading">正在载入控制台…</string>
     <string name="proot_phase_preparing">正在准备运行环境…</string>
     <string name="proot_phase_updating">正在热更新 ALAS…</string>
     <string name="proot_phase_starting">正在启动 ALAS 服务…</string>
@@ -374,6 +376,9 @@
     <string name="dialog_sui_detected_message">当前由 Sui 提供 Shizuku 服务。Sui 以 Root 身份运行，本应用可能无法正常工作，请以实际测试为准。</string>
     <string name="dialog_shizuku_need_auth_title">Shizuku 未授权</string>
     <string name="dialog_shizuku_need_auth_message">Shizuku 服务正在运行但尚未授权本应用，请完成授权。授权成功前会持续提示。</string>
+    <string name="dialog_shizuku_official_conflict_title">检测到官方版 Shizuku</string>
+    <string name="dialog_shizuku_official_conflict_message">本应用配套的特权服务是魔改版 shizuku-m：重启手机后可离线自连，无需 WLAN 或电脑。它与官方 Shizuku 包名相同但签名不同，无法覆盖安装——请先在系统中卸载官方 Shizuku，再安装 shizuku-m（获取方式见项目 README）。卸载官方版不影响本应用的数据。</string>
+    <string name="dialog_shizuku_uninstall_confirm">去卸载官方版</string>
     <string name="common_got_it">知道了</string>
 
     <!-- 运行日志 -->
