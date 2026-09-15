@@ -4,6 +4,73 @@
 
 ## 未发版
 
+### 2026-09-16 · M2-a 基线构建绿 ✅（三跑迭代：Aliyun 镜像 + floatingx-compose 补齐）
+
+- **基线 assembleDebug 第三跑 BUILD SUCCESSFUL**（1m48s，105 tasks；`app/app/build/outputs/apk/debug/app-debug.apk` 81MB）。本机可构建实证，M2-b 减法对照基准就位。APK 缺 MaaFramework jniLibs（拷贝时已排除）属预期，M2-b 连引用一起剔除。
+- **跑①红**：`bundletool:1.18.3` 解析挂 TLS 握手中断（dl.google.com 被中间盒 RST；暖缓存只有 1.18.0）。curl 复测 dl.google.com 通=间歇性，仍决定根治：`app/settings.gradle.kts` 两个 repositories 块加 Aliyun google/central 镜像（官方源+jitpack 兜底）。已入 debug.md。
+- **跑②红**：`OverlayController.kt:32` `Unresolved reference com.petterp.floatingx.compose.enableComposeSupport`。三方 hash 比对 + m0 用户 Gradle 缓存考古定位：`floatingx:2.3.7` 在中央仓是**无 compose 包的瘦 aar**；m0 当年靠仓库序 jitpack 优先拿到**聚合空 jar** → 传递依赖 `io.github.petterpx.floatingx:floatingx-compose`（jitpack 构建）才编过；加镜像时 jitpack 被挪到队尾 → 中央瘦 aar 截胡。修法：toml + `app/build.gradle.kts` **显式声明 `floatingx-compose:2.3.7`**（中央/aliyun 直达，CN 友好），不恢复 jitpack 优先序。已入 debug.md。
+- **fork 源考古**：`git ls-files -v` 全 H 无 skip-worktree 隐藏改动；compose import 是 b2b0f54 提交自带（fork 作者本地靠 jitpack 序巧合可编，上游 CI 未覆盖该坐标陷阱）。
+- **seed_config.py 键兼容 ✅**（未决项关闭）：ALAS master HEAD=`92c07aa28ba8515b7709542ae8c14f6a7f3a08bd` 的 `config/template.json` 五键（Serial/PackageName/ScreenshotMethod/ControlMethod/ScreenshotDedithering）全在。附带发现：rootfs 构建 `ALAS_REF` 默认 master **浮动不钉**（BUILD_MANIFEST 记录解析后 commit），可复现性改进留阶段三评估。
+- **游戏仍在登录页**（只读 screencap `.tmp/game-now3.png`）——M1-d 油数 100 帧验收继续等用户把游戏点到出击菜单页。
+
+### 2026-09-15 · M2-a 开工：fork 复活为 `app/`（25MB 干净副本）+ 基线构建在跑
+
+- **v4 artifact 核验 ✅**：`.tmp/rootfs-dist-v4/rootfs.tar.xz` sha256 `b506a62e…745a` 与 CI 日志一致，cached-property 2.0.1 在列、ALL_IMPORTS_OK、OCR_GATE PASS——**交付基准定型**。
+- **fork 复活**：`m0-archive/vendor/MaaFwApp`（只读）→ 仓内 `app/`（tar 管道拷贝，排除 `.git/app/build/.cxx/.gradle/.kotlin/.maafw/.maa-cache/build*/jniLibs`），25MB 源码级副本，**6 处 m0 WebView 未提交改动随之固化进仓**（AlasScreen/network_security_config/AppRoot/Routes/strings/manifest）。
+- **修构建死路径**：`app/local.properties` 删 `pi.profile`（原指向已归档的 m0 yaml，`BuildProfile.kt:91-92` 硬失败）。
+- **构建环境**：JDK17 @ `D:\VSCodeCache\shizku-m\build-env\jdk-17.0.2`；SDK 用 `C:\Users\da270\AppData\Local\Android\Sdk`（cmake 3.22.1 + ndk 28.2 齐）；`GRADLE_USER_HOME` = 本仓 `.tmp/gradle-home`（从 build-env 拷 1.1GB 暖缓存，不污染共享目录）。
+- **基线 assembleDebug 在跑**（`.tmp/app-build-baseline.log`）——减法前先证本机可构建，之后减法每刀都有对照。
+
+### 2026-09-15 · 阶段二备战：MaaFwApp fork 减法盘点落地（`docs/stage2-maafwapp-inventory.md`）
+
+- explore 子代理对 fork @ b2b0f54 做全量只读摸底，盘点固化成工作底稿。**三条改变任务理解的发现**：
+  1. **桥不在 fork 里**——m0 的 6 端点桥是 Python MaaFramework Agent（`m0-archive/spike/m0/agent/main.py`，TCP 22300 行分隔 JSON+裸帧，非 HTTP）；删 libMaaCore 会连桥一起删 → 阶段二的"保留 5 端点"= **在特权进程内用 Kotlin 重写**（去 ocr 端点）。
+  2. **桥底层设施（libbridge.so + InputControlUtils + DriverClass）与业务解耦可原地留用**，唯一缺口是帧数据无 Java 裸字节出口（需加 JNI）。
+  3. **fork 工作树带 6 处未提交改动 = m0 WebView 资产**（AlasScreen 等），复活前必须先固化。
+- VD flag 现状核查**合规**（`SHOULD_SHOW_SYSTEM_DECORATIONS` 被 `VD_SYSTEM_DECORATIONS=false` 代码级挡住，`ROTATES_WITH_CONTENT` 是死常量）。
+- 构建前提：`local.properties` 的 `pi.profile` 是死路径须先删；`libc++_shared.so` 不能删（断 libbridge）；13 个 MaaFramework/PP-OCR so 剔除后包体 200MB+ → <20MB。
+- 游戏仍停在登录页（等用户点到出击菜单页）；v4 artifact 仍在下载。
+
+### 2026-09-15 · M1-d（中）：油数探针链路全通，GHA 第四跑绿（cached-property 入正）✅
+
+- **GHA run 34997038262（`e233630`）completed/success**——`cached-property` 正式进构建；artifact 后台下载中（`.tmp/rootfs-dist-v4`），作为交付基准。
+- **油数探针机械链路真机验证通过**：宿主 `/system/bin/screencap` 抓帧（2800×1264）→ proot `-b frames:/frames` → `Digit.ocr` → in-proc PP-OCR 出文本。登录页错误区域读出 `'NA'` → `Digit.after_process` `int('NA')` ValueError——**正是"区域无数字"的标准失败形态**，证明 import 链/图像加载/CTC 解码/Digit 调用形状全对。
+- 口径说明：m0 的 `OIL_AREA=(632,22,712,52)` 是 **1280×720 VD 原生帧**坐标；物理屏 2800×1264 宽屏 UI 锚定真实边缘，不能等比映射。M1-d 油数测试改用**实帧目测的原生分辨率油区**（游戏到出击页后定），m0 原生 720p 口径留阶段二 VD 上线后回归。
+- 100 帧连拍与探针脚本（`.tmp/m1d-oil-probe.py`，已在 rootfs `/opt/alas/` 就位）备好，**只等用户把游戏点到出击菜单页**。
+- WebUI 仍保活（bash-r6h84em7），PC 浏览器 127.0.0.1:22267 可看。
+
+### 2026-09-15 · M1-d（上）：rootfs 真机拉起成功，WebUI 200 ✅，踩坑 4 连
+
+- **验收 ③ BUILD_MANIFEST 可读 ✅**（设备上 cat 出完整 JSON：rootfs 0.1.0 / alas@92c07aa / py3.12.3 / ort 1.30.0 / cv2 5.0.0）。
+- **验收 ① WebUI ✅**：shell 域 proot 单命令 `gui.py` → uvicorn `0.0.0.0:22267` startup complete，adb forward 后 PC `curl 127.0.0.1:22267` = **200**（PyWebIO Application，6055B）。
+- **坑①**：解包目标非空场（Spike A 旧 rootfs）→ `./bin` 软链覆盖失败。修：解包脚本先 `rm -rf files/rootfs`。
+- **坑②**：busybox tar 解 ubuntu-base 硬链接前向引用必炸（`uncompress→gunzip`）。修：PC 侧 `.tmp/repack-linkfree.py` 重打包去硬链接（reg 21359/hard 3 全物化/sym 740/dir 2380，977MB 未压缩 tar，WiFi push 43MB/s）。已入 debug.md。
+- **坑③**：run-as（runas_app 域）**禁 socket**（`socket()` EPERM，虽有 inet gid）→ 改 shell 域跑 harness：shell 执行 /data/local/tmp 内 proot 可行；guest PATH 要显式 export（宿主 Android PATH 无 /usr/bin）；mksh heredoc 在 run-as 下建临时文件失败（禁用 heredoc）。
+- **坑④**：shell 域 SELinux 禁**路径式 AF_UNIX**（shell_data_file 上建 socket 文件 EPERM），但 AF_INET/abstract AF_UNIX 通 → harness 用 sitecustomize 把 `BaseManager` 默认地址换 127.0.0.1:0（同 ALAS Windows 路径），**仅 harness 不进构建**（生产 untrusted_app 域 + app 私有 TMPDIR，m0 已实证无碍）。
+- **依赖缺口实锤 1 个**：`cached-property`（`config_updater.py`/`alas.py` 顶层 import；老 uiautomator2 传递依赖，现代 3.x 不再传递；m0 清单同样缺但当时未踩到）。静态全扫其余 10 项均惰性/平台限定可忽略（cnocr/av/lz4/psutil 等）。**构建修复待做**：build-rootfs.sh pip 集 + cached-property 并重跑 GHA。
+- 现状：WebUI 进程在后台任务保活（bash-r6h84em7）；shell 侧 rootfs @ `/data/local/tmp/rootfs`；**验收 ② 油数 100 次待跑——需用户把游戏点到出击菜单页**。
+
+### 2026-09-15 · M1-c 收官：GHA 第三跑全绿 ✅
+
+- **run 34989709297（commit `a1c9e96`）completed/success**，全程仅 ~4.5 分钟（ubuntu-24.04-arm 原生 + `XZ_OPT=-T0`）。七个 step 全绿，含 Spike F OCR gate。
+- **pip 宽松集 aarch64 解析实录**（`.tmp/gh-run3-full.log`）：numpy 2.5.3 / scipy 1.18.1 / opencv-python-headless 5.0.0.93 / onnxruntime 1.30.0 / pydantic 1.10.26 / pillow 12.3.0 + ALAS 全套（adbutils 2.12.0、uiautomator2 3.7.0、pywebio 1.8.4、fastapi 0.125.0、uvicorn 0.53.0 裸版等 46 包）——**m0 实证集在 ubuntu-base 24.04 + py3.12.3 上一次装全，零失败**。
+- **chroot import 硬门禁**：`ALL_IMPORTS_OK`；assets_fix 补丁生效（DAILY_SKIP @ module/daily/assets.py:19）。
+- **CI Spike F 门禁**：model_load PASS / synthetic_digits 13/13 PASS / gray2d_stacking 2/2 PASS → **OCR_GATE PASS（3 PASS 0 FAIL 0 SKIP）**——合成数字用默认字体即可渲染，此前"无 CJK 字体会 SKIP"的预判未发生。
+- **产物**：`rootfs.tar.xz` sha256 `b27148c6859ecbbaad0fb896876e2d13b36629cd987088a7b72c1c82550546d7` + BUILD_MANIFEST（artifact 14 天）。
+- 结论：**M1-c 完成，rootfs 烘焙链定型**。进入 M1-d 真机复验（runbook 见 handoff）。
+
+### 2026-09-15 · M1-c：GHA 首跑 404 秒修，第二跑在飞
+
+- **（当日续②）用户新授权**：**本次长任务期间 git 操作全部预授权**（含 push；发版 release/tag 仍需逐次授权），已记 handoff。
+- **（当日续③）M1-d 设备侧预踩点完成**：spikea 在机、nld 四件套齐（proot/loader/shmem/busybox）、/data 余量 91G；发现新坑——`libbusybox.so` 直接调报 `applet not found`（多合一认 basename(argv[0])，须软链成裸名 `busybox`），已记 debug.md；完整 M1-d runbook（推包→run-as 解包→proot 拉起→验收三件套）写进 handoff。
+- **（当日续）第二跑 34989211076 又红**：ubuntu-base/apt/pip 基座全过（`libglib2.0-0t64` 改名修复生效、py3.12.3、git 2.43 装好），死在 **ALAS 克隆**：`fatal: could not read Username for 'https://gitee.com'`——gitee 同名镜像对匿名克隆返回 401 索取凭证（本机 `git ls-remote` 复现：挂凭证管理器提示）。修复：`ALAS_REPO` 默认改 **GitHub 原生上游**（`ls-remote` 实测 HEAD=92c07aa 可达；GHA runner 在海外本就应走 GitHub；runtime 的 fullcn 更新镜像由 deploy.yaml 管，与构建源无关），`chroot_run` env 白名单补 `GIT_TERMINAL_PROMPT=0` 让凭证提示 fail-fast。commit `a1c9e96` 已 push。**第三跑 34989709297 在飞**，改 2min 轮询盯梢（`.tmp/gh-run-watch3.log`，`gh run watch` 长连接两次被本机网络 EOF 打断，不可用于盯梢）。
+- **push 授权到位**：用户"可以push，手机可用于调试"→ commit `b263dfb`（59 文件 +37100 行，M1 全量 + Spike E 报告 + 手势劫持硬约束）推 `Shinarin/MaaAL` main，触发 rootfs.yml 首跑（run 34988699866）。
+- **首跑 12s 失败**：`Build rootfs` step 下载 ubuntu-base 404——脚本写的是 `ubuntu-base-24.04-arm64.tar.gz`，cdimage 实际命名为 `ubuntu-base-<点版本>-base-arm64.tar.gz`（当前 24.04.3/4/5 并存）。
+- **修复**：`build-rootfs.sh` 两处 URL 钉 `ubuntu-base-24.04.5-base-arm64.tar.gz`（旧点版本 cdimage 保留，可复现；无 sha256 钉版故无连带改动）；`curl -sI` 200 ✓、`bash -n` ✓、全仓 URL 重扫无其他 404 风险。commit `e85255d` 已 push（构建迭代属本次授权范围，已报备）。
+- **第二跑**：run 34989211076（`e85255d`）in_progress，后台任务盯梢（`.tmp/gh-run-watch2.log`）。重点盯：pip 宽松集 aarch64 实际解析、import 硬门禁输出、Spike F 门禁 chroot（中文字体缺省 → 合成图 SKIP 属预期）。
+- **游戏侧**：`am start` 拉起成功，截屏确认停在**登录页**（服务器：奥林匹克行动）——M1-d 油数复验需要游戏停在**出击菜单页**，届时请用户手动点过去（我不代点游戏界面）。
+- 注：盯梢任务 bash-ash579qm 因 GitHub API 瞬时 EOF 提前退出（`failed to get run: EOF`），与构建本身无关；已改直接 `gh run view` 查状态。
+
 ### 2026-09-15 · 阶段一 M1-c 前置：push 前主代理终审（4 文件 7 处修）
 
 - 终审动机：push 触发 GHA 首跑前，主代理对子代理交付物逐行把关（不依赖子代理自查）。
