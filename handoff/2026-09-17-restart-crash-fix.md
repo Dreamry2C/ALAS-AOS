@@ -21,7 +21,7 @@
 ## 验证状态
 
 - ✅ wrapper/base.py py_compile；APK 重装 Success；`/status` 已带新字段（wrapper 新版在岗，gui alive）。
-- ⏳ **端到端留用户**：按「开始挂机」→ 等 ALAS 触发 Restart（Research 异常会自动引发，或配置里的定时 Restart）→ 预期：登录流程不再 TypeError；即便未来任何崩溃，~5-60s 内自动重拉，/status `runner_respawns` +1，不用再点。
+- ✅ **端到端用户确认**（2026-09-17「可以使用了」）：挂机 + ALAS 重启链路恢复正常，本里程碑收官。
 
 ## 设备直读日志路径（用户导不出日志时自用）
 
