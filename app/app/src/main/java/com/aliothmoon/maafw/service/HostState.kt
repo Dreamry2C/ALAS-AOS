@@ -1,6 +1,7 @@
 package com.aliothmoon.maafw.service
 
 import android.content.Context
+import android.view.Surface
 import com.aliothmoon.maafw.BuildConfig
 import com.aliothmoon.maafw.MaaDispatchers
 import com.aliothmoon.maafw.constant.DefaultDisplayConfig
@@ -130,6 +131,21 @@ class HostState(
             }
             _snapshot.update { it.copy(vdDisplayId = DefaultDisplayConfig.DISPLAY_NONE) }
         }
+    }
+
+    /**
+     * 预览面挂载/摘除：挂机页 SurfaceView 的 Surface 交给特权进程渲染虚拟屏画面
+     * （native bridge_preview 通道，零拷贝）。特权断线时静默失败——
+     * 页面侧显示占位，连接恢复后随页面 active 翻转会重挂
+     */
+    fun attachPreviewSurface(surface: Surface) {
+        runCatching { servicePort.serviceOrNull()?.setMonitorSurface(surface) }
+            .onFailure { Timber.w(it, "attachPreviewSurface failed") }
+    }
+
+    fun detachPreviewSurface() {
+        runCatching { servicePort.serviceOrNull()?.setMonitorSurface(null) }
+            .onFailure { Timber.w(it, "detachPreviewSurface failed") }
     }
 
     /** m0 桥协议最小客户端：一行请求一行响应，判 "pong":true */

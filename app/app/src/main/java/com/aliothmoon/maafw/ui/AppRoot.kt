@@ -21,8 +21,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
@@ -77,6 +79,7 @@ import com.aliothmoon.maafw.theme.MaaFwTheme
 import com.aliothmoon.maafw.ui.components.clearFocusOnBlankTap
 import com.aliothmoon.maafw.ui.alas.AlasScreen
 import com.aliothmoon.maafw.ui.components.ShizukuReadinessDialog
+import com.aliothmoon.maafw.ui.hangar.HangarScreen
 import com.aliothmoon.maafw.ui.navigation.Routes
 import com.aliothmoon.maafw.ui.logs.AppLogDetailScreen
 import com.aliothmoon.maafw.ui.logs.AppLogScreen
@@ -92,7 +95,8 @@ private enum class TopDestination(
     val outlinedIcon: ImageVector,
     val filledIcon: ImageVector,
 ) {
-    // 默认首页：App 一打开就是 ALAS WebUI
+    // 默认首页：App 一打开就是挂机页（画面 + 控制面）
+    Hangar(R.string.nav_hangar, Icons.Outlined.PlayCircle, Icons.Filled.PlayCircle),
     Alas(R.string.nav_alas, Icons.Outlined.Public, Icons.Filled.Public),
     Settings(R.string.nav_settings, Icons.Outlined.Settings, Icons.Filled.Settings),
 }
@@ -275,6 +279,11 @@ fun AppRoot(
                     .consumeWindowInsets(padding),
             ) { page ->
                 when (TopDestination.entries[page]) {
+                    TopDestination.Hangar -> HangarScreen(
+                        active = pagerState.currentPage == TopDestination.Hangar.ordinal,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
                     TopDestination.Alas -> AlasScreen(
                         // 不在本页时（pager 预组合）不抢返回键
                         active = pagerState.currentPage == TopDestination.Alas.ordinal,
@@ -303,7 +312,7 @@ fun AppRoot(
         ) {
             NavHost(
                 navController = navController,
-                startDestination = Routes.ALAS,
+                startDestination = Routes.HANGAR,
                 modifier = Modifier.fillMaxSize(),
                 // 共享轴 X 前进转场：推进右进左出、返回左进右出
                 enterTransition = { slideInHorizontally { it } + fadeIn() },
@@ -312,6 +321,7 @@ fun AppRoot(
                 popExitTransition = { slideOutHorizontally { it } + fadeOut() },
             ) {
                 // 主 tab 路由空占位：真实内容由上面的 HorizontalPager 渲染
+                composable(Routes.HANGAR) {}
                 composable(Routes.ALAS) {}
                 composable(Routes.SETTINGS) {}
                 composable(Routes.APP_LOG) {
