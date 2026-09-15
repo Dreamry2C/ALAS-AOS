@@ -4,6 +4,23 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-16] adb 操作三坑：引号两层剥离 / 多设备必须 `-s` / run-as 碰不了 /sdcard 外部私有目录
+
+- **现象**：①`adb shell run-as <pkg> sh -c 'ls files/; ...'` 实际只裸跑了 `ls`（列的是 run-as 家目录），后面命令散落成独立 adb 命令在 `/` 下跑；②压测中途 `adb shell` 突然报 `more than one device/emulator`——设备列表多出一台 `127.0.0.1:16385`（SM_S9080，非本链设备）；③`run-as <pkg> ls /sdcard/Android/data/<pkg>/files/` Permission denied——哪怕那是该 app 自己的外部私有目录。
+- **根本原因**：①Git Bash 先剥一层引号，adb shell 把剩余参数空格拼接——远端 `sh -c` 只收到第一个词；②adb 默认 ambiguous 即拒，任何时刻都可能有第二台设备上线；③run-as 上下文缺外部存储 app-op，scoped storage 下绝对路径 /sdcard 访问被挡（与 SELinux socket 限制是两码事）。
+- **解决方案**：①整条远端命令再套一层双引号：`adb shell "run-as <pkg> sh -c '...'"`；②**一律** `adb -s 192.168.50.190:5555 ...` 显式指定本链设备（HONOR PPG-AN00）；③读 app 外部私有目录用 shell 域直接 `adb shell ls /sdcard/Android/data/<pkg>/files/`（shell 有 ext_data_rw 组），别走 run-as。
+
+## [2026-09-16] FileLogTree 只记 WARN+：热更新 UNCHANGED 在 app.log 无行，别误判"没跑"
+
+- **现象**：真机验证热更新恢复路径，`app.log` 里只有 FAILED（W 级）行，UNCHANGED 会话一条 AlasUpdater 记录都没有，一度怀疑启动链没走到更新步。
+- **根本原因**：`FileLogTree`（`log/LogTrees.kt`）过滤级别 WARN+，Timber.i/d 只进 logcat（tag=类名，如 `AlasUpdater`）；且 HONOR 系统日志极吵，logcat 缓冲几分钟就被冲掉。
+- **解决方案**：判 INFO 级事件的旁证——热更新看 `.maaal_alas_commit` 的 mtime（UNCHANGED 也会重写）与 `.git/FETCH_HEAD` 是否变化；会话级判定看 ps 进程树。长期可考虑给 FileLogTree 开 INFO（评估噪音后定）。
+
+## [2026-09-16] 真机测桥回环延迟：toybox `nc` 可用，stat 轮询地板 ~28ms
+
+- **现象**：要测桥 screencap 真机耗时，run-as 禁 socket（见 2026-09-15 条目）；`/system/bin/sh`（mksh）无 `/dev/tcp`；响应帧 2.76MB 且连接是长连协议，nc 不知道什么时候算"收完"。
+- **解决方案**：shell 域 `/system/bin/nc` 直打 127.0.0.1:22300（shell 域 AF_INET 通）；后台 `(printf 请求; sleep 4) | nc > 文件`，前台 `stat -c %s` 轮询文件长到 期望值（header 行长 + `"length"` 字段，校准轮先跑一次拿）即记录 `date +%s%N` 差值，kill 掉 nc 进入下一轮。**坑**：ping 响应只有 ~48B，期望值按 200B 等会每轮吃满 10s 超时保护；轮询每圈派生 stat ≈28ms 是测量地板，真值比测得值更小。脚本与结果见 devlog 2026-09-16 阶段五-4 条目（screencap p50=30ms，对照 ALAS >1s 不可用线富余 33 倍）。
+
 ## [2026-09-16] wrapper /status 时间戳是 guest 本地时（proot 无 TZ=UTC）——比设备 CST 慢 8h，别误判"旧会话复活"
 
 - **现象**：重装包装机后 1 分钟 curl `/status`，`gui_started_at=2026-09-15T20:08:59`（昨天！），第一反应"旧 proot 会话逃过 install -r 的杀进程，划卡归零结论要翻案"。
