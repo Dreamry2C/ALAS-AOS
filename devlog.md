@@ -4,6 +4,15 @@
 
 ## 未发版
 
+### 2026-09-16 · 阶段五开锣 ✅：断网容灾实证（-3）+ 桥截图耗时定档（-4）
+
+- **阶段五-3 断网/弱网容灾（Gitee 超时降级）**：三层验证全绿。
+  - **代码审计**：`maaal_update.sh` 三态协议（末行 UPDATED/UNCHANGED/FAILED）+ `AlasUpdater` 永不抛异常全折叠 SKIPPED（300s 兜底 > 脚本内 240s）+ `ProotHost` 启动链失败续走、UPDATED 后重放补丁——设计无缺陷。锁清理位置实测确认：UNCHANGED 快进路径不清锁但无害（会挡操作的锁只在 fetch 前必清），App 侧 `cleanupStale` 每次启动双保险。
+  - **PC 七场景**（`.tmp/m5-netresil`，file:// 裸仓当远端）：UNCHANGED 479ms / UPDATED 1051ms（文件内容核对一致）/ 首跑 DEPTH=1 路径 1009ms / 连接拒绝 2.4s FAILED / 无路由黑洞 30.8s FAILED（<60s ls-remote 兜底）/ DNS 不存在 1s FAILED / fetch 路径假锁全清 UPDATED。
+  - **真机 E2E**（guest `.git/config` 临时指向 192.0.2.1 冷启，可逆已还原）：9s FAILED ls-remote → App 降级 SKIPPED → 启动链续走 → wrapper/gui 全起；恢复正确 URL 再冷启 → UNCHANGED 快进（state 重写、FETCH_HEAD 零下载）。另发现 03:46 真实网络抖动已在生产链留下过一次 FAILED fetch 自然降级——两种失败模式真机均实证。判读注意：FileLogTree 只记 WARN+，UNCHANGED 是 INFO 级文件无行，要看 state mtime（已入 debug.md）。
+- **阶段五-4 最低配置定档（桥 screencap 耗时）**：shell 域 nc 直打 127.0.0.1:22300（绕 run-as 的 runas_app 域禁 socket 老坑），30 轮 ping + 30 轮 screencap（1280×720×3=2.76MB 裸帧）：**ping p50=29ms，screencap p50=30ms / p95=42ms / max=45ms**——受 stat 轮询地板（~28ms）压制真值更小。对照 ALAS 官方 >1s 不可用线富余 33 倍+，对照 m0 兜底 p50 0.109s 更快。**桥方案在 HONOR PPG-AN00（Android 16）定档远超需求**；多 ROM 矩阵实测留阶段五-1。方法已入 debug.md。
+- **插曲**：压测中途 adb 多出一台 127.0.0.1:16385（SM_S9080，非本链设备）致 `adb shell` ambiguous——今后 adb 一律 `-s 192.168.50.190:5555` 显式指定（已入 debug.md）。
+
 ### 2026-09-16 · M4-d 收官 ✅：设置/构建死账清仓（死 pref×7 + 分辨率安慰剂 + runner 包 + toml/baselineprofile/okhttp/tracing）
 
 - **M2-b 遗留②③④⑤ 一次清完**（阶段五前的卫生面，账本全核销）：
