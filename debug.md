@@ -4,6 +4,37 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-15] scrcpy-server 默认 `cleanup=true` 会删掉刚 push 上去的 jar
+
+- **现象**：push `scrcpy-server-v4.1.jar` 后第一次 `app_process … com.genymobile.scrcpy.Server 4.1` 正常运行（打印 device/New display 后因无客户端退出）；**紧接着第二次运行整套 `Aborted`**，logcat 墓志铭：
+  `Abort message: 'No pending exception expected: java.lang.ClassNotFoundException: com.genymobile.scrcpy.Server'`（在 `AndroidRuntime::startReg` 阶段就炸，看起来像设备坏了）；同一时刻 `ls -l /data/local/tmp/scrcpy-server-v4.1.jar` → `No such file or directory`。
+- **根本原因**：`cleanup` 默认 `true` 时 server 会派生一个 `CleanUp` 辅助进程（`app_process … com.genymobile.scrcpy.CleanUp …`）来在退出时恢复 `show_touches`/亮度等设置；该辅助进程 `main()` 的**第一步**就是 `unlinkSelf()` → `new File(Server.SERVER_PATH).delete()`，把 server jar 自己删掉（scrcpy 客户端每次都重新 push，所以上游无感）。
+- **解决方案**：起 server 时显式 `cleanup=false`；或每次运行前重新 push（校验 sha256）。做常驻实验必须用前者。
+
+## [2026-09-15] scrcpy-server 必须"有人连"才活着——客户端一断，虚拟屏一起走
+
+- **现象**：`new_display` 建好的虚拟屏，在约 2 分钟后凭空消失（`cmd display get-displays -i` 回到只有 `0`），server 侧 shell 打印 `Terminated`。
+- **根本原因**：`tunnel_forward=true` 时 server 在抽象 socket（缺省 `scrcpy`）上 `accept()` 等客户端，随后整个生命周期都往这条 socket 写视频流；socket 断开（PC 侧客户端退出 / **adb 传输掉线导致 `adb shell` 会话被杀**）→ server 抛异常退出 → VD 随创建者进程消亡。
+- **解决方案**：① 实验前先备一个"只 connect + recv 落盘"的保活客户端（本仓 `spike/e-adb-virtual-display/tools/hold_client.py`），并把 PC 侧任务超时设足（后台任务默认 600s 到点会杀 `adb shell`，等于自杀）；② 生产化必须做"adb 会话 → server → VD"的整链自愈/重建监督。
+
+## [2026-09-15] `screencap -d` 与 `input -d` 的 display id 是**两个命名空间**
+
+- **现象**：`screencap -p -d 9 /data/local/tmp/vd.png` → `Failed to take take screenshot. Display Id '9' is not valid.`（rc=1），而 `dumpsys display` 里明明有 `displayId 9`；反过来 `input -d 11529215049802775650 tap …` → `IllegalArgumentException: Error: Invalid arguments for display ID.`（rc=255）。
+- **根本原因**：Android 14+ 起两个工具吃不同 ID：`screencap -d` 吃 **`dumpsys SurfaceFlinger --display-id` 列出的 int64 physical/SF id**（其 help 里 "see dumpsys SurfaceFlinger --display-id for valid display IDs" 就是线索；不给 `-d` 时的默认值 `4630947145909893267` 也是 physical id）；`input -d` 吃 **logical display id**（`InputShellCommand.getDisplayId()` 按 int 解析，装不下 int64 physical id）。
+- **解决方案**：诊断脚本里两个 ID 都取：logical 从 `dumpsys display`（`DisplayInfo{"<name>", displayId N`）或 server 日志的 `New display: … (id=N)`；physical 从 `dumpsys SurfaceFlinger --display-id`（按 displayName/uniqueId 匹配）。`screencap` 用 physical、`input` 用 logical。
+
+## [2026-09-15] 虚拟屏"变黑"= display group 电源请求 OFF（ColorFade 盖屏），shell 域点不亮
+
+- **现象**：`screencap -d <VD physical id>` 成功但整帧纯黑（1280×720 PNG 恒 5336 字节）；`dumpsys window` 里该屏所有窗口 `mHasSurface=false isOnScreen=false`、任务 `state=STOPPED / isSleeping=true`。
+- **根本原因**：VD 带 `FLAG_OWN_DISPLAY_GROUP`（自成一 display group，dumpsys 里 `displayGroupId=1`），其电源状态由 `DisplayManagerService.requestPowerState(groupId, …)` 决定，而请求方是 **WindowManager**。一旦该 group 的请求是 OFF：DPC `mScreenState=OFF` → 屏幕被 **ColorFade 层**覆盖（`dumpsys SurfaceFlinger` 里该屏合成只剩 `1 Layers / Output Layer (ColorFade#…)`）→ 任何截屏路径（含 scrcpy 编码器）都拿黑帧；WM 也不再给窗口 surface，注入没有可投递的焦点窗口。
+- **解决方案（诊断 + 规避）**：shell 域**没有**等价入口——`cmd display power-reset <id>` 无效（`STATE_UNKNOWN` 解析到"上次状态"）、`DisplayManagerGlobal.requestDisplayPower(id, STATE_ON)` 只让 SF `powerMode=On` + 恢复窗口 surface，**ColorFade 仍盖黑**、`am start --display <id>` 也不点亮。规避只有两条：① 在设备处于交互态（`mWakefulness=Awake`，真屏亮）时建 VD（实测创建即 On，立刻可截真实画面）；② 熄灭后**重建** VD（本次两次运行均在 1~2 分钟后被 framework 翻成 OFF）。诊断口径：`dumpsys SurfaceFlinger | grep -A2 'Virtual Display <physicalId>'` 看 `powerMode`；`dumpsys display` 里该 displayId 的 DPC `mPowerRequest=policy=…`。
+
+## [2026-09-15] HONOR ROM 的显示栈缺 scrcpy 依赖的两个隐藏方法
+
+- **现象**：`DisplayManagerGlobal.requestDisplayPower(int, boolean)` → `NoSuchMethodException`（只有 `requestDisplayPower(int, int)`）；`SurfaceControl.getPhysicalDisplayIds()` → `NoSuchMethodException`（只有 `getPhysicalDisplayToken(long)`）。
+- **根本原因**：OEM（HONOR/MagicOS）改过 `framework` 的隐藏 API 形状——scrcpy 的 `Device.setDisplayPower()` 在 Android 15+ 走 `requestDisplayPower(int, boolean)`，在其 `Honor` workaround 分支里又用 `getPhysicalDisplayIds()`，两条在本机都会静默失败/降级。
+- **解决方案**：写反射探针先**枚举**再调用（本仓 `spike/e-adb-virtual-display/tools/VDLab.java` 的 `methods` 模式，`app_process` 跑在 shell 域可直接读隐藏 API）；对外报告里区分"API 存在但被 OEM 改形"与"权限不足"。
+
 ## [2026-09-15] jniLibs 里非 `lib*.so` 命名的文件被双重丢弃
 
 - **现象**：`jniLibs/arm64-v8a/libtalloc.so.2`、`libbusybox.so.1.38.0` 放进工程后，构建成功，但 APK 的 `lib/` 里查无此文件；`nativeLibraryDir` 自然也没有。
@@ -93,3 +124,27 @@
 - **现象**：采样里 `ps` 计数偶尔比 cgroup 计数少几十（如 `ps=17` 而 cgroup=50），或把 adb `run-as` 自己拉起的同 uid 进程算进来。
 - **根本原因**：`ps` 是快照式遍历 + 文本过滤，进程频繁生死时会漏/多；`run-as` 的 shell 自身也在 app uid 下。
 - **解决方案**：以 `/sys/fs/cgroup/apps/uid_<uid>/pid_<appPid>/cgroup.procs` 行数 −1（App 自身）为权威值（与 AMS 同源）；`ps` 仅作交叉校验；App 侧另用 `kill(pid,0)` 做独立心跳复核。
+
+## [2026-09-15] scrcpy `--new-display` 虚拟屏劫持主屏手势导航——`FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS` 是生死线
+
+- **现象**：Spike E 实验（scrcpy-server `new_display=1280x720/160` 建虚拟屏）后，用户报告**主屏手势导航全部失效**（边缘侧滑/上滑无响应）；dumpsys 显示 `GestureNavAnim`、`GestureSildeOut`、`NavigationBar0` 三个 SystemUI 窗口的 `mDisplayId` 全部指向虚拟屏（9）而非主屏（0）（物证：`spike/e-adb-virtual-display/logs/e3c-power-reset.txt:19-32`）。
+- **根本原因**：scrcpy `--new-display` 默认带 `FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS`（+`OWN_FOCUS`/`OWN_DISPLAY_GROUP`/`TRUSTED`）。AOSP 对该 flag 的原文："virtual displays without this flag shouldn't show home, navigation bar or wallpaper"——SystemUI 会为带此 flag 的可信虚拟屏**创建一套导航栏/手势窗口**；MagicOS 10 的手势输入路由跟着这些窗口走，主屏物理手势被投递到 1280×720 虚拟空间，表现为主屏手势"失灵"。对照：m0 的 `VirtualDisplayManager.kt:39` 显式 `VD_SYSTEM_DECORATIONS = false`（`:187-189` 分支不执行），代码级规避了此坑（注意：m0 项目此后长期暂停未用，"无事故"以代码证据为准，非连续运行实证）。
+- **解决方案**：杀掉 VD 属主进程（scrcpy-server）→ 虚拟屏销毁 → 手势窗口自动回主屏（验证：`cmd display get-displays -i` 只剩 0、三手势窗口在列表、无 scrcpy 进程）。
+- **防范（不能再有第二次）**：① 任何建虚拟屏的代码/实验**禁止** `SHOULD_SHOW_SYSTEM_DECORATIONS`（scrcpy 侧即使 `--no-vd-system-decorations` 也有被 ROM 忽略的公开记录 scrcpy#6684，不可依赖）；② 实验前后各查一次手势窗口归属（`dumpsys window windows | grep -E 'GestureNav|GestureSilde|NavigationBar'` 必须在 display 0）；③ VD 属主进程必须可一键杀死、实验结束必须清场到 `get-displays` 只剩 0。已写入 `AGENTS.md`「虚拟屏实验纪律」与 roadmap 阶段二「VD flag 硬约束」。
+
+## [2026-09-15] `screencap -d` 与 `input -d` 是两个 ID 命名空间（m0 §41 翻案的关键）
+
+- **现象**：m0 §41 记录"screencap -d 报 Display Id not valid、input -d 静默无效"；Spike E 实测两者都可工作，前提是 ID 用对命名空间。
+- **根本原因**：`screencap -d` 吃 `dumpsys SurfaceFlinger --display-id` 的 int64 **physical id**（用 logical id 报 not valid）；`input -d` 吃 int32 **logical display id**（给 physical id 直接 IllegalArgumentException）。m0 当年用 logical id 调 screencap、在 VD 熄灭/无焦点窗口态调 input。
+- **解决方案**：建 VD 后同时记录两个 ID；注入前确认 VD 处于"可见且有 resumed 焦点窗口"状态。证据：`spike/e-adb-virtual-display/REPORT.md` §4。
+
+## [2026-09-15] 虚拟屏被 framework 熄灭后 shell 域点不亮（ColorFade 盖屏）
+
+- **现象**：VD 创建 1~2 分钟后被 framework 翻成 OFF，截屏全黑、注入无效；`cmd display power-reset <id>` 无效，反射 `requestDisplayPower(id, ON)` 只恢复窗口 surface、ColorFade 层仍盖黑。
+- **根本原因**：per-display-group 电源请求由 WindowManager 发起（AOSP `DisplayManagerService.java:5613`），shell 域无等价入口；DPC 置 OFF 后 SF 合成列表只剩 ColorFade 层。
+- **解决方案**：m0 的做法是属主进程每 4s `PowerManager.userActivity(displayId)` 保活（`PowerController.kt`）——阶段二必须继承；纯 adb 通道对此无解（VD 只能重建）。另：HONOR 显示栈私货——`DisplayManagerGlobal.requestDisplayPower(int,boolean)` 与 `SurfaceControl.getPhysicalDisplayIds()` 均不存在，scrcpy 的 Android 15+ 电源路径在本机静默走空。
+
+## [2026-09-15] scrcpy-server 两个生命周期陷阱：`cleanup=true` 自删 jar；无人连接即退出
+
+- **现象**：默认 `cleanup=true` 时 server 派生 CleanUp 进程 `unlinkSelf()` 删掉刚 push 上去的 jar，第二次启动报 `ClassNotFoundException`（像设备坏了）；`tunnel_forward=true` 时 server 在 accept() 阻塞，客户端断开/从未连接 → server 退出、VD 即亡。
+- **解决方案**：实验配方固定 `cleanup=false`；必须配"只 connect+recv"的保活客户端（`.tmp/spike-e/hold_client.py`）；生产上 VD 属主必须是 App 自己的常驻特权进程，不能悬在 adb 会话上。

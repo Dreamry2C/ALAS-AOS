@@ -6,6 +6,8 @@
 
 - **Spike A（PASS）**：APK 内 proot exec 真机实证 —— `spike/a-proot-exec/`（REPORT.md）。
 - **Spike C（PASS）**：幻影进程查杀缓解真机复验 —— 同工程 PHANTOM 模式（REPORT-C.md）。
+- **Spike D（PASS）**：ALAS 进程管理 import 面探查 —— `docs/spike-d-wrapper-surface.md`。
+- **B′ + Spike E（PASS，仅控制面备用通道）**：shell 域 adb 直控虚拟屏 —— `spike/e-adb-virtual-display/REPORT.md`。能建屏/截屏/注入/取视频流；但 VD 保活（点亮）与 adb 会话绑定，**不替代 m0 桥**。关键口径：`screencap -d` 用 SF physical id、`input -d` 用 logical id。
 
 任何不清楚之处：先读 `docs/roadmap-v3.md`（开发宪法），再读 `handoff/` 最新文件。
 
@@ -13,6 +15,7 @@
 
 - `docs/roadmap-v3.md` — 13 项已确认决策、阶段〇–五、风险登记、m0 平移清单。
 - `spike/a-proot-exec/` — **阶段〇 Spike A/C 的独立最小 Android 工程**（`com.maaal.spikea`，纯 Kotlin/无 AndroidX，targetSdk 35/28 可变体）：jniLibs 放 Termux 二进制（proot/busybox）、迷你 rootfs 由 assets 落地；`run-device-ladder.sh`（Spike A 阶梯）、`run-phantom-ab.sh`（Spike C A/B 轮）、`tools/`（dynstr 改写、argv0 shim、探针源码）、`dist/`（APK + 全量真机日志证据）、`REPORT.md` / `REPORT-C.md`。
+- `spike/e-adb-virtual-display/` — **Spike E（+B′）交付**：`REPORT.md`（scrcpy-server 建屏逐字配方 + 截屏/注入的 ID 命名空间 + VD 电源机制）、`logs/`（命令原文与截图证据）、`tools/`（`hold_client.py` scrcpy 保活客户端、`VDLab.java`/`vdlab.jar` app_process 反射探针，构建法见 REPORT §10）。
 - `handoff/` — 跨对话接力（按时间取最新）。
 - `m0-archive/` — m0 阶段全部成果归档：MaaFwApp fork（`vendor/MaaFwApp` @ b2b0f54）、Termux 补丁集与种子配置（`termux/`）、桥代理与 PP-OCR 模型（`spike/m0/`）、全部 devlog 与研究文档（`docs/`）。v3 的直接复用来源，平移清单见 roadmap-v3 附录 A。
 - `.tmp/` — 临时文件（已 gitignore）。`.tmp/alas` 内有 ALAS 官方 master 部分克隆（blob:none），供查源码；`.tmp/spike-a/gradle-home` 为 Spike 构建用的 Gradle 缓存（复用 `shizku-m/build-env` 工具链，写目录留在本仓）。

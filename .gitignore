@@ -26,3 +26,7 @@ local.properties
 # spike 产物：APK 二进制可重建不入库；dist/logs 文本证据保留
 !spike/**/dist/
 spike/**/dist/*.apk
+
+# v3 阶段一：rootfs/ 资产必须进仓，解除上方通用目录名规则（build/、config/）的误伤
+!rootfs/build/
+!rootfs/patches/module/config/

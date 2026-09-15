@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""MaaAL v3 · ALAS 进程管理 wrapper（rootfs 内，stdlib only）。
+
+薄 HTTP（127.0.0.1:22400）+ 进程组管理，供 App 悬浮窗 start/stop/日志 使用。
+端口选择：避开 m0 桥 22300 与 WebUI 22267。
+
+端点
+----
+GET  /status        → {"runner_alive": bool, "pid": int|null, "log_file": str|null, "log_lines": int}
+POST /start         → 幂等拉起 runner 子进程（已在跑则直接返回现状）
+POST /stop          → 杀进程组：os.killpg(SIGTERM) → 3s → SIGKILL
+GET  /logs?tail=N   → ./log/ 下最新 *.txt 的尾部 N 行（默认 200，上限 2000）
+
+设计要点（依据 docs/spike-d-wrapper-surface.md 的 Spike D 结论）
+----
+- wrapper 本体**完全不 import ALAS**，只 subprocess 拉 runner.py（同目录）。
+  runner 子进程 preexec_fn=os.setsid 独立进程组，停止用 os.killpg。
+- **不碰 ALAS 的 ProcessManager**（双头管理风险：两边都以为自己在管进程，状态互踩）。
+  WebUI 启停按钮与悬浮窗并存的问题留阶段三决策
+  （候选：wrapper 同进程 uvicorn 直调 ProcessManager.get_manager()）。
+- 停止语义等同 m0 的 ProcessManager.stop（其本身就是 kill()，无 graceful）：
+  ALAS 无 SIGTERM handler，SIGTERM 即默认终止；3s 不死补 SIGKILL。
+- 防孤儿（m0 教训）：① 父退出前 atexit + SIGTERM handler 清理 runner；
+  ② stdin 管道破裂自尽——monitor 线程阻塞读 stdin，父进程（proot 启动器）死亡
+  导致管道 EOF 时，杀掉 runner 进程组并退出。stdin 是 tty（手工调试）时不挂监控。
+- 单实例锁：./log/wrapper.lock（fcntl.flock LOCK_EX|LOCK_NB，rootfs 是 Linux），
+  锁不住说明已有 wrapper 在跑，直接退出码 2。
+- 日志面：ALAS 写 ./log/{YYYY-MM-DD}_{config_name}.txt（module/logger.py:171-177），
+  runner import 期另建 {date}_runner.txt；/logs 与 /status 按 mtime 取最新 *.txt，
+  不猜文件名（append 打开、整天不换名，见 Spike D §3）。
+"""
+import atexit
+import datetime
+import fcntl
+import json
+import os
+import signal
+import stat
+import subprocess
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs
+
+HOST = '127.0.0.1'
+PORT = 22400
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+RUNNER_PATH = os.path.join(BASE_DIR, 'runner.py')
+LOG_DIR = os.path.join(BASE_DIR, 'log')
+LOCK_PATH = os.path.join(LOG_DIR, 'wrapper.lock')
+_STOP_GRACE_SEC = 3.0
+
+_runner = None            # subprocess.Popen | None
+_runner_lock = threading.Lock()
+_runner_started_at = None  # float | None
+
+
+# ---------------------------------------------------------------- runner 进程组管理
+
+def _runner_alive():
+    return _runner is not None and _runner.poll() is None
+
+
+def start_runner():
+    """幂等：已在跑直接返回现状。返回 (alive, pid, started_now)。"""
+    global _runner, _runner_started_at
+    with _runner_lock:
+        if _runner_alive():
+            return True, _runner.pid, False
+        _runner = subprocess.Popen(
+            [sys.executable, RUNNER_PATH],
+            cwd=BASE_DIR,
+            preexec_fn=os.setsid,  # 独立进程组，停止走 os.killpg
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,  # ALAS 日志走 ./log/ 文件，不走管道
+            stderr=subprocess.DEVNULL,
+        )
+        _runner_started_at = time.time()
+        return True, _runner.pid, True
+
+
+def stop_runner():
+    """SIGTERM → 3s → SIGKILL，杀整个进程组。返回 (was_alive, exit_code)。"""
+    global _runner
+    with _runner_lock:
+        if not _runner_alive():
+            return False, _runner.returncode if _runner else None
+        pgid = os.getpgid(_runner.pid)
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        deadline = time.time() + _STOP_GRACE_SEC
+        while time.time() < deadline and _runner.poll() is None:
+            time.sleep(0.05)
+        if _runner.poll() is None:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            _runner.wait(timeout=5)
+        code = _runner.returncode
+        _runner = None
+        return True, code
+
+
+def _cleanup():
+    """父退出前清理：atexit + SIGTERM/SIGINT 都汇到这里。"""
+    if _runner_alive():
+        stop_runner()
+
+
+def _on_signal(signum, frame):
+    _cleanup()
+    # 按信号语义退出：128+signum
+    sys.exit(128 + signum)
+
+
+def _stdin_watchdog():
+    """stdin 管道 EOF = 父进程已死 → 杀进程组自我了断（m0 孤儿教训）。"""
+    try:
+        sys.stdin.buffer.read()
+    except (OSError, ValueError):
+        pass
+    _cleanup()
+    os._exit(0)
+
+
+def _arm_stdin_watchdog():
+    # 只有 stdin 是管道（FIFO）时才挂监控：父进程死亡 → 管道 EOF → 自尽。
+    # tty（手工调试）没有"父进程管道"语义；/dev/null（如 Java Redirect.DISCARD）
+    # 读即 EOF，挂上会立即自尽——两者都不挂。
+    try:
+        if sys.stdin is not None and not sys.stdin.isatty() \
+                and stat.S_ISFIFO(os.fstat(sys.stdin.fileno()).st_mode):
+            threading.Thread(target=_stdin_watchdog, daemon=True).start()
+    except (OSError, ValueError):
+        pass
+
+
+def _acquire_instance_lock():
+    """单实例锁：返回锁文件对象（引用防 GC 关 fd），已有实例则 sys.exit(2)。"""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    fd = open(LOCK_PATH, 'a', encoding='utf-8')
+    try:
+        fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print(f'MaaAL wrapper: another instance holds {LOCK_PATH}', file=sys.stderr)
+        sys.exit(2)
+    fd.write(str(os.getpid()))
+    fd.flush()
+    return fd
+
+
+# ---------------------------------------------------------------- 日志读取
+
+def _latest_log_file():
+    """./log/ 下 mtime 最新的 *.txt；没有则 None。"""
+    try:
+        candidates = [os.path.join(LOG_DIR, p) for p in os.listdir(LOG_DIR) if p.endswith('.txt')]
+    except FileNotFoundError:
+        return None
+    if not candidates:
+        return None
+    return max(candidates, key=os.path.getmtime)
+
+
+def _tail_lines(path, n):
+    try:
+        with open(path, 'rb') as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - 256 * 1024))  # 尾部窗口，足够覆盖 2000 行日志
+            data = f.read().decode('utf-8', errors='replace')
+    except OSError:
+        return []
+    return data.splitlines()[-n:]
+
+
+def _count_lines(path):
+    try:
+        count = 0
+        with open(path, 'rb') as f:
+            for _ in f:
+                count += 1
+        return count
+    except OSError:
+        return 0
+
+
+# ---------------------------------------------------------------- HTTP 面
+
+class _Handler(BaseHTTPRequestHandler):
+    server_version = 'MaaALWrapper/3.0'
+
+    def log_message(self, fmt, *args):  # 静音访问日志
+        pass
+
+    def _json(self, obj, code=200):
+        body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _text(self, text, code=200):
+        body = text.encode('utf-8')
+        self.send_response(code)
+        self.send_header('Content-Type', 'text/plain; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        url = urlparse(self.path)
+        if url.path == '/status':
+            log_file = _latest_log_file()
+            self._json({
+                'runner_alive': _runner_alive(),
+                'pid': _runner.pid if _runner_alive() else None,
+                'started_at': datetime.datetime.fromtimestamp(_runner_started_at).isoformat()
+                if _runner_alive() and _runner_started_at else None,
+                'log_file': log_file,
+                'log_lines': _count_lines(log_file) if log_file else 0,
+            })
+        elif url.path == '/logs':
+            qs = parse_qs(url.query)
+            try:
+                n = min(int(qs.get('tail', ['200'])[0]), 2000)
+            except ValueError:
+                n = 200
+            log_file = _latest_log_file()
+            if not log_file:
+                self._text('')
+            else:
+                self._text('\n'.join(_tail_lines(log_file, n)))
+        else:
+            self._json({'error': 'not found'}, code=404)
+
+    def do_POST(self):
+        url = urlparse(self.path)
+        if url.path == '/start':
+            alive, pid, started_now = start_runner()
+            self._json({'runner_alive': alive, 'pid': pid, 'started_now': started_now})
+        elif url.path == '/stop':
+            was_alive, code = stop_runner()
+            self._json({'runner_alive': False, 'was_alive': was_alive, 'exit_code': code})
+        else:
+            self._json({'error': 'not found'}, code=404)
+
+
+def main():
+    _lock_fd = _acquire_instance_lock()  # noqa: F841 - 引用防 GC
+    atexit.register(_cleanup)
+    signal.signal(signal.SIGTERM, _on_signal)
+    signal.signal(signal.SIGINT, _on_signal)
+    _arm_stdin_watchdog()
+    server = ThreadingHTTPServer((HOST, PORT), _Handler)
+    print(f'MaaAL wrapper: listening on http://{HOST}:{PORT}', flush=True)
+    server.serve_forever()
+
+
+if __name__ == '__main__':
+    main()
