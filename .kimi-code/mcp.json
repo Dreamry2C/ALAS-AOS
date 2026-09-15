@@ -1,0 +1,31 @@
+{
+    "mcpServers": {
+        "maa-mcp": {
+            "command": "uvx",
+            "args": [
+                "--from",
+                "maa-mcp==1.2.3",
+                "maa-mcp"
+            ]
+        },
+        "create-maa-project": {
+            "command": "uvx",
+            "args": [
+                "--from",
+                "create-maa-project==2.0.0",
+                "create-maa-project",
+                "--mcp"
+            ]
+        },
+        "playwright": {
+            "command": "cmd",
+            "args": [
+                "/c",
+                "npx",
+                "--yes",
+                "@playwright/mcp@0.0.78",
+                "--isolated"
+            ]
+        }
+    }
+}
