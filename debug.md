@@ -202,3 +202,9 @@
 - **现象**：游戏被起到主屏后主屏转横屏（2800×1264），按竖屏（1264×2800）坐标发的两次 tap 越界被钳到屏幕边缘（未触达有效 UI，但属意外输入）。
 - **根本原因**：`input tap` 坐标空间跟随**当前旋转**；被测机旋转可被前台 app（游戏=横屏）随时改变。
 - **解决方案**：自动化点击纪律——每次 tap 前先 `dumpsys input | grep orientation`（或 screencap 尺寸）核坐标空间，再从 dumpsys/screencap 取目标当前帧坐标；禁止复用上一次截图的坐标。
+
+## [2026-09-16] rootfs 解压目标绝不能是 getExternalFilesDir：/sdcard 无符号链接且 noexec
+
+- **现象**（提交前自查拦下，未出货）：M3-a 解压流水线初版把 rootfs 解到 `AppPaths.ROOT`（`getExternalFilesDir(null)` = /sdcard/Android/data/...）。
+- **根本原因**：① /sdcard 是 FUSE 模拟存储，**不支持 `Os.symlink`**——ubuntu-base 有 740 个符号链接，第一个就炸（EPERM）；② /sdcard 挂载 noexec，guest 二进制无处可跑；③ Spike A 已实证：targetSdk 35 上 app 直接 `execve(filesDir/...)` 被拒，但 **proot 从内部 filesDir 跑 guest 全 PASS**——内部 filesDir（/data/data/<pkg>/files）才是合法位置。
+- **解决方案**：解压目标改 `context.filesDir/rootfs`；日志/导出继续用外部私有目录（AppPaths.ROOT）不受影响。判据速查：凡是"要 exec 或要 symlink"的数据，一律内部 filesDir；外部存储只放纯数据。
