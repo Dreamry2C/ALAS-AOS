@@ -6,11 +6,15 @@
 
 端点
 ----
-GET  /status        → {"runner_alive": bool, "pid": int|null, "gui_alive": bool, "gui_pid": int|null,
+GET  /status        → {"runner_alive": bool, "pid": int|null, "config": str|null,
+                       "gui_alive": bool, "gui_pid": int|null,
                        "log_file": str|null, "log_lines": int}
-POST /start         → 幂等拉起 runner 子进程（已在跑则直接返回现状）
+POST /start?config=N → 幂等拉起 runner 子进程（已在跑则直接返回现状）；N = config/ 下的
+                       实例配置名（默认 alas），runner.py argv[1] 透传
 POST /stop          → 杀进程组：os.killpg(SIGTERM) → 3s → SIGKILL
 GET  /logs?tail=N   → ./log/ 下最新 *.txt 的尾部 N 行（默认 200，上限 2000）
+GET  /configs       → {"configs": [str]}：config/*.json 去掉 template* 的实例名列表，
+                       'alas' 固定排最前；供 App 侧下拉选择运行配置
 
 设计要点（依据 docs/spike-d-wrapper-surface.md 的 Spike D 结论）
 ----
@@ -37,6 +41,7 @@ import datetime
 import fcntl
 import json
 import os
+import re
 import signal
 import stat
 import subprocess
@@ -52,12 +57,16 @@ PORT = 22400
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RUNNER_PATH = os.path.join(BASE_DIR, 'runner.py')
 LOG_DIR = os.path.join(BASE_DIR, 'log')
+CONFIG_DIR = os.path.join(BASE_DIR, 'config')
 LOCK_PATH = os.path.join(LOG_DIR, 'wrapper.lock')
 _STOP_GRACE_SEC = 3.0
+# 实例名只许安全字符：它会拼进 runner argv 与日志文件名
+_CONFIG_RE = re.compile(r'^[A-Za-z0-9_\-]+$')
 
 _runner = None            # subprocess.Popen | None
 _runner_lock = threading.Lock()
 _runner_started_at = None  # float | None
+_runner_config = None      # str | None：本次拉起跑的实例名，/status 汇报用
 
 _gui = None                # subprocess.Popen | None
 _gui_lock = threading.Lock()
@@ -74,14 +83,14 @@ def _runner_alive():
     return _runner is not None and _runner.poll() is None
 
 
-def start_runner():
-    """幂等：已在跑直接返回现状。返回 (alive, pid, started_now)。"""
-    global _runner, _runner_started_at
+def start_runner(config_name='alas'):
+    """幂等：已在跑直接返回现状（不发新配置）。返回 (alive, pid, started_now)。"""
+    global _runner, _runner_started_at, _runner_config
     with _runner_lock:
         if _runner_alive():
             return True, _runner.pid, False
         _runner = subprocess.Popen(
-            [sys.executable, RUNNER_PATH],
+            [sys.executable, RUNNER_PATH, config_name],
             cwd=BASE_DIR,
             preexec_fn=os.setsid,  # 独立进程组，停止走 os.killpg
             stdin=subprocess.DEVNULL,
@@ -89,12 +98,13 @@ def start_runner():
             stderr=subprocess.DEVNULL,
         )
         _runner_started_at = time.time()
+        _runner_config = config_name
         return True, _runner.pid, True
 
 
 def stop_runner():
     """SIGTERM → 3s → SIGKILL，杀整个进程组。返回 (was_alive, exit_code)。"""
-    global _runner
+    global _runner, _runner_config
     with _runner_lock:
         if not _runner_alive():
             return False, _runner.returncode if _runner else None
@@ -114,6 +124,7 @@ def stop_runner():
             _runner.wait(timeout=5)
         code = _runner.returncode
         _runner = None
+        _runner_config = None
         return True, code
 
 
@@ -244,6 +255,29 @@ def _acquire_instance_lock():
     return fd
 
 
+# ---------------------------------------------------------------- 配置实例发现
+
+def _list_configs():
+    """config/ 下的实例配置名：*.json 去掉 template*（template.json/.maa/.fpy 等），
+    去扩展名排序，'alas' 固定排最前。与 WebUI 配置下拉的来源同一层。"""
+    try:
+        names = []
+        for p in os.listdir(CONFIG_DIR):
+            if not p.endswith('.json'):
+                continue
+            stem = p[:-len('.json')]
+            if stem.startswith('template'):
+                continue
+            names.append(stem)
+    except FileNotFoundError:
+        return []
+    names.sort()
+    if 'alas' in names:
+        names.remove('alas')
+        names.insert(0, 'alas')
+    return names
+
+
 # ---------------------------------------------------------------- 日志读取
 
 def _latest_log_file():
@@ -311,6 +345,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({
                 'runner_alive': _runner_alive(),
                 'pid': _runner.pid if _runner_alive() else None,
+                'config': _runner_config if _runner_alive() else None,
                 'started_at': datetime.datetime.fromtimestamp(_runner_started_at).isoformat()
                 if _runner_alive() and _runner_started_at else None,
                 'gui_alive': _gui_alive(),
@@ -320,6 +355,8 @@ class _Handler(BaseHTTPRequestHandler):
                 'log_file': log_file,
                 'log_lines': _count_lines(log_file) if log_file else 0,
             })
+        elif url.path == '/configs':
+            self._json({'configs': _list_configs()})
         elif url.path == '/logs':
             qs = parse_qs(url.query)
             try:
@@ -337,8 +374,14 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urlparse(self.path)
         if url.path == '/start':
-            alive, pid, started_now = start_runner()
-            self._json({'runner_alive': alive, 'pid': pid, 'started_now': started_now})
+            qs = parse_qs(url.query)
+            config_name = qs.get('config', ['alas'])[0] or 'alas'
+            if not _CONFIG_RE.match(config_name):
+                self._json({'error': 'invalid config name'}, code=400)
+                return
+            alive, pid, started_now = start_runner(config_name)
+            self._json({'runner_alive': alive, 'pid': pid, 'started_now': started_now,
+                        'config': _runner_config if alive else None})
         elif url.path == '/stop':
             was_alive, code = stop_runner()
             self._json({'runner_alive': False, 'was_alive': was_alive, 'exit_code': code})

@@ -287,6 +287,15 @@
     <string name="proot_phase_starting">Starting ALAS service…</string>
     <string name="proot_phase_failed">Failed to start ALAS environment: %1$s</string>
 
+    <!-- Hangar tab: virtual display preview + run config + control panel -->
+    <string name="nav_hangar">Farming</string>
+    <string name="hangar_env_down">Environment not started — no preview</string>
+    <string name="hangar_env_start">Start environment</string>
+    <string name="hangar_preview_waiting">Connecting preview…</string>
+    <string name="hangar_config_label">Run config</string>
+    <string name="hangar_config_switch">Switch</string>
+    <string name="hangar_config_running_hint">Stop the scheduler to switch config</string>
+
     <!-- Option editor -->
     <string name="option_input_invalid">Invalid input</string>
 

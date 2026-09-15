@@ -1,5 +1,6 @@
 package com.aliothmoon.maafw.proot
 
+import android.content.Context
 import com.aliothmoon.maafw.MaaDispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -13,20 +14,23 @@ import org.json.JSONObject
 import timber.log.Timber
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * ALAS 调度器运行态：悬浮窗「开始/停止挂机」与日志板的数据源
  *
  * 数据全部来自 wrapper 薄 HTTP（127.0.0.1:22400，rootfs wrapper.py）：
- * - GET /status → runner_alive/pid/gui_alive/log_lines
- * - POST /start、POST /stop → 调度器启停（幂等；/stop 内部 SIGTERM→3s→SIGKILL，响应偏慢）
+ * - GET /status → runner_alive/pid/config/gui_alive/log_lines
+ * - POST /start?config=N、POST /stop → 调度器启停（幂等；/stop 内部 SIGTERM→3s→SIGKILL，响应偏慢）
  * - GET /logs?tail=N → 纯文本日志尾。语义：按 mtime 取 log/ 下最新 *.txt——
  *   调度器在跑时是它的 {date}_alas.txt，没跑时多半是 gui 启动日志，均够悬浮窗一瞥
+ * - GET /configs → config/ 下的实例配置名列表（运行配置下拉的数据源）
  *
  * 4s 轮询；wrapper 不可达不视为错误（proot 会话没起/正在起，reachable=false 即可）。
- * 双头管理注意：WebUI 的启停按钮走 ProcessManager，与本通道并存时不要两边都点
- * （roadmap 阶段四决策：悬浮窗是唯一控制面，WebUI 按钮别用，见 docs/spike-d-wrapper-surface.md）
+ * 运行配置选择持久化在 SharedPreferences，/start 时透传给 runner；
+ * 调度器在跑时 /status 回报的 config 才是生效配置，下拉选择下次启动生效。
+ * 双头管理注意：WebUI 的启停按钮已被锁定补丁封死（只记 warning），本通道是唯一控制面。
  */
 data class AlasRunState(
     val reachable: Boolean = false,
@@ -36,13 +40,29 @@ data class AlasRunState(
     val logLines: Int = 0,
     val logTail: List<String> = emptyList(),
     val busy: Boolean = false,
-)
+    val configs: List<String> = emptyList(),
+    val selectedConfig: String = DEFAULT_CONFIG,
+    /** 正在跑的实例名（/status 回报）；没在跑为 null */
+    val runningConfig: String? = null,
+) {
+    companion object {
+        const val DEFAULT_CONFIG = "alas"
+    }
+}
 
 class AlasRunController(
+    context: Context,
     private val scope: CoroutineScope,
 ) {
 
-    private val _state = MutableStateFlow(AlasRunState())
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val _state = MutableStateFlow(
+        AlasRunState(
+            selectedConfig = prefs.getString(KEY_SELECTED_CONFIG, AlasRunState.DEFAULT_CONFIG)
+                ?: AlasRunState.DEFAULT_CONFIG,
+        )
+    )
     val state = _state.asStateFlow()
 
     private val started = AtomicBoolean(false)
@@ -59,7 +79,16 @@ class AlasRunController(
         }
     }
 
-    fun startAlas() = postThenRefresh("$BASE/start")
+    /** 选择运行配置：持久化，下次 /start 生效；调度器在跑时不拦，但生效要等下次启动 */
+    fun selectConfig(name: String) {
+        prefs.edit().putString(KEY_SELECTED_CONFIG, name).apply()
+        _state.update { it.copy(selectedConfig = name) }
+    }
+
+    fun startAlas() {
+        val config = URLEncoder.encode(_state.value.selectedConfig, "UTF-8")
+        postThenRefresh("$BASE/start?config=$config")
+    }
 
     fun stopAlas() = postThenRefresh("$BASE/stop")
 
@@ -87,6 +116,7 @@ class AlasRunController(
                 it.copy(
                     reachable = false, runnerAlive = false, pid = null,
                     guiAlive = false, logLines = 0, logTail = emptyList(),
+                    configs = emptyList(), runningConfig = null,
                 )
             }
             return
@@ -94,8 +124,19 @@ class AlasRunController(
         val j = runCatching { JSONObject(body) }.getOrNull() ?: return
         val runnerAlive = j.optBoolean("runner_alive")
         val pid = if (j.isNull("pid")) null else j.optInt("pid")
+        val runningConfig = if (j.isNull("config")) null else j.optString("config")
         val guiAlive = j.optBoolean("gui_alive")
         val logLines = j.optInt("log_lines")
+        val configs = runCatching {
+            val arr = JSONObject(get("$BASE/configs", HTTP_TIMEOUT_MS) ?: return@runCatching null)
+                .getJSONArray("configs")
+            List(arr.length()) { arr.getString(it) }
+        }.getOrNull() ?: _state.value.configs
+        // 持久化的选择可能已被 WebUI 删掉；列表非空时自愈回第一项
+        val selected = _state.value.selectedConfig
+        if (configs.isNotEmpty() && selected !in configs) {
+            selectConfig(configs.first())
+        }
         val tail = get("$BASE/logs?tail=$LOG_TAIL", HTTP_TIMEOUT_MS)
             ?.split('\n')
             ?.filter { it.isNotBlank() }
@@ -104,6 +145,7 @@ class AlasRunController(
             it.copy(
                 reachable = true, runnerAlive = runnerAlive, pid = pid,
                 guiAlive = guiAlive, logLines = logLines, logTail = tail,
+                configs = configs, runningConfig = runningConfig,
             )
         }
     }
@@ -122,5 +164,7 @@ class AlasRunController(
         const val HTTP_TIMEOUT_MS = 1_500
         const val POST_READ_TIMEOUT_MS = 12_000
         const val LOG_TAIL = 80
+        const val PREFS_NAME = "maaal_alas"
+        const val KEY_SELECTED_CONFIG = "selected_config"
     }
 }

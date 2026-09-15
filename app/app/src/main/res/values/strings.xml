@@ -283,6 +283,15 @@
     <string name="proot_phase_starting">正在启动 ALAS 服务…</string>
     <string name="proot_phase_failed">ALAS 环境启动失败：%1$s</string>
 
+    <!-- 挂机 tab：虚拟屏画面 + 运行配置 + 控制面板 -->
+    <string name="nav_hangar">挂机</string>
+    <string name="hangar_env_down">环境未启动，暂无画面</string>
+    <string name="hangar_env_start">启动环境</string>
+    <string name="hangar_preview_waiting">正在接入画面…</string>
+    <string name="hangar_config_label">运行配置</string>
+    <string name="hangar_config_switch">切换</string>
+    <string name="hangar_config_running_hint">调度器运行中，停止后可切换配置</string>
+
     <!-- option 编辑器 -->
     <string name="option_input_invalid">输入不合法</string>
 

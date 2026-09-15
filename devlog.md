@@ -4,6 +4,22 @@
 
 ## 未发版
 
+### 2026-09-16 · 挂机页落地 ✅：应用内「游戏画面 + 运行配置 + 操作面板」真机实证
+
+- **起因**：用户提出把悬浮窗操作面板做进应用内（上游 MaaFwApp 游戏窗口页的形制）。可行性分析（`handoff/2026-09-16-gamepage-analysis.md`）发现预览通道在阶段二减法中幸存（AIDL setMonitorSurface / RemoteServiceImpl / native bridge_preview 全在现役包），用户拍板开工；并明确「任务概览」= ALAS 配置文件里的**配置名下拉框**（不显示具体内容）。
+- **wrapper.py**（rootfs/overlays + assets/alas/overlay 同源同步）：新增 `GET /configs`（config/*.json 去 template*，'alas' 排最前）；`POST /start?config=N` 透传实例名给 runner argv[1]（白名单字符校验）；`/status` 新增 `config` 字段（在跑实例名）。
+- **App 侧**：`AlasRunController` 加配置态（configs/selectedConfig/runningConfig，SharedPreferences 持久化，列表非空且选择失效时自愈回第一项）；`HostState` 加 attach/detachPreviewSurface（AIDL setMonitorSurface）；抽出共享组合件 `ui/components/AlasControlPanel.kt`（状态行+日志板+启停），`OverlayPanel` 重构复用；新 `ui/hangar/HangarScreen.kt`（虚拟屏 16:9 预览 + 运行配置卡 + 面板）；`AppRoot` TopDestination 加「挂机」为**第一主 tab（默认首页）**，Routes/i18n（zh/en）同步。
+- **真机验证**（HONOR PPG-AN00，版本 22 装机）：GET /configs → `["alas"]` ✅；/status 含 config ✅；页面结构全渲染 ✅；下拉点开列出 alas ✅；**预览通道像素级实证**——VD 空载时桥帧全零、app 预览同黑；往 VD 推 Settings 后桥帧白+左黑条、app 预览同构图，两图一致（证据 `.tmp/hangar-2.png` vs `.tmp/vd-frame2.png`）。「开始挂机」未按（纪律，留给用户在场演示）；Settings 已 force-stop 清场。
+- **坑**：MagicOS 无线调试又休眠掉线一次（install 空报错→device offline→重连恢复）；构建漏 fillMaxSize import 一次（13s 快败即修）。
+- README 工作原理图与「使用」段同步为「挂机页/悬浮窗 = 控制面」。
+
+### 2026-09-16 · 可行性分析 🟢：应用内「挂机页」（游戏画面+操作面板+ALAS 任务概览）
+
+- **用户新想法**（只分析未实施）：把悬浮窗操作面板做进应用内页面——保留游戏画面在上、下面改操作面板、原任务配置框改显 ALAS 任务管理配置。
+- **核心发现：预览通道在阶段二减法中幸存**。减法只删 UI 层（ui/home、ui/tasks、runner/PreviewPort），底层整段还在现役 build：AIDL `RemoteService.aidl:62` setMonitorSurface（+触摸注入三连）、特权端 `RemoteServiceImpl.kt:203-207`、native bridge_preview/bridge_capture/bridge_frame_buffer 仍在 CMake 编译；帧源被桥 screencap p50=30ms 实证活着。缺口只剩 app 侧一个 SurfaceView 组合件（上游 MaaPreviewSurface.kt 91 行可照抄）+ 一次 service 调用，**零 native/AIDL 工作量**。
+- **分层结论**：A 游戏画面=小~中（唯一未知=bridge_preview 真机首验）；B 操作面板=小（OverlayPanel/AlasRunController/HostState 全可复用）；C 任务概览=小~中只读（wrapper 加 /tasks 解析 alas.json 带 Scheduler 节的任务组；**不做原生编辑**，守双头纪律）。结构=AppRoot TopDestination 加第三主 tab。合计约 2 天，A 先行排雷。
+- 全账：`handoff/2026-09-16-gamepage-analysis.md`。**待用户拍板做不做/分期/命名**。
+
 ### 2026-09-16 · 装机验证收官 ✅：WebUI 锁定补丁真机实证 LOCKED-OK + 全链体检上岗
 
 - **补丁真机静态验证（adb 恢复后）**：新 APK `install -r` Success → 冷启环境全起 → proot 一次性 python 在 guest 内 import `module.webui.patch` 后核 `ProcessManager.start/stop`——**均为 `patch_maaal_scheduler_lock.<locals>._locked`，LOCKED-OK**。锁壳在真实 guest 环境按设计生效；剩演示日用户点 WebUI Start 的行为确认（应只留 warning）。
