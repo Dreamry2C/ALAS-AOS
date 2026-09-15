@@ -161,10 +161,13 @@ pip_install() {
 # uvicorn 装裸版不带 [standard]：standard extra 拉 uvloop/httptools 老钉版死链（m0 同款处理）。
 # deploy.yaml 的 RequirementsFile 键永不执行（InstallDependencies:false 已锁），无需迁就其清单。
 # native 包宽松不钉死（numpy 写 >=2 表意图）；pydantic 钉 <2 对齐 ALAS v1 API
+# cached-property：ALAS config_updater.py / alas.py 顶层 import；老 uiautomator2 2.x 的
+# 传递依赖，现代 3.x 不再传递，必须显式装（M1-d 真机 WebUI 实锤，静态全扫唯一缺口）
 pip_install \
   'numpy>=2' scipy pillow lxml opencv-python-headless onnxruntime \
   pywebio uvicorn fastapi aiofiles inflection pyyaml requests tqdm rich imageio \
-  'pydantic<2' adbutils uiautomator2 uiautomator2cache websockets pypresence onepush
+  'pydantic<2' adbutils uiautomator2 uiautomator2cache websockets pypresence onepush \
+  cached-property
 
 # ---------- 6. 应用本仓资产（宿主侧拷入 $ROOTFS_DIR/opt/alas） ----------
 # m0 补丁集：module/ 与 assets/ 子树整层覆盖上游同名文件
@@ -216,7 +219,7 @@ chroot_run python3 - <<'PY'
 try:
     import cv2, numpy, scipy, PIL, lxml.etree, yaml
     import pywebio, uvicorn, fastapi, pydantic, imageio, rich, requests, jellyfish
-    import adbutils, uiautomator2, onnxruntime
+    import adbutils, uiautomator2, onnxruntime, cached_property
 except ImportError as e:
     print(f'::error::import 硬门禁失败: {e}')
     raise SystemExit(1)
