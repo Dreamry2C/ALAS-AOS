@@ -27,7 +27,7 @@ enum class SystemPermission(val grantBit: Int) {
 }
 
 /**
- * 无状态的权限探测与请求，与 [ShizukuInstallHelper] 同一路子：需要 Activity 的动作由 Route 层执行
+ * 无状态的权限探测与请求：需要 Activity 的动作由 Route 层执行
  *
  * 走 XXPermissions 而不是自己拼 Intent：MIUI 的电池优化白名单判定与系统页跳转都有偏差
  */

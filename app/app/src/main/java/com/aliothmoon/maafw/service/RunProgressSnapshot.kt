@@ -1,4 +1,4 @@
-package com.aliothmoon.maafw.notification
+package com.aliothmoon.maafw.service
 
 import android.app.NotificationManager
 import android.os.Build

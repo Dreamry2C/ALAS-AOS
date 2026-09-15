@@ -11,7 +11,7 @@ import java.io.File
 /**
  * 服务进程启动诊断 trace（Shizuku / Root 用户服务进程侧）。
  *
- * 卡死发生在 [RemoteServiceImpl] 构造阶段（init 块里同步加载 libMaaCore.so），早于 setup(userDir)，
+ * 卡死发生在 [RemoteServiceImpl] 构造阶段（init 块里的进程内初始化），早于 setup(userDir)，
  * 此时进程既没有 Context 也拿不到 App 传来的外部路径。FakeContext.getExternalFilesDir() 解析的是
  * com.android.shell 的目录而非本应用，不可用
  *

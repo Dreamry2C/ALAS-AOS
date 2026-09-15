@@ -7,7 +7,6 @@ import com.aliothmoon.maafw.bridge.InputControlUtils
 import com.aliothmoon.maafw.bridge.NativeBridgeLib
 import com.aliothmoon.maafw.constant.DefaultDisplayConfig
 import com.aliothmoon.maafw.constant.DisplayMode
-import com.aliothmoon.maafw.maa.MaaFrameworkLoader
 import com.aliothmoon.maafw.remote.internal.ActivityUtils
 import com.aliothmoon.maafw.remote.internal.AppWatchdog
 import com.aliothmoon.maafw.remote.internal.PermissionGrantHelper
@@ -38,16 +37,6 @@ class RemoteServiceImpl : RemoteService.Stub() {
     private val virtualDisplayMode = AtomicInteger(DisplayMode.BACKGROUND)
     private val appPid = AtomicInteger(0)
     private val destroyed = AtomicBoolean(false)
-    private var piRoot: String? = null
-
-    // 两者互相引用：host 要把 child 的输出交回 runner 的回调。用 lazy 打破初始化顺序——
-    // host 的 lambda 到真正有输出时才读 runner，那会儿它早已建好
-    private val runner: MaaRunner by lazy { MaaRunner(agentHost) }
-    private val agentHost: ExecAgentHost by lazy {
-        ExecAgentHost { line, fromStderr ->
-            runner.onAgentLine(line, fromStderr)
-        }
-    }
 
     init {
         RemoteBootTrace.mark("CTOR_START")
@@ -64,7 +53,6 @@ class RemoteServiceImpl : RemoteService.Stub() {
         Ln.i("$TAG: destroy()")
         AppWatchdog.stopWatching()
         InputControlUtils.setTouchCallback(null)
-        runner.destroy()
         cleanup()
         exitProcess(0)
     }
@@ -75,7 +63,6 @@ class RemoteServiceImpl : RemoteService.Stub() {
         append("bridge=").append(if (NativeBridgeLib.LOADED) NativeBridgeLib.ping() else "not loaded")
         append(" uid=").append(Process.myUid())
         append(" pid=").append(Process.myPid())
-        append(" pi=").append(piRoot ?: "unset")
     }
 
     override fun pid(): Int = Process.myPid()
@@ -117,33 +104,10 @@ class RemoteServiceImpl : RemoteService.Stub() {
     }
 
     override fun setup(piRoot: String?, logDir: String?, isDebug: Boolean): Boolean {
-        if (piRoot.isNullOrBlank() || !File(piRoot).isDirectory) {
-            Ln.e("$TAG: setup failed - PI root not readable: $piRoot")
-            return false
-        }
-        this.piRoot = piRoot
-        // agent child 的 cwd 与上游 MaaPiCli 对齐，取 PI 根
-        runner.setProjectRoot(piRoot)
-        // Android 12 起子进程会被 phantom process killer 收割，接 native 前先关掉
-        // agent child 同样吃这条：它是特权进程 fork 出来的，不关就会被一起收走
+        // Android 12 起子进程会被 phantom process killer 收割，先关掉
         PermissionGrantHelper.disablePhantomProcessKiller()
-        // 特权进程是 shell/root 身份，app 建的目录未必可写，这里自己建一遍
-        if (!logDir.isNullOrBlank() && ensureWritableDir(logDir)) {
-            runner.applyGlobalOptions(logDir, isDebug)
-        } else {
-            Ln.w("$TAG: log dir unusable, MaaFramework will write to process CWD: $logDir")
-        }
-        Ln.i("$TAG: setup ok, piRoot=$piRoot")
+        Ln.i("$TAG: setup, piRoot=$piRoot logDir=$logDir isDebug=$isDebug")
         return true
-    }
-
-    private fun ensureWritableDir(path: String): Boolean {
-        val dir = File(path)
-        if (!dir.isDirectory && !dir.mkdirs()) {
-            Ln.e("$TAG: mkdirs failed: $path")
-            return false
-        }
-        return dir.canWrite()
     }
 
     // ── 显示 ──
@@ -260,28 +224,17 @@ class RemoteServiceImpl : RemoteService.Stub() {
 
     // ── 执行 ──
 
-    override fun setRunnerCallback(callback: IMaaRunnerCallback?) {
-        runner.setCallback(callback)
-    }
+    override fun setRunnerCallback(callback: IMaaRunnerCallback?) = Unit
 
-    override fun startRun(runPlanJson: String?): Boolean {
-        if (runPlanJson.isNullOrBlank()) return false
-        val started = runner.start(runPlanJson)
-        if (started) AppWatchdog.startWatching()
-        return started
-    }
+    override fun startRun(runPlanJson: String?): Boolean = false
 
-    override fun stopRun(): Boolean {
-        AppWatchdog.stopWatching()
-        return runner.stop()
-    }
+    override fun stopRun(): Boolean = false
 
-    override fun isRunning(): Boolean = runner.isRunning()
+    override fun isRunning(): Boolean = false
 
-    override fun saveCachedImage(path: String?): Boolean =
-        !path.isNullOrBlank() && runner.saveCachedImage(path)
+    override fun saveCachedImage(path: String?): Boolean = false
 
-    override fun maaVersion(): String? = MaaFrameworkLoader.library?.MaaVersion()
+    override fun maaVersion(): String? = null
 
     /**
      * 逐项独立执行：一项失败不影响其余，返回实际授到的位

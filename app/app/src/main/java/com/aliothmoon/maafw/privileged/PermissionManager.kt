@@ -2,6 +2,8 @@ package com.aliothmoon.maafw.privileged
 import com.aliothmoon.maafw.MaaDispatchers
 
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -10,6 +12,7 @@ import com.aliothmoon.maafw.service.AccessibilityHelperService
 import com.aliothmoon.maafw.domain.RemoteBackend
 import com.aliothmoon.maafw.i18n.uiTextFromFramework
 import com.aliothmoon.maafw.settings.AppSettingsManager
+import rikka.sui.Sui
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -251,10 +254,15 @@ class PermissionManager(
         appSettings.setSkipShizukuCheck(true)
     }
 
-    fun installShizuku(context: Context): Boolean = ShizukuInstallHelper.installShizuku(context)
-
-    fun openShizuku(context: Context): Boolean =
-        ShizukuInstallHelper.openShizuku(context, appSettings.shizukuLaunchPackage.value)
+    fun openShizuku(context: Context): Boolean {
+        val launchPackage = appSettings.shizukuLaunchPackage.value
+        if (launchPackage.isBlank()) return false
+        val intent = context.packageManager.getLaunchIntentForPackage(launchPackage) ?: return false
+        return runCatching {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        }.onFailure { Timber.w(it, "Failed to open Shizuku") }.getOrDefault(false)
+    }
 
     private suspend fun resolveReadiness(
         remoteState: RemoteAccessState,
@@ -262,25 +270,29 @@ class PermissionManager(
         launchPackage: String,
     ): ShizukuReadiness {
         val stage = when {
-            // 已跳过就不再付 checkStatus 那次 IPC 的代价
+            // 已跳过就不再付探测那次 IPC 的代价
             skipCheck -> ShizukuReadinessStage.Ready
             remoteState.configuredBackend != RemoteBackend.SHIZUKU -> ShizukuReadinessStage.Ready
             // Sui 在启动时已 init，先报兼容性，别被下面的 shizukuAvailable 抢成 NeedAuth
             ShizukuManager.isSui -> ShizukuReadinessStage.SuiAvailable
             remoteState.shizukuGranted -> ShizukuReadinessStage.Ready
             remoteState.shizukuAvailable -> ShizukuReadinessStage.NeedAuth
-            else -> when (
-                withContext(MaaDispatchers.IO) {
-                    ShizukuInstallHelper.checkStatus(appContext, launchPackage)
-                }
-            ) {
-                ShizukuInstallHelper.Status.SuiAvailable -> ShizukuReadinessStage.SuiAvailable
-                ShizukuInstallHelper.Status.NotRunning -> ShizukuReadinessStage.NotRunning
-                ShizukuInstallHelper.Status.Ready -> ShizukuReadinessStage.NeedAuth
-                ShizukuInstallHelper.Status.NotInstalled -> ShizukuReadinessStage.NotInstalled
-            }
+            else -> withContext(MaaDispatchers.IO) { probeShizukuStage(launchPackage) }
         }
         return ShizukuReadiness(stage = stage, canSwitchToRoot = remoteState.rootAvailable)
+    }
+
+    private fun probeShizukuStage(launchPackage: String): ShizukuReadinessStage {
+        val sui = runCatching { Sui.init(appContext.packageName) }.getOrDefault(false)
+        if (sui) return ShizukuReadinessStage.SuiAvailable
+        if (ShizukuManager.isShizukuAvailable()) return ShizukuReadinessStage.NeedAuth
+        val installed = launchPackage.isNotBlank() && try {
+            appContext.packageManager.getPackageInfo(launchPackage, 0)
+            true
+        } catch (_: PackageManager.NameNotFoundException) {
+            false
+        }
+        return if (installed) ShizukuReadinessStage.NotRunning else ShizukuReadinessStage.NotInstalled
     }
 
     private companion object {

@@ -1,9 +1,8 @@
 # R8 规则
 #
-# 这个应用有三类东西 R8 的可达性分析看不见，改名或裁掉都只在设备上炸，编译期一声不吭：
+# 这个应用有两类东西 R8 的可达性分析看不见，改名或裁掉都只在设备上炸，编译期一声不吭：
 #   1. native 按字面名 FindClass / GetStaticMethodID 的 upcall 目标
-#   2. JNA 按 Java 方法名去 dlsym 的 C 函数绑定
-#   3. 特权进程用 app_process 按类名加载的入口（与 app 不是同一个进程）
+#   2. 特权进程用 app_process 按类名加载的入口（与 app 不是同一个进程）
 # 每一条都注明是哪一种，删之前先确认对应的调用方也没了
 
 # 崩溃日志要能对得上号：CrashHandler 落盘的栈是给人看的，行号丢了就只剩类名
@@ -18,18 +17,7 @@
 -keep class com.aliothmoon.maafw.bridge.NativeBridgeLib { *; }
 -keep class com.aliothmoon.maafw.bridge.DriverClass { *; }
 
-# ── 2. JNA ──
-# Native.load(name, X::class.java) 拿 Java 方法名当 C 符号名去 dlsym，
-# 整包保留而不是逐个接口：MaaEventCallback 这类回调是嵌套类型，-keep interface 盖不到
--keep class com.aliothmoon.maafw.maa.** { *; }
-# libjnidispatch 按字面名 FindClass 的那些都在顶层包（Pointer / Memory / Function /
-# CallbackReference …），子包（ptr / internal / win32）没有 native 反查，交给 R8 裁
--keep class com.sun.jna.* { *; }
--keepclassmembers class * extends com.sun.jna.Structure { <fields>; }
--keepclassmembers class * implements com.sun.jna.Callback { <methods>; }
--dontwarn java.awt.**
-
-# ── 3. 特权进程的入口 ──
+# ── 2. 特权进程的入口 ──
 # app_process --starter-class / --class 按名字加载；Shizuku 那条走 ComponentName
 -keep class com.aliothmoon.maafw.remote.RemoteServiceImpl { *; }
 -keep class com.aliothmoon.maafw.remote.LogcatCaptureServiceImpl { *; }
@@ -66,22 +54,3 @@
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
-
-# markwon-image 对 SVG 与 GIF 的支持是可选依赖，本仓库没引，那两条解码分支进不去
--dontwarn com.caverock.androidsvg.**
--dontwarn pl.droidsonroids.gif.**
-
-# ── SMTP 推送渠道 ──
-# 反射目标不用猜，就是包里那几份元数据点名的类：META-INF/services/jakarta.mail.Provider、
-# META-INF/javamail.default.providers、META-INF/mailcap。ServiceLoader 迭代时少一个就抛
-# ServiceConfigurationError，所以 imap / pop3 也得留着——虽然本应用只发 smtp
-# jakarta.mail / jakarta.activation 的 API 类由上面这些静态引用带到，不必整包保留
--keep class org.eclipse.angus.mail.smtp.** { *; }
--keep class org.eclipse.angus.mail.imap.** { *; }
--keep class org.eclipse.angus.mail.pop3.** { *; }
--keep class org.eclipse.angus.mail.handlers.** { *; }
--keep class org.eclipse.angus.mail.util.MailStreamProvider { *; }
--keep class org.eclipse.angus.activation.*RegistryProviderImpl { *; }
--dontwarn org.eclipse.angus.**
--dontwarn jakarta.**
--dontwarn javax.**

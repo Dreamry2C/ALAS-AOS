@@ -1,8 +1,10 @@
 package com.aliothmoon.maafw.settings
 
-import com.aliothmoon.maafw.privileged.ShizukuInstallHelper
 import com.aliothmoon.preferences.PrefKey
 import com.aliothmoon.preferences.PrefSchema
+
+/** Shizuku 官方包名，manifest 的 `<queries>` 里声明的就是它 */
+private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
 
 /**
  * app 级设置，与 `UserConfiguration` 分开存
@@ -24,8 +26,8 @@ data class AppSettings(
     val skipShizukuCheck: String = "false",
 
     /** Shizuku 管理器的包名；有 ROM 内置了自己的分发，允许指到别处 */
-    @PrefKey(default = ShizukuInstallHelper.SHIZUKU_PACKAGE)
-    val shizukuLaunchPackage: String = ShizukuInstallHelper.SHIZUKU_PACKAGE,
+    @PrefKey(default = SHIZUKU_PACKAGE)
+    val shizukuLaunchPackage: String = SHIZUKU_PACKAGE,
 
     /** 首页是否显示「打开 Shizuku」快捷入口 */
     @PrefKey(default = "true")

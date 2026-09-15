@@ -25,7 +25,6 @@ object VirtualDisplayManager {
     private const val VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY: Int =
         DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
     private const val VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH: Int = 1 shl 6
-    private const val VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT: Int = 1 shl 7
     private const val VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL: Int = 1 shl 8
     private const val VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS: Int = 1 shl 9
     private const val VIRTUAL_DISPLAY_FLAG_TRUSTED: Int = 1 shl 10
