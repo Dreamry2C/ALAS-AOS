@@ -4,6 +4,16 @@
 
 ## 未发版
 
+### 2026-09-17 · 修复 ✅：「ALAS 重启即断连」——base.py 全量补丁冻结漂移 + runner 崩溃自拉起
+
+- **用户现象**：挂机中 ALAS 一旦发起游戏重启（Restart 任务），任务断开、要重新手点「开始挂机」。日志用户导不出，我经 run-as 直读设备 `/opt/alas/log/` 定位。
+- **根因 A（致命崩溃）**：Research 任务异常 → ALAS `Task call: Restart` → `App stop/start` → 登录处理器 `handle_cn_user_agreement` 调 `image_color_button(threshold=10)` → **TypeError**（运行态 base.py 签名是 `color_threshold`）→ runner 死。漂移机制：补丁施加是 `cp -rf` **整文件覆盖**（build-rootfs.sh:175），我们的 `patches/module/base/base.py` 是 m0 时代全量拷贝，把热更新到上游 master 的 base.py 冻回旧版；login.py 已热更新到新版（与上游 master 逐字节一致，实测 diff 空），新旧 API 撞车。补丁里真正的自有改动只有 `early_ocr_import` 的 MaaAL BEGIN/END 预热块（9 行）。
+- **修复 A**：base.py 补丁**重打** = 上游 master 原样 + MaaAL 块（本地 python 脚本锚点替换生成，diff 只剩 9 行）。双源同步（rootfs/patches ↔ assets/alas/patches），base64 分块法直写设备活文件并 diff 校验一致（DEVICE_SYNC_OK），设备 login.py 与上游 master 逐字节一致佐证重打目标正确。
+- **根因 B（体验断连）**：wrapper 只监管 WebUI（gui 崩溃重拉），**runner 无监管**——任何崩溃都要人手再点。
+- **修复 B**（wrapper.py，双源同步）：`_runner_wanted` Event（/start 置位、/stop 复位）+ `_runner_supervisor` 监管循环——runner 非预期死亡按 5s→60s 退避自动重拉同配置实例，活过 5 分钟退避复位；与 gui 监管同款形制。`/status` 新增 `runner_wanted`/`runner_respawns` 字段。ALAS 重跑会自处理 pending 队列，挂机无感续跑。
+- **验证（不越纪律，未代按开始挂机）**：wrapper py_compile ✅；base.py py_compile ✅；APK 重装后 `/status` 已带新字段（wrapper 新版在岗，gui 活着）✅。**端到端留给用户**：按「开始挂机」→ 等 ALAS 触发 Restart（或任意崩溃）→ 应见自动重拉、/status runner_respawns +1。
+- **坑入库**：adb exec-out stdin 不递 EOF（`cat >` 悬挂 10 分钟）；写设备文件改用 base64 分块 echo -n 追加 + base64 -d。
+
 ### 2026-09-17 · 修复 ✅：「开始挂机 touch down failed」——桥侧 down 注入有界重试吸收窗注册竞态
 
 - **症状**：用户按「开始挂机」，调度器识别到 GET_SHIP 后首击 `Click (1009,643)` → `ScriptError: MaaAL proxy error: touch down failed` → CRITICAL 死（runner2/3 同死法；runner1 之死系 install -r 重装箱误杀，非 bug）。
