@@ -2,11 +2,11 @@
 
 ## 当前阶段
 
-**阶段四进行中**：M4-a ✅（悬浮窗直连 wrapper 薄 HTTP：ALAS 调度器状态行 + 开始/停止挂机按钮 + 半透明日志板，`proot/AlasRunController` 4s 轮询；双头管理定案=悬浮窗唯一控制面、WebUI 启停按钮禁用写文档，不做 Spike D in-proc 重构）。「开始挂机」端到端演示（真拉起 ALAS 操作游戏）留用户在场。**阶段三已收官**：M3-a（首启解压流水线）✅ → M3-b（FGS 拉 proot + 自愈清锁 + 热更新快进路径 + wrapper 监管 WebUI）✅ → M3-c（生命周期防护：杀 Java 进程 ≤3s 全树自尽 / force-stop 零残留双实证 + 重启引导文案对齐决策 #11）✅。阶段三 DoD 3 项中 2 项全绿，第 3 项（重启手机经引导恢复）机制+文案落地、**真机重启验证待用户授权**。阶段一 M1 已交付：rootfs 构建链 GHA 四连迭代至绿，v4 artifact 为交付基准；M1-d 真机复验 WebUI/MANIFEST 已过，**油数验收改走生产链（待用户把游戏点到出击菜单页）**。
+**阶段四应用内侧全落地**：M4-a ✅（悬浮窗直连 wrapper 薄 HTTP：调度器状态行 + 开始/停止挂机 + 半透明日志板；双头管理定案=悬浮窗唯一控制面）→ M4-b ✅（官方版 Shizuku 冲突引导：flavor 检测 + OfficialConflict 档 + 去卸载闭环；冲突分支真机未演留阶段五）→ M4-c ✅（开屏 `pageReady` 载入层淡出不再闪错误脸 + 面板分工 caption）。**阶段四 DoD 只剩「开始挂机」端到端演示（真拉起 ALAS 操作游戏，必须用户在场）**，过后进阶段五（多 ROM/长稳/Release/README）。**阶段三已收官**（M3-a/b/c 全 ✅，重启恢复机制+文案落地、真机重启验证待用户授权）。阶段一 M1 已交付：rootfs 构建链 GHA 四连迭代至绿，v4 artifact 为交付基准；M1-d 真机复验 WebUI/MANIFEST 已过，**油数验收改走生产链（待用户把游戏点到出击菜单页）**。
 
 - 开发宪法：`docs/roadmap-v3.md`（13 项决策、阶段〇–五、风险登记）。
 - 阶段二工作底稿：`docs/stage2-maafwapp-inventory.md`（减法三栏清单 / 新桥设计 / VD flag 核查）。
-- 任何不清楚之处：先读 roadmap，再读 `handoff/` 最新文件（当前 `2026-09-16-m4a.md`）。
+- 任何不清楚之处：先读 roadmap，再读 `handoff/` 最新文件（当前 `2026-09-16-m4c.md`）。
 
 ## 仓库结构（现状）
 

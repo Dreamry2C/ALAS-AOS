@@ -22,6 +22,7 @@ fun ShizukuReadinessDialog(
     onInstall: () -> Unit,
     onOpenApp: () -> Unit,
     onRequestAuth: () -> Unit,
+    onUninstall: () -> Unit,
     onDismiss: () -> Unit,
     onSwitchToRoot: () -> Unit,
     isRequesting: Boolean = false,
@@ -51,6 +52,19 @@ fun ShizukuReadinessDialog(
             icon = Icons.Outlined.Build,
             confirmText = stringResource(R.string.dialog_shizuku_open_app),
             onConfirm = onOpenApp,
+            neutralText = switchToRootText,
+            onNeutralClick = onSwitchToRoot,
+            dismissText = skipText,
+            onDismissRequest = onDismiss,
+        )
+
+        // 官方版与 shizuku-m 同包名不同签名，覆盖安装必失败；只能先卸再装
+        ShizukuReadinessStage.OfficialConflict -> MaaPromptDialog(
+            title = stringResource(R.string.dialog_shizuku_official_conflict_title),
+            message = stringResource(R.string.dialog_shizuku_official_conflict_message),
+            icon = Icons.Outlined.WarningAmber,
+            confirmText = stringResource(R.string.dialog_shizuku_uninstall_confirm),
+            onConfirm = onUninstall,
             neutralText = switchToRootText,
             onNeutralClick = onSwitchToRoot,
             dismissText = skipText,

@@ -161,6 +161,7 @@
     <string name="overlay_alas_start">Start ALAS</string>
     <string name="overlay_alas_stop">Stop ALAS</string>
     <string name="overlay_alas_log_empty">No logs yet</string>
+    <string name="overlay_alas_hint">Frequent actions live here; full configuration is in the in-app ALAS console</string>
     <string name="host_state_connected">connected</string>
     <string name="host_state_disconnected">disconnected</string>
     <string name="host_state_ok">OK</string>
@@ -280,6 +281,7 @@
     <!-- ALAS tab: WebUI container -->
     <string name="alas_webui_not_running">ALAS is served by the app\'s built-in environment. The first launch needs initialization; if it stays down, check the runtime environment and retry</string>
     <string name="alas_webui_retry">Retry connection</string>
+    <string name="alas_webui_loading">Loading console…</string>
     <string name="proot_phase_preparing">Preparing runtime environment…</string>
     <string name="proot_phase_updating">Hot-updating ALAS…</string>
     <string name="proot_phase_starting">Starting ALAS service…</string>
@@ -378,6 +380,9 @@
     <string name="dialog_sui_detected_message">Sui is providing the Shizuku service with root privileges. This app may not work correctly; please verify by actual testing.</string>
     <string name="dialog_shizuku_need_auth_title">Shizuku Not Authorized</string>
     <string name="dialog_shizuku_need_auth_message">Shizuku is running but has not authorized this app yet. Please grant access. This prompt keeps showing until access is granted.</string>
+    <string name="dialog_shizuku_official_conflict_title">Official Shizuku Detected</string>
+    <string name="dialog_shizuku_official_conflict_message">This app works with shizuku-m, a modified Shizuku that reconnects offline after every reboot without WLAN or a computer. It shares the official package name but uses a different signature, so it cannot be installed over the official build — uninstall the official Shizuku first, then install shizuku-m (see the project README). Uninstalling it does not affect this app data.</string>
+    <string name="dialog_shizuku_uninstall_confirm">Uninstall official build</string>
     <string name="common_got_it">Got it</string>
 
     <!-- Run log -->

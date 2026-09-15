@@ -4,6 +4,7 @@ import com.aliothmoon.maafw.MaaDispatchers
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -276,28 +277,69 @@ class PermissionManager(
             // Sui 在启动时已 init，先报兼容性，别被下面的 shizukuAvailable 抢成 NeedAuth
             ShizukuManager.isSui -> ShizukuReadinessStage.SuiAvailable
             remoteState.shizukuGranted -> ShizukuReadinessStage.Ready
-            remoteState.shizukuAvailable -> ShizukuReadinessStage.NeedAuth
-            else -> withContext(MaaDispatchers.IO) { probeShizukuStage(launchPackage) }
+            else -> withContext(MaaDispatchers.IO) {
+                probeShizukuStage(launchPackage, remoteState.shizukuAvailable)
+            }
         }
         return ShizukuReadiness(stage = stage, canSwitchToRoot = remoteState.rootAvailable)
     }
 
-    private fun probeShizukuStage(launchPackage: String): ShizukuReadinessStage {
+    /**
+     * 未授权时的分级探测。服务可用也可能是官方版在提供（同包名），
+     * 先按包 label 分 flavor：官方版一律劝换 shizuku-m（离线自连是本项目的根基）
+     */
+    private fun probeShizukuStage(launchPackage: String, serviceAvailable: Boolean): ShizukuReadinessStage {
         val sui = runCatching { Sui.init(appContext.packageName) }.getOrDefault(false)
         if (sui) return ShizukuReadinessStage.SuiAvailable
-        if (ShizukuManager.isShizukuAvailable()) return ShizukuReadinessStage.NeedAuth
-        val installed = launchPackage.isNotBlank() && try {
-            appContext.packageManager.getPackageInfo(launchPackage, 0)
-            true
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
+        val available = serviceAvailable || ShizukuManager.isShizukuAvailable()
+        when (detectShizukuFlavor(launchPackage)) {
+            ShizukuFlavor.OFFICIAL -> return ShizukuReadinessStage.OfficialConflict
+            ShizukuFlavor.MOD -> return if (available) {
+                ShizukuReadinessStage.NeedAuth
+            } else {
+                ShizukuReadinessStage.NotRunning
+            }
+
+            ShizukuFlavor.NONE -> Unit
         }
-        return if (installed) ShizukuReadinessStage.NotRunning else ShizukuReadinessStage.NotInstalled
+        // 包查不到但服务活着（launchPackage 被改过的怪局）：能用就先走授权
+        return if (available) ShizukuReadinessStage.NeedAuth else ShizukuReadinessStage.NotInstalled
+    }
+
+    /** 包名下同包异构：官方版 label 是 "Shizuku"，shizuku-m 的 app_name 改成了 "Shizuku-m"（SHIZUKU-M.md） */
+    private fun detectShizukuFlavor(packageName: String): ShizukuFlavor {
+        if (packageName.isBlank()) return ShizukuFlavor.NONE
+        return try {
+            val pm = appContext.packageManager
+            val label = pm.getPackageInfo(packageName, 0).applicationInfo?.loadLabel(pm)?.toString()
+            if (label?.contains(MOD_LABEL_MARK, ignoreCase = true) == true) {
+                ShizukuFlavor.MOD
+            } else {
+                ShizukuFlavor.OFFICIAL
+            }
+        } catch (_: PackageManager.NameNotFoundException) {
+            ShizukuFlavor.NONE
+        }
+    }
+
+    /** 引导用户卸官方版：系统卸载确认框，卸完回来自动 refresh 进 NotInstalled 引导 */
+    fun uninstallShizuku(context: Context): Boolean {
+        val launchPackage = appSettings.shizukuLaunchPackage.value
+        if (launchPackage.isBlank()) return false
+        val intent = Intent(Intent.ACTION_DELETE, Uri.parse("package:$launchPackage"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching {
+            context.startActivity(intent)
+            true
+        }.onFailure { Timber.w(it, "Failed to launch uninstall") }.getOrDefault(false)
     }
 
     private companion object {
         /** 系统绑定无障碍服务是异步的，3 秒等不到就当没连上，不卡住授权流程 */
         const val ACCESSIBILITY_BIND_TIMEOUT_MS = 3_000L
+
+        /** shizuku-m 的应用名（官方版是 "Shizuku"），flavor 判别标记 */
+        const val MOD_LABEL_MARK = "Shizuku-m"
     }
 }
 
