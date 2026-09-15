@@ -2,35 +2,53 @@
 
 ## 当前阶段
 
-**阶段〇（Spike 验证）进行中**。开发宪法 `docs/roadmap-v3.md` 已定稿执行；已完成：
+**阶段二（宿主外壳减法）进行中**：M2-a 基线构建绿（2026-09-16），下一步 M2-b 减法剔除。阶段一 M1 已交付：rootfs 构建链 GHA 四连迭代至绿，v4 artifact 为交付基准；M1-d 真机复验 WebUI/MANIFEST 已过，**油数 100 帧验收待用户把游戏点到出击菜单页**。
 
-- **Spike A（PASS）**：APK 内 proot exec 真机实证 —— `spike/a-proot-exec/`（REPORT.md）。
-- **Spike C（PASS）**：幻影进程查杀缓解真机复验 —— 同工程 PHANTOM 模式（REPORT-C.md）。
-- **Spike D（PASS）**：ALAS 进程管理 import 面探查 —— `docs/spike-d-wrapper-surface.md`。
-- **B′ + Spike E（PASS，仅控制面备用通道）**：shell 域 adb 直控虚拟屏 —— `spike/e-adb-virtual-display/REPORT.md`。能建屏/截屏/注入/取视频流；但 VD 保活（点亮）与 adb 会话绑定，**不替代 m0 桥**。关键口径：`screencap -d` 用 SF physical id、`input -d` 用 logical id。
-
-任何不清楚之处：先读 `docs/roadmap-v3.md`（开发宪法），再读 `handoff/` 最新文件。
+- 开发宪法：`docs/roadmap-v3.md`（13 项决策、阶段〇–五、风险登记）。
+- 阶段二工作底稿：`docs/stage2-maafwapp-inventory.md`（减法三栏清单 / 新桥设计 / VD flag 核查）。
+- 任何不清楚之处：先读 roadmap，再读 `handoff/` 最新文件（当前 `2026-09-15-m1c.md`）。
 
 ## 仓库结构（现状）
 
-- `docs/roadmap-v3.md` — 13 项已确认决策、阶段〇–五、风险登记、m0 平移清单。
-- `spike/a-proot-exec/` — **阶段〇 Spike A/C 的独立最小 Android 工程**（`com.maaal.spikea`，纯 Kotlin/无 AndroidX，targetSdk 35/28 可变体）：jniLibs 放 Termux 二进制（proot/busybox）、迷你 rootfs 由 assets 落地；`run-device-ladder.sh`（Spike A 阶梯）、`run-phantom-ab.sh`（Spike C A/B 轮）、`tools/`（dynstr 改写、argv0 shim、探针源码）、`dist/`（APK + 全量真机日志证据）、`REPORT.md` / `REPORT-C.md`。
-- `spike/e-adb-virtual-display/` — **Spike E（+B′）交付**：`REPORT.md`（scrcpy-server 建屏逐字配方 + 截屏/注入的 ID 命名空间 + VD 电源机制）、`logs/`（命令原文与截图证据）、`tools/`（`hold_client.py` scrcpy 保活客户端、`VDLab.java`/`vdlab.jar` app_process 反射探针，构建法见 REPORT §10）。
-- `handoff/` — 跨对话接力（按时间取最新）。
-- `m0-archive/` — m0 阶段全部成果归档：MaaFwApp fork（`vendor/MaaFwApp` @ b2b0f54）、Termux 补丁集与种子配置（`termux/`）、桥代理与 PP-OCR 模型（`spike/m0/`）、全部 devlog 与研究文档（`docs/`）。v3 的直接复用来源，平移清单见 roadmap-v3 附录 A。
-- `.tmp/` — 临时文件（已 gitignore）。`.tmp/alas` 内有 ALAS 官方 master 部分克隆（blob:none），供查源码；`.tmp/spike-a/gradle-home` 为 Spike 构建用的 Gradle 缓存（复用 `shizku-m/build-env` 工具链，写目录留在本仓）。
-- 根目录环境配置：`.editorconfig` / `.gitattributes` / `.gitignore` / `.node-version` / `.prettierrc.mjs` / `.vscode/` / `.kimi-code/`。
+- `app/` — 阶段二主战场：MaaFwApp fork 复活副本（b2b0f54 + m0 WebView 6 处改动固化 + 构建修复：Aliyun 镜像、floatingx-compose 显式声明）。
+- `rootfs/` — 阶段一资产：`build/build-rootfs.sh`（GHA ARM64 构建脚本）、`patches/`（ALAS 补丁集，含 `module/device/method/maaal.py` 桥客户端）。
+- `.github/workflows/` — rootfs 构建 workflow（手动触发；`ALAS_REF` 默认 master 浮动，manifest 记录解析后 commit）。
+- `docs/` — `roadmap-v3.md`、`stage2-maafwapp-inventory.md`、`spike-d-wrapper-surface.md`。
+- `spike/` — 阶段〇交付：`a-proot-exec/`（Spike A/C 工程+报告）、`e-adb-virtual-display/`（Spike E/B′）。
+- `m0-archive/`（gitignore，本地只读）— m0 全部成果归档：MaaFwApp fork、termux 补丁/种子、桥代理、OCR 模型、m0 devlog。
+- 账册（根目录）：`devlog.md`（倒序流水）、`debug.md`（坑与解法）、`development.md`（本文件）、`handoff/`（跨对话接力，取最新）。
+- `.tmp/`（gitignore）— 构建缓存（`gradle-home`）、实验物、rootfs artifact、ALAS 部分克隆。
 
 ## 技术栈（规划，源自 v3）
 
-- **Android App**：MaaFwApp fork 减法整理（Kotlin，Gradle，AGPL-3.0）——阶段二复活 m0 基线；保留特权进程（虚拟屏+截屏注入）、TCP 22300 桥（五端点）、WebView 容器、Shizuku 辅助。
-- **rootfs**：Ubuntu ARM64 + Python 3 + opencv-headless + onnxruntime + ALAS 官方 master（Gitee 镜像，钉 commit）+ m0 补丁集 + PP-OCR 模型——GitHub Actions ARM64 runner 构建（主仓需公开）。
+- **Android App**：MaaFwApp fork 减法整理（Kotlin，Gradle，AGPL-3.0）——保留特权进程（虚拟屏+截屏注入）、TCP 22300 桥（五端点，Kotlin 重写）、WebView 容器、Shizuku 辅助。
+- **rootfs**：Ubuntu 24.04 ARM64 + Python 3.12 + opencv-headless + onnxruntime + ALAS 官方 master（GitHub，BUILD_MANIFEST 钉 commit）+ m0 补丁集 + PP-OCR 模型——GitHub Actions ARM64 runner 构建。
 - **提权**：shizuku-m（官方 v13.6.0 fork，用户自装，不内置）。
 - **控制面/OCR**：桥代理五端点（ping/screencap/click/swipe/shell）；in-proc PP-OCR + rpc.py shim。
 
 ## 运行与构建
 
-Spike 工程（阶段〇）已有可复现构建/真机流程，两条都在 `spike/a-proot-exec/`：
+### 主 App（`app/`，阶段二起）
+
+```bash
+export JAVA_HOME='D:\VSCodeCache\shizku-m\build-env\jdk-17.0.2'
+export GRADLE_USER_HOME='D:\VSCodeCache\maa-alas\.tmp\gradle-home'
+cd app && cmd //c 'gradlew.bat assembleDebug --console=plain'
+# APK → app/app/build/outputs/apk/debug/app-debug.apk
+```
+
+- SDK 由 `app/local.properties`（gitignored）指向 `C:\Users\da270\AppData\Local\Android\Sdk`（cmake 3.22.1 + ndk 28.2 齐）。
+- 坑：dl.google.com 间歇握手断 → settings 已加 Aliyun 镜像（官方源兜底）；floatingx 的 compose 包必须显式声明 `floatingx-compose`（两坑详见 debug.md 2026-09-16 条目）。
+
+### rootfs（阶段一）
+
+- GHA workflow 手动触发（主仓需公开）；产物 `rootfs.tar.xz` + BUILD_MANIFEST。
+- **交付基准 = v4 artifact**（run 34997038262，sha256 `b506a62e…745a`；含 cached-property 修复）。
+- 真机部署链（M1-d 实证）：PC `repack-linkfree.py` 去硬链接重打包 → push → 设备 busybox tar 解 + `chmod -R a+x` → proot harness（nld loader + 显式 guest PATH + `-b /dev,/proc,/sys`）。
+
+### Spike 工程（阶段〇，存档）
+
+两条可复现流程都在 `spike/a-proot-exec/`：
 
 ```bash
 export JAVA_HOME=/d/VSCodeCache/shizku-m/build-env/jdk-21.0.2          # 便携工具链（只读）
@@ -43,4 +61,4 @@ bash run-device-ladder.sh AVAY025422002864     # Spike A：exec 阶梯（自动�
 bash run-phantom-ab.sh A 600                   # Spike C：幻影查杀 A/B 轮（A|B|A2|B1|B2|L|final）
 ```
 
-前置：`adb` 可达真机、`export MSYS_NO_PATHCONV=1`、`local.properties` 的 `sdk.dir` 指向便携 SDK（细节与坑点见 `debug.md`）。主 App（阶段二起）的构建命令待阶段一/二补充。
+前置：`adb` 可达真机、`export MSYS_NO_PATHCONV=1`（细节与坑点见 `debug.md`）。

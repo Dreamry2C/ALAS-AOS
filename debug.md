@@ -4,6 +4,24 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-15] run-as（runas_app 域）禁止 socket——真机 harness 要用 shell 域，不是 run-as
+
+- **现象**：`run-as com.maaal.spikea` 起的 shell 里，proot 客户机进程 `socket()` 直接 `PermissionError [Errno 1]`（TCP/UDP/UNIX 全灭）；但 `id` 明明显示带 `3003(inet)` 组。
+- **根本原因**：run-as 切的是 `runas_app` SELinux 域（调试域），socket 类被策略整体拒绝——gid 有 inet 也没用，LSM 检查在 capability 检查之后。对比：`shell` 域 AF_INET/abstract AF_UNIX 通、路径式 AF_UNIX 拒（shell_data_file 上建 socket 文件）；`untrusted_app`（App 自身进程树，zygote 孵化）全通——m0 Termux 与 Spike A 走的就是这条。
+- **解决方案**：要网络的真机 harness 用 **shell 域**（`/data/local/tmp` 放 proot 可执行 + rootfs，shell 可执行该区域文件）；不要在 run-as 里跑任何带 socket 的东西。另外两个配套坑：run-as 下 mksh heredoc 会在 /data/local 建临时文件失败（用 `python3 -c` 替代）；proot 客户机内要显式 `export PATH=/usr/local/sbin:...:/bin`（继承的 Android PATH 无 /usr/bin）。
+
+## [2026-09-15] busybox tar 解 ubuntu-base 必炸：硬链接前向引用 + app uid 不能 mknod
+
+- **现象**：`busybox tar -x` 解 GHA 产的 `rootfs.tar.xz`（ubuntu-base 24.04.5 为底），报 `tar: can't create hardlink './usr/bin/uncompress' to './usr/bin/gunzip'` 中止。
+- **根本原因**：ubuntu 系 tar 包里硬链接条目存在**前向引用**（`uncompress` 条目排在目标 `gunzip` 之前）；GNU tar 解包会把硬链接推迟到末尾处理，busybox tar 顺序立即 `link()` → ENOENT 即死。另有两个连环坑：① 解包目标目录必须是空场——Spike A 遗留合成 rootfs 的实体 `bin/` 目录会让 usrmerge 的 `./bin → usr/bin` 软链覆盖失败（`can't remove old file ./bin: Is a directory`）；② app uid 无 CAP_MKNOD，包内设备节点（若有）也建不了。
+- **解决方案**：PC 侧 Python 预重打包（`.tmp/repack-linkfree.py`）：流式过一遍，普通文件内容落 spool，发牌时 HARDLINK 物化为目标内容副本、符号链接/目录/权限位原样保留、设备与 fifo 节点丢弃（proot `-b /dev:/dev` 提供真 /dev）。产物不压缩（~1GB），WiFi adb push ~1 分钟，设备端纯 `busybox tar -xf` 即可。
+
+## [2026-09-15] `libbusybox.so` 直接调用报 "applet not found"——多合一二进制认 basename(argv[0])
+
+- **现象**：`run-as com.maaal.spikea` 里直接执行 `$NLD/libbusybox.so tar …` → `libbusybox.so: applet not found`，连 `--list`/`--help` 都一样。
+- **根本原因**：busybox 多合一二进制按 `basename(argv[0])` 查 applet 表；`libbusybox.so` 不在表里（只有裸名 `busybox` 才走"$1 当 applet 名"的分派分支）。Android jniLibs 强制 `lib*.so` 命名，故直接调永远踩这个。
+- **解决方案**：在可写目录建软链 `ln -sf $NLD/libbusybox.so files/bin/busybox`，经**裸名软链**调用（`./bin/busybox xzcat … | ./bin/busybox tar -x …`）。设备端解 xz 包、跑 proot harness 都靠这一手。
+
 ## [2026-09-15] scrcpy-server 默认 `cleanup=true` 会删掉刚 push 上去的 jar
 
 - **现象**：push `scrcpy-server-v4.1.jar` 后第一次 `app_process … com.genymobile.scrcpy.Server 4.1` 正常运行（打印 device/New display 后因无客户端退出）；**紧接着第二次运行整套 `Aborted`**，logcat 墓志铭：
@@ -148,3 +166,15 @@
 
 - **现象**：默认 `cleanup=true` 时 server 派生 CleanUp 进程 `unlinkSelf()` 删掉刚 push 上去的 jar，第二次启动报 `ClassNotFoundException`（像设备坏了）；`tunnel_forward=true` 时 server 在 accept() 阻塞，客户端断开/从未连接 → server 退出、VD 即亡。
 - **解决方案**：实验配方固定 `cleanup=false`；必须配"只 connect+recv"的保活客户端（`.tmp/spike-e/hold_client.py`）；生产上 VD 属主必须是 App 自己的常驻特权进程，不能悬在 adb 会话上。
+
+## [2026-09-16] 构建期 dl.google.com TLS 握手中断（间歇）→ settings 加 Aliyun 镜像根治
+
+- **现象**：Gradle 配置阶段解析 `com.android.tools.build:bundletool:1.18.3` 失败，`Remote host terminated the handshake`；curl 复测同一 URL 却 200——中间盒 RST 注入是概率性的，重跑可能恰好又过。
+- **根本原因**：本机到 dl.google.com 链路被 SNI 干扰；暖缓存（拷自 shizku-m/build-env）只有 bundletool 1.18.0（m0 时代 AGP 依赖），帮不上 AGP 9.2.1。
+- **解决方案**：`app/settings.gradle.kts` 的 `pluginManagement` 与 `dependencyResolutionManagement` 各加 `https://maven.aliyun.com/repository/google` 与 `.../central`（官方源、jitpack 留兜底）。google 块保持 content 过滤（com.android/com.google/androidx），镜像块同样过滤防误伤插件门户解析。
+
+## [2026-09-16] floatingx 坐标陷阱：jitpack 聚合是空 jar、中央本体无 compose 包
+
+- **现象**：fork 原样代码编译报 `Unresolved reference com.petterp.floatingx.compose.enableComposeSupport`（OverlayController），而 m0 当年同源码能编过。
+- **根本原因**：`io.github.petterpx:floatingx:2.3.7` 在**中央仓是无 compose 包的瘦 aar**（hash 与 aliyun 完全一致，排除镜像污染）；compose 支持在独立构件 `floatingx-compose`。m0 能编过纯属仓库序巧合：fork 原来 jitpack 排在 mavenCentral 前，jitpack 按 GitHub tag 现场构建出**聚合空 jar**（只含 MANIFEST），其 pom 传递出 `io.github.petterpx.floatingx:floatingx-compose`（jitpack 多模块坐标）——真货来自传递依赖。给 settings 加镜像时把 jitpack 挪到队尾，中央瘦 aar 截胡且没有传递依赖，compose 包整个消失。
+- **解决方案**：不恢复 jitpack 优先序（CN 不稳定+现场构建慢），改为 toml/build.gradle.kts **显式声明 `io.github.petterpx:floatingx-compose:2.3.7`**（中央/aliyun 直达）。教训：改仓库顺序属于依赖图变更，同坐标在不同仓库的构件内容可能完全不同（jitpack 构建产物 ≠ 作者发布产物）。
