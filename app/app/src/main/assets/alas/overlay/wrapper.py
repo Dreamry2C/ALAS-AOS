@@ -7,11 +7,13 @@
 端点
 ----
 GET  /status        → {"runner_alive": bool, "pid": int|null, "config": str|null,
+                       "runner_wanted": bool, "runner_respawns": int,
                        "gui_alive": bool, "gui_pid": int|null,
                        "log_file": str|null, "log_lines": int}
 POST /start?config=N → 幂等拉起 runner 子进程（已在跑则直接返回现状）；N = config/ 下的
-                       实例配置名（默认 alas），runner.py argv[1] 透传
-POST /stop          → 杀进程组：os.killpg(SIGTERM) → 3s → SIGKILL
+                       实例配置名（默认 alas），runner.py argv[1] 透传；
+                       置 wanted——此后 runner 意外退出由监管循环按退避自动重拉
+POST /stop          → 杀进程组：os.killpg(SIGTERM) → 3s → SIGKILL；复位 wanted 不再重拉
 GET  /logs?tail=N   → ./log/ 下最新 *.txt 的尾部 N 行（默认 200，上限 2000）
 GET  /configs       → {"configs": [str]}：config/*.json 去掉 template* 的实例名列表，
                        'alas' 固定排最前；供 App 侧下拉选择运行配置
@@ -76,6 +78,13 @@ _GUI_BACKOFF_MAX = 60.0
 _GUI_HEALTHY_UPTIME = 300.0
 _closing = threading.Event()
 
+# runner 崩溃自拉起：/start 置 wanted，/stop 复位；监管循环只在 wanted 期间重拉
+_RUNNER_BACKOFF_INIT = 5.0
+_RUNNER_BACKOFF_MAX = 60.0
+_RUNNER_HEALTHY_UPTIME = 300.0
+_runner_wanted = threading.Event()
+_runner_respawns = 0       # 非预期死亡后的重拉次数，/status 汇报
+
 
 # ---------------------------------------------------------------- runner 进程组管理
 
@@ -83,28 +92,38 @@ def _runner_alive():
     return _runner is not None and _runner.poll() is None
 
 
-def start_runner(config_name='alas'):
-    """幂等：已在跑直接返回现状（不发新配置）。返回 (alive, pid, started_now)。"""
+def _spawn_runner(config_name):
+    """拉起一次 runner。返回 Popen。调用方须持 _runner_lock。"""
     global _runner, _runner_started_at, _runner_config
+    _runner = subprocess.Popen(
+        [sys.executable, RUNNER_PATH, config_name],
+        cwd=BASE_DIR,
+        preexec_fn=os.setsid,  # 独立进程组，停止走 os.killpg
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,  # ALAS 日志走 ./log/ 文件，不走管道
+        stderr=subprocess.DEVNULL,
+    )
+    _runner_started_at = time.time()
+    _runner_config = config_name
+    return _runner
+
+
+def start_runner(config_name='alas'):
+    """幂等：已在跑直接返回现状（不发新配置）。返回 (alive, pid, started_now)。
+    /start 即表态「要它跑」：置 wanted，监管循环接管其后的意外死亡。"""
+    _runner_wanted.set()
     with _runner_lock:
         if _runner_alive():
             return True, _runner.pid, False
-        _runner = subprocess.Popen(
-            [sys.executable, RUNNER_PATH, config_name],
-            cwd=BASE_DIR,
-            preexec_fn=os.setsid,  # 独立进程组，停止走 os.killpg
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,  # ALAS 日志走 ./log/ 文件，不走管道
-            stderr=subprocess.DEVNULL,
-        )
-        _runner_started_at = time.time()
-        _runner_config = config_name
-        return True, _runner.pid, True
+        proc = _spawn_runner(config_name)
+        return True, proc.pid, True
 
 
 def stop_runner():
-    """SIGTERM → 3s → SIGKILL，杀整个进程组。返回 (was_alive, exit_code)。"""
+    """SIGTERM → 3s → SIGKILL，杀整个进程组。返回 (was_alive, exit_code)。
+    /stop 即表态「不要它跑」：复位 wanted，监管循环不再重拉。"""
     global _runner, _runner_config
+    _runner_wanted.clear()
     with _runner_lock:
         if not _runner_alive():
             return False, _runner.returncode if _runner else None
@@ -126,6 +145,49 @@ def stop_runner():
         _runner = None
         _runner_config = None
         return True, code
+
+
+def _runner_supervisor():
+    """崩溃重拉循环：runner 非预期死亡（wanted 仍置位）时按退避重拉同配置实例。
+    活过 5 分钟视为健康、退避复位；/stop（wanted 复位）或 _closing 后不重拉。
+    与 _gui_supervisor 同款：5s 起步翻倍，60s 封顶。"""
+    global _runner_respawns
+    backoff = _RUNNER_BACKOFF_INIT
+    while not _closing.is_set():
+        if not _runner_wanted.is_set():
+            if _closing.wait(1.0):
+                break
+            continue
+        with _runner_lock:
+            proc = _runner
+        if proc is None:
+            # wanted 已置但 /start 的 spawn 还没落：让出，下拍再看
+            if _closing.wait(0.5):
+                break
+            continue
+        proc.wait()
+        if _closing.is_set() or not _runner_wanted.is_set():
+            continue
+        uptime = time.time() - (_runner_started_at or time.time())
+        backoff = _RUNNER_BACKOFF_INIT if uptime > _RUNNER_HEALTHY_UPTIME \
+            else min(backoff * 2, _RUNNER_BACKOFF_MAX)
+        print(f'MaaAL wrapper: runner exited code={proc.returncode} '
+              f'uptime={uptime:.0f}s, respawn in {backoff:.0f}s', flush=True)
+        if _closing.wait(backoff):
+            break
+        if not _runner_wanted.is_set():
+            continue
+        with _runner_lock:
+            if _runner_alive():
+                continue  # 竞态：已被 /start 拉起
+            cfg = _runner_config or 'alas'
+            try:
+                proc2 = _spawn_runner(cfg)
+                _runner_respawns += 1
+                print(f'MaaAL wrapper: runner respawned pid={proc2.pid} '
+                      f'config={cfg} (#{_runner_respawns})', flush=True)
+            except OSError as e:
+                print(f'MaaAL wrapper: runner respawn failed: {e}', file=sys.stderr, flush=True)
 
 
 # ---------------------------------------------------------------- WebUI（gui.py）监管
@@ -346,6 +408,8 @@ class _Handler(BaseHTTPRequestHandler):
                 'runner_alive': _runner_alive(),
                 'pid': _runner.pid if _runner_alive() else None,
                 'config': _runner_config if _runner_alive() else None,
+                'runner_wanted': _runner_wanted.is_set(),
+                'runner_respawns': _runner_respawns,
                 'started_at': datetime.datetime.fromtimestamp(_runner_started_at).isoformat()
                 if _runner_alive() and _runner_started_at else None,
                 'gui_alive': _gui_alive(),
@@ -395,6 +459,7 @@ def main():
     signal.signal(signal.SIGTERM, _on_signal)
     signal.signal(signal.SIGINT, _on_signal)
     _arm_stdin_watchdog()
+    threading.Thread(target=_runner_supervisor, daemon=True).start()
     if os.environ.get('MAAAL_WEBUI', '1') != '0':
         threading.Thread(target=_gui_supervisor, daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), _Handler)

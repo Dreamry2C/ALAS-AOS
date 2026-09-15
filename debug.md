@@ -202,6 +202,17 @@
 - **根本原因**：本机到 dl.google.com 链路被 SNI 干扰；暖缓存（拷自 shizku-m/build-env）只有 bundletool 1.18.0（m0 时代 AGP 依赖），帮不上 AGP 9.2.1。
 - **解决方案**：`app/settings.gradle.kts` 的 `pluginManagement` 与 `dependencyResolutionManagement` 各加 `https://maven.aliyun.com/repository/google` 与 `.../central`（官方源、jitpack 留兜底）。google 块保持 content 过滤（com.android/com.google/androidx），镜像块同样过滤防误伤插件门户解析。
 
+## [2026-09-17] ALAS 全量补丁冻结漂移：cp 整文件覆盖会把文件冻在补丁年代
+
+- **现象**：挂机中 ALAS 重启游戏后登录流程炸 `TypeError: ModuleBase.image_color_button() got an unexpected keyword argument 'threshold'`，runner 死、任务断连。
+- **根本原因**：补丁施加机制是 `cp -rf patches/module/. → /opt/alas/module/`（build-rootfs.sh:175）**整文件覆盖**。`patches/module/base/base.py` 是 m0 时代全量拷贝（自有改动仅 early_ocr_import 的 MaaAL 预热块 9 行），热更新把 ALAS 推到上游 master 后，base.py 被补丁冻回旧版（`color_threshold`），而同树 login.py 已是新版（`threshold`），API 撞车。排查锚点：设备 login.py 与上游 master 逐字节 diff 为空 → 设备跟踪 master → 补丁按 master 重打即收敛。
+- **解决方案**：全量补丁**重打** = 上游 master 原样 + MaaAL 块（脚本锚点替换，diff 应只剩自有改动）；直写设备活文件 + diff 校验。长期教训：① 补丁文件里的自有改动必须压缩到最小并 BEGIN/END 标记（本次正是靠标记确认只有 9 行）；② ALAS 热更新后任意 API 型 TypeError，先怀疑补丁漂移，diff 设备文件与上游 master 即现形；③ 理想终态是差分补丁（git apply）替代整文件覆盖。
+
+## [2026-09-17] adb exec-out 不递 stdin EOF——设备写文件用 base64 分块法
+
+- **现象**：`adb exec-out sh -c "run-as app sh -c 'cat > file'" < local` 永久悬挂（本地 stdin 文件读完，EOF 不过 adb 通道），任务挂 10 分钟零输出。
+- **解决方案**：写设备文件改用 base64 分块——本地 `base64 -w0 file`，按 8KB 分块，`run-as sh -c 'echo -n <chunk> >> tmp.b64'` 逐块追加，末块后 `base64 -d tmp.b64 > target`；再 `exec-out cat target` 拉回 diff 校验。读方向（cat/pull）exec-out 正常，只有写方向的 stdin 悬挂。
+
 ## [2026-09-16] floatingx 坐标陷阱：jitpack 聚合是空 jar、中央本体无 compose 包
 
 - **现象**：fork 原样代码编译报 `Unresolved reference com.petterp.floatingx.compose.enableComposeSupport`（OverlayController），而 m0 当年同源码能编过。
