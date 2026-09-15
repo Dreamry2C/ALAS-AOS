@@ -4,6 +4,13 @@
 
 ## 未发版
 
+### 2026-09-16 · M4-a 收官 ✅：悬浮窗直连 wrapper 薄 HTTP —— 调度器状态行 + 开始/停止挂机 + 半透明日志板
+
+- **代码**：`proot/AlasRunController.kt`（新）——4s 轮询 wrapper 薄 HTTP（GET /status → reachable/runnerAlive/pid/guiAlive/logLines；POST /start、/stop（busy 置位，读超时 12s 覆盖 SIGTERM→3s→SIGKILL）；GET /logs?tail=80 纯文本），Koin 单例挂 `postCreate` 全程轮询，Mutex 互斥刷新。`OverlayPanel` 改版：三行环境状态 + 「ALAS 调度器」状态行（环境未就绪/运行中·pid/已停止）+ 半透明黑底日志板（Monospace 10sp/行高 13，`LaunchedEffect(linesCount, lines.size)` 自动沉底，空显「暂无日志」，weight(1f) 吃满剩余）+ 全宽「开始挂机/停止挂机」（enabled=reachable && !busy，按 runnerAlive 切换）+ 原「回到应用/环境启停」行。字符串七键 ZH/EN 同步；DI：prootModule 注册 controller、OverlayModule 注入、MaaFwApp.postCreate `start()`。
+- **双头管理决策（roadmap 阶段四遗留）定案**：**不做 Spike D 的 in-proc uvicorn 重构**——gui.py 独立 + wrapper runner 的链路已全绿，重构改动已验证链路风险大于收益。悬浮窗=唯一控制面；WebUI 启停按钮（走 ProcessManager，与本通道并存双跑会抢设备）「不要用」，先写文档警告（AlasRunController 头注，README 待写），阶段五再评硬化（如 WebUI 按钮屏蔽补丁）。
+- **真机验证（HONOR PPG-AN00）**：装包重开 → 环境自动起（VD #15、桥通、球出）→ 点球面板渲染全对——调度器「已停止」与 curl /status（runner_alive=false）一致；日志板从「暂无日志」（首版策略=runner 活着才拉）改为**可达即拉**后真实日志上板（gui 日志 `<<< RESTART ALAS >>>`、`Start alas complete`、`[Server] cn` 等，与 /status 的 log_file 相符）；关面板球复活。**「开始挂机」未按**（会真拉起 ALAS 操作游戏，端到端留用户在场演示）。
+- **新坑入 debug.md**：wrapper /status 时间戳是 guest 本地时（proot 无 TZ=UTC），比设备 CST 慢 8h——首读 gui_started_at 误判「旧会话逃过重装」，ps 进程树（proot 父=新 app pid）才定案。
+
 ### 2026-09-16 · M3-c 收官 ✅：生命周期防护压测全绿（杀 Java 进程 ≤3s 全树自尽）+ 重启引导文案对齐决策 #11
 
 - **划卡归零正赛（DoD 核心项）**：`run-as kill <appPid>` 只杀 Java 进程（模拟最近任务划卡的最坏面——native 子树不随包名被杀），**≤3 秒内 proot/wrapper/gui 全灭**——stdin 管道 EOF → wrapper 监控线程 `_cleanup` → 杀 runner+gui 双进程组 → proot tracee 尽失退出。叠加 M3-b 的 `am force-stop` 零残留（uid 级全杀），两条死亡路径都闭环。

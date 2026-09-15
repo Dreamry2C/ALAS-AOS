@@ -18,6 +18,7 @@ import com.aliothmoon.maafw.overlay.OverlayController
 import com.aliothmoon.maafw.overlay.screensaver.ScreenSaverOverlayManager
 import com.aliothmoon.maafw.privileged.PermissionManager
 import com.aliothmoon.maafw.privileged.RemoteServiceManager
+import com.aliothmoon.maafw.proot.AlasRunController
 import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.settings.AppSettingsManager
 import kotlinx.coroutines.CoroutineScope
@@ -70,6 +71,7 @@ class MaaFwApp : Application() {
         val provider = koin.get<AppSettingsManager>().startupBackend::value
         RemoteServiceManager.initialize(this, provider)
         koin.get<HostState>().start()
+        koin.get<AlasRunController>().start()
         koin.get<OverlayController>().setup()
         koin.get<ScreenSaverOverlayManager>().setup()
     }

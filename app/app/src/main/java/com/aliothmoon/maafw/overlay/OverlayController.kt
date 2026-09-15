@@ -15,6 +15,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.aliothmoon.maafw.MainActivity
 import com.aliothmoon.maafw.domain.OverlayControlMode
 import com.aliothmoon.maafw.overlay.border.BorderOverlayManager
+import com.aliothmoon.maafw.proot.AlasRunController
 import com.aliothmoon.maafw.service.AccessibilityHelperService
 import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.settings.AppSettingsGateway
@@ -46,6 +47,7 @@ class OverlayController(
     private val appSettings: AppSettingsGateway,
     val borderOverlayManager: BorderOverlayManager,
     private val viewModelOwner: OverlayViewModelOwner,
+    private val alasController: AlasRunController,
 ) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -156,11 +158,15 @@ class OverlayController(
                 // 那样收不到环境态变化，再显示出来就是过期数据
                 val snapshot by hostState.snapshot.collectAsState()
                 val locked by isPanelLocked.collectAsState()
+                val alas by alasController.state.collectAsState()
                 OverlayPanel(
                     snapshot = snapshot,
+                    alas = alas,
                     isLocked = locked,
                     onStart = { scope.launch { hostState.ensureEnvironmentStarted() } },
                     onStop = { scope.launch { hostState.stopEnvironment() } },
+                    onAlasStart = { alasController.startAlas() },
+                    onAlasStop = { alasController.stopAlas() },
                     onBackToApp = ::bringAppToFront,
                     onLockToggle = { setPanelLocked(it) },
                     onClose = ::onPanelClosed,
