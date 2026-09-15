@@ -8,7 +8,7 @@
 
 - **评估结论（M4-a 推迟项）**：WebUI 有两处 Start/Stop 按钮（overview 页 + daemon 页，`app.py:456/688`），都汇入 `ProcessManager.start/stop`（gui 进程内）——用户误点会 spawn **第二个 runner** 与 wrapper 管理的 runner 抢设备输入。双头管理决策「悬浮窗=唯一控制面」需要的不只是文档警告，要通道级锁死。
 - **实现（漂移最小）**：`rootfs/patches/module/webui/patch.py`（m0 起就在维护的 fork 文件，`app.py` 启动时模块级 import）尾部自执行 `patch_maaal_scheduler_lock()`——`MAAAL_SCHEDULER_LOCK=0` 留调试逃生口；`ProcessManager.start/stop` 换成只记 warning 的空壳（overview 页 `alive`/renderables 读路径不动；updater 早已被 deploy.yaml 锁死；gui 退出时的 `alas.stop()` 变无害空操作）。**不整文件 fork `process_manager.py`**，热更新上游漂移面零新增。assets/alas 同源两份已同步。
-- **验证**：语法 OK；BUILD SUCCESSFUL。**装机与真机静态验证（proot 一次性 python 核 `ProcessManager.start` 为锁壳 + gui 日志干净）未完成——真机 adb 掉线**（ping 通但 5555 拒连，MagicOS 无线调试休眠掉线老毛病，需用户唤醒/重开）。演示 checklist 增补：用户在场时点一下 WebUI Start 确认只留警告不起 runner。
+- **验证**：语法 OK；BUILD SUCCESSFUL。**PC 侧静态审计补完（adb 掉线期间）**：循环导入排除——`process_manager` 依赖链（setting/logger/submodule→stdlib+rich）无任何回指 `webui.patch/app`；无 ProcessManager 子类覆盖；`*args/**kwargs` 签名兼容 `start(func,ev)`/`stop()`。**装机与真机静态验证（proot 一次性 python 核 `ProcessManager.start` 为锁壳 + gui 日志干净）未完成——真机 adb 掉线**（ping 通但 5555 拒连，MagicOS 无线调试休眠掉线老毛病，需用户唤醒/重开）。演示 checklist 增补：用户在场时点一下 WebUI Start 确认只留警告不起 runner。
 - **README**：「不要用 WebUI 启停按钮」警告改写为「已锁定」说明。
 
 ### 2026-09-16 · 阶段五-6/-1 起草 ✅：根 README 初稿 + 多 ROM 矩阵骨架
