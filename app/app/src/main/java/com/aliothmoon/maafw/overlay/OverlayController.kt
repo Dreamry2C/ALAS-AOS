@@ -88,7 +88,12 @@ class OverlayController(
                 val up = snapshot.environmentUp
                 if (up == wasUp) return@collect
                 wasUp = up
-                if (up) showControl() else hideControl()
+                // 面板在屏时球不复活：球只是面板的入口，入口开着就不需要第二个入口
+                if (up) {
+                    if (FloatingX.controlOrNull(PANEL_TAG)?.isShow() != true) showControl()
+                } else {
+                    hideControl()
+                }
             }
         }
     }
