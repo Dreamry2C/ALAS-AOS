@@ -44,6 +44,15 @@ object BridgeServer {
     private const val DEFAULT_SHELL_TIMEOUT_SEC = 30.0
     private const val CLICK_HOLD_MS = 50L
     private const val SWIPE_STEP_MS = 16L
+
+    /**
+     * down 注入重试预算：游戏被 am start 拉上 VD 后 SurfaceFlinger 已出帧（screencap 可见），
+     * 但 input 窗注册滞后 ~1s，此间 WAIT_FOR_FINISH 注入原生返 false（debug.md 同款）。
+     * ALAS 单击失败即 ScriptError 死调度器，故在有界预算内重试把瞬态竞态对客户端隐身；
+     * 真空 VD（游戏崩溃/未启动）仍报错，只是晚 ~3s。
+     */
+    private const val DOWN_RETRY_BUDGET_MS = 3000L
+    private const val DOWN_RETRY_INTERVAL_MS = 200L
     private const val DEFAULT_SWIPE_MS = 500L
     private const val JOIN_AFTER_KILL_MS = 1000L
 
@@ -200,6 +209,25 @@ object BridgeServer {
         }
     }
 
+    /** 有界重试的 down：见 DOWN_RETRY_BUDGET_MS 注释。失败事件未投递无悬挂状态，可安全重试。 */
+    private fun downWithRetry(x: Int, y: Int, displayId: Int): Boolean {
+        val deadline = SystemClock.uptimeMillis() + DOWN_RETRY_BUDGET_MS
+        var attempts = 0
+        while (true) {
+            attempts++
+            if (InputControlUtils.down(x, y, 0, displayId)) {
+                if (attempts > 1) Ln.w("$TAG: touch down ok after $attempts attempts (window-register race absorbed)")
+                return true
+            }
+            val remaining = deadline - SystemClock.uptimeMillis()
+            if (remaining <= 0) {
+                Ln.e("$TAG: touch down failed after $attempts attempts / ${DOWN_RETRY_BUDGET_MS}ms on display $displayId")
+                return false
+            }
+            Thread.sleep(minOf(DOWN_RETRY_INTERVAL_MS, remaining))
+        }
+    }
+
     private fun handleClick(request: JSONObject, reply: (JSONObject) -> Unit) {
         val x = request.getInt("x")
         val y = request.getInt("y")
@@ -209,8 +237,8 @@ object BridgeServer {
                 reply(err("no active virtual display"))
                 return@withLock
             }
-            if (!InputControlUtils.down(x, y, 0, displayId)) {
-                reply(err("touch down failed"))
+            if (!downWithRetry(x, y, displayId)) {
+                reply(err("touch down failed (no touchable window on display $displayId within ${DOWN_RETRY_BUDGET_MS}ms)"))
                 return@withLock
             }
             Thread.sleep(CLICK_HOLD_MS)
@@ -234,8 +262,8 @@ object BridgeServer {
                 reply(err("no active virtual display"))
                 return@withLock
             }
-            if (!InputControlUtils.down(x1, y1, 0, displayId)) {
-                reply(err("touch down failed"))
+            if (!downWithRetry(x1, y1, displayId)) {
+                reply(err("touch down failed (no touchable window on display $displayId within ${DOWN_RETRY_BUDGET_MS}ms)"))
                 return@withLock
             }
             val steps = (durationMs / SWIPE_STEP_MS).coerceAtLeast(1)

@@ -4,6 +4,14 @@
 
 ## 未发版
 
+### 2026-09-17 · 修复 ✅：「开始挂机 touch down failed」——桥侧 down 注入有界重试吸收窗注册竞态
+
+- **症状**：用户按「开始挂机」，调度器识别到 GET_SHIP 后首击 `Click (1009,643)` → `ScriptError: MaaAL proxy error: touch down failed` → CRITICAL 死（runner2/3 同死法；runner1 之死系 install -r 重装箱误杀，非 bug）。
+- **根因（真机决定性实验坐实）**：`InputControlUtils.injectInputEvent` 走 WAIT_FOR_FINISH，VD 上无可触摸 input 窗时框架原生返 false（debug.md 旧案升级版）。游戏被 `am start --display` 拉上 VD 后 **SurfaceFlinger 先出帧（screencap/OCR 可见）但 input 窗注册滞后 ~1s**——竞态窗口实测：am start 后第 1 次轮询 click 必败，~1s 后窗注册完成 click 恢复。ALAS 的链路恰是 am start → 识别 → 立即点，单击失败即抛 ScriptError 死调度器。空 VD（游戏未起/崩溃）同款 false。
+- **修复**（`BridgeServer.kt`）：新增 `downWithRetry()`——down 失败后在 **3s 预算 / 200ms 间隔**内重试（注入失败事件未投递、无悬挂 DOWN，重试安全），handleClick/handleSwipe 的 down 都换走它；重试成功记 `Ln.w`（race absorbed）、耗尽记 `Ln.e`；最终报错带诊断 `touch down failed (no touchable window on display N within 3000ms)`。真空 VD 行为不变（仍报错，只是晚 ~3s），瞬态竞态对 ALAS 隐身。
+- **真机回归**（VD #23，HONOR PPG-AN00）：① force-stop 游戏→am start 上 VD→**立刻 click 落竞态窗口 → ok:true**（修复前 100% 败）；② 空 VD click → 3.18s 后带诊断报错（预算有界）✅；③ 游戏窗稳定后 click×3 + swipe 全 ok ✅。游戏已 force-stop 清场。
+- **结论给用户**：可重新按「开始挂机」验证；若游戏真未启动/崩溃，报错文案会直接说明「无窗」，不再是裸 failed。
+
 ### 2026-09-16 · 挂机页落地 ✅：应用内「游戏画面 + 运行配置 + 操作面板」真机实证
 
 - **起因**：用户提出把悬浮窗操作面板做进应用内（上游 MaaFwApp 游戏窗口页的形制）。可行性分析（`handoff/2026-09-16-gamepage-analysis.md`）发现预览通道在阶段二减法中幸存（AIDL setMonitorSurface / RemoteServiceImpl / native bridge_preview 全在现役包），用户拍板开工；并明确「任务概览」= ALAS 配置文件里的**配置名下拉框**（不显示具体内容）。
