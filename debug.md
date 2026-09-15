@@ -178,3 +178,27 @@
 - **现象**：fork 原样代码编译报 `Unresolved reference com.petterp.floatingx.compose.enableComposeSupport`（OverlayController），而 m0 当年同源码能编过。
 - **根本原因**：`io.github.petterpx:floatingx:2.3.7` 在**中央仓是无 compose 包的瘦 aar**（hash 与 aliyun 完全一致，排除镜像污染）；compose 支持在独立构件 `floatingx-compose`。m0 能编过纯属仓库序巧合：fork 原来 jitpack 排在 mavenCentral 前，jitpack 按 GitHub tag 现场构建出**聚合空 jar**（只含 MANIFEST），其 pom 传递出 `io.github.petterpx.floatingx:floatingx-compose`（jitpack 多模块坐标）——真货来自传递依赖。给 settings 加镜像时把 jitpack 挪到队尾，中央瘦 aar 截胡且没有传递依赖，compose 包整个消失。
 - **解决方案**：不恢复 jitpack 优先序（CN 不稳定+现场构建慢），改为 toml/build.gradle.kts **显式声明 `io.github.petterpx:floatingx-compose:2.3.7`**（中央/aliyun 直达）。教训：改仓库顺序属于依赖图变更，同坐标在不同仓库的构件内容可能完全不同（jitpack 构建产物 ≠ 作者发布产物）。
+
+## [2026-09-16] `hideOverlayWindows` 在 HONOR ROM 上全局生效且粘性——悬浮窗"消失"不是 app bug
+
+- **现象**：悬浮球点了一下（想开面板）后球与面板双双"消失"；dumpsys 显示球窗口仍在、视图 VISIBLE，但 `mPolicyVisibility=false mForceHideNonSystemOverlayWindow=true shown=false`——是系统策略强隐，不是 app 侧隐藏（app 侧 hide 的特征是 `mViewVisibility=0x8`）。后续该窗口输入通道不消费触摸，点它落空。
+- **根本原因**：`android.settings.SETTINGS`（HWSettings，设了 `hideOverlayWindows` 防点击劫持）被起到**虚拟屏**上做注入测试时，MagicOS 把"隐藏非系统悬浮窗"**全局**应用到所有 display——主屏 overlay 全被强隐。且 flag **粘性**：Settings 进程死后不自动复评，直到一次前台应用切换（home→回 app）才重估恢复。游戏类 app 不设此属性（实测游戏前台时球存活），生产无影响；**测试纪律：别把 Settings 类 app 起到 VD 上**。
+- **解决方案**：前台切换一次（`input keyevent KEYCODE_HOME` → 重进 app）触发复评即恢复。排查口诀：悬浮窗"消失"先看 `mViewVisibility`——`0x8`=app 自己藏的（查代码路径），`0x0`+`mPolicyVisibility=false`=系统策略藏（查当前谁在前台/谁设了 hideOverlayWindows）。
+
+## [2026-09-16] 空虚拟屏上注入"失败"是消费语义，不是链路坏（WAIT_FOR_FINISH）
+
+- **现象**：桥 CLICK/SWIPE 端点在新建空 VD 上回 `touch down failed`，疑似注入链路坏。
+- **根本原因**：`InputControlUtils`（同 `input -d <id> tap`）走 WAIT_FOR_FINISH 模式；**无窗口消费触摸的屏**上 framework natively 返 false（`input -d 2 tap` 同样静默 false 但 exit=0）。VD 上 `am start` 任意窗口后，同链路 CLICK/SWIPE 全 `ok:true`。
+- **解决方案**：判故障时先给 VD 放个窗口再注入；生产语义本就正确（游戏常驻 VD，必有消费者）。
+
+## [2026-09-16] values-en 字符串带裸撇号炸 aapt（`app's` → `app\'s`）
+
+- **现象**：M2-d 构建 aapt 报错，指向 `values-en/strings.xml` 新文案。
+- **根本原因**：英文资源里的 `app's` 撇号未转义——aapt 字符串解析把 `'` 当引号边界。
+- **解决方案**：values-en 文本统一写 `app\'s`；新增英文文案时 grep 一遍裸 `'`。
+
+## [2026-09-16] 屏幕旋转会换掉 input 坐标空间——点击前先核旋转与目标帧
+
+- **现象**：游戏被起到主屏后主屏转横屏（2800×1264），按竖屏（1264×2800）坐标发的两次 tap 越界被钳到屏幕边缘（未触达有效 UI，但属意外输入）。
+- **根本原因**：`input tap` 坐标空间跟随**当前旋转**；被测机旋转可被前台 app（游戏=横屏）随时改变。
+- **解决方案**：自动化点击纪律——每次 tap 前先 `dumpsys input | grep orientation`（或 screencap 尺寸）核坐标空间，再从 dumpsys/screencap 取目标当前帧坐标；禁止复用上一次截图的坐标。

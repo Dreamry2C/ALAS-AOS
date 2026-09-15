@@ -4,6 +4,23 @@
 
 ## 未发版
 
+### 2026-09-16 · M2-d 收官 ✅：HostState 脱钩 + DoD 真机验证 6/6 + 悬浮球消失之谜定案
+
+- **代码（`8c02157`）**：新建 `service/HostState.kt`（快照=特权连接+桥可达+vdDisplayId；environmentUp=桥通且屏在；4s 裸 socket ping 22300 探测；ensureEnvironmentStarted=bind→setup→startVD→FGS 一键链；stopEnvironment=stopVD）+ `di/HostModule.kt`；OverlayController/OverlayPanel/FloatBall/RunForegroundService 全脱钩 RunnerPort（StubRunnerPort/RunnerContracts 删除）；AlasScreen 错误页改「重试连接」；NotInstalled 档改「我已安装，重新检测」+ shizuku-m 自装引导文案。
+- **DoD 真机验证 6/6（HONOR PPG-AN00，竖屏 1264×2800，shizuku-m 在线）**：
+  1. ✅ Shizuku 权限链路：NotRunning→点 shizuku-m「启动」→NeedAuth「请求权限」→系统弹窗「始终允许」→全自动 bind→setup→VD→FGS→桥→悬浮球。
+  2. ✅ VD 创建：display 动态分配，flags=PRESENTATION|OWN_CONTENT_ONLY|DESTROY_CONTENT_ON_REMOVAL|TRUSTED|OWN_DISPLAY_GROUP|ALWAYS_UNLOCKED|TOUCH_FEEDBACK_DISABLED|OWN_FOCUS|STEAL_TOP_FOCUS_DISABLED（**无** SHOULD_SHOW_SYSTEM_DECORATIONS），owner shell uid2000；**手势三窗口全程 displayId=0**。
+  3. ✅ 桥五端点（adb forward + PC python 冻结协议客户端）：PING/SHELL(uid=2000)/SCREENCAP(恰 1280×720×3=2764800B)/UNKNOWN 错误帧全对。
+  4. ✅ WebView 渲染**真实 ALAS PyWebIO GUI**（harness WebUI 22267 供）。
+  5. ✅ 悬浮球自动出现（绿球呼吸）+ FGS 通知在岗（ONGOING|PROMOTED_ONGOING）。
+  6. ✅ 面板全生命周期：点球→面板开（球隐）；「停止环境」→ VD 毁+球隐+面板转「启动环境」；「启动环境」→ VD 重建；关面板（X）→ 球复活。
+- **悬浮球消失之谜定案（非 bug，系统机制）**：当 `android.settings.SETTINGS` 开在 **VD** 上时，HONOR ROM 把 `hideOverlayWindows` **全局**应用于所有 display——主屏悬浮窗被策略性强隐（`mPolicyVisibility=false mForceHideNonSystemOverlayWindow=true`，视图仍 VISIBLE）。且 flag **粘性**：Settings 死后不自动复评，需一次前台应用切换（home→回 app）触发重估才恢复。游戏无此属性（游戏前台时球实测存活 ✅），生产无影响。已入 debug.md。
+- **顺带修复（`728dff6`）**：面板经「启动环境」重建 VD 后球会压在面板上——observeHost 在 showControl 前查面板在屏则跳过。真机回归：停止→启动→球保持隐 ✅ → 关面板→球复活 ✅。
+- **事故披露**：验证"游戏前台球存活"时 monkey 把游戏起到主屏（`--display` 被忽略）→ 主屏转横屏；后续两次按竖屏坐标的 tap 越界被钳到屏幕边缘（未触达有效 UI）；游戏进程随后被发现已退出（登录页，无进度损失；死因未能归属到具体操作，倾向系统回收/游戏自身）。教训入 debug.md（点击前先核旋转与坐标）。
+- **空 VD 注入语义（留档）**：空 VD（无窗口消费）上 click/swipe 回 `touch down failed` 非链路坏——WAIT_FOR_FINISH 模式无消费者 natively 返 false（`input -d 2 tap` 同静默 false）；VD 上有窗口（Settings）后 CLICK/SWIPE 均 ok。生产语义正确（游戏常驻 VD）。
+- **清场 ✅**：面板停环境 → force-stop → 只剩 display 0、maafw 窗口 0、手势三窗口 displayId=0、无活动通知。
+- **遗留**：① M1-d 油数验收仍等用户把游戏点到出击菜单页（游戏现已退出，需重开）；② appId 身份（`com.aliothmoon.maafw`→MaaAL 命名）待用户定夺；③ AppSettings 死 pref、`runner/DisplayResolution.kt` 包名不副实，留阶段三。
+
 ### 2026-09-16 · M2-c 收官 ✅：特权进程内 Kotlin 重写 m0 桥（TCP 22300，5 端点）
 
 - **`BridgeServer.kt`（368 行新增）+ JNI 裸帧出口**，commit `05164f8` 已 push。m0 Python Agent 桥（`m0-archive/spike/m0/agent/main.py`）由特权进程内 Kotlin 服务整体替代，协议与冻结客户端 `rootfs/patches/module/device/method/maaal.py` 逐点兼容。
