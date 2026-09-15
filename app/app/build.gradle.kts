@@ -30,7 +30,9 @@ android {
     }
 
     androidResources {
+        // rootfs.tar.xz 已压缩且要按字节读进度（assets.openFd 只对未压缩资产生效）
         noCompress += "zip"
+        noCompress += "xz"
     }
 }
 
@@ -82,6 +84,9 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     implementation(libs.okhttp)
+    // 首启解压 rootfs.tar.xz（设备端流式解 tar/xz；busybox tar 解 ubuntu 硬链接有前向引用死坑）
+    implementation(libs.commons.compress)
+    implementation(libs.tukaani.xz)
     // 前台模式控制层：拖拽/吸边/多屏/返回键拦截都在库里，自己写这几样是纯坑区
     implementation(libs.floatingx)
     implementation(libs.floatingx.compose)

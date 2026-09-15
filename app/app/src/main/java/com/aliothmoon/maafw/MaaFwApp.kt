@@ -8,6 +8,7 @@ import com.aliothmoon.maafw.di.hostModule
 import com.aliothmoon.maafw.di.logModule
 import com.aliothmoon.maafw.di.overlayModule
 import com.aliothmoon.maafw.di.privilegedModule
+import com.aliothmoon.maafw.di.provisionModule
 import com.aliothmoon.maafw.di.viewModelModule
 import com.aliothmoon.maafw.log.AppLogWriter
 import com.aliothmoon.maafw.log.CrashHandler
@@ -50,6 +51,7 @@ class MaaFwApp : Application() {
                 hostModule,
                 logModule,
                 overlayModule,
+                provisionModule,
                 viewModelModule,
             )
         }.koin

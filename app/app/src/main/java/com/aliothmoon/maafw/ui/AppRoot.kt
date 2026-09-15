@@ -61,9 +61,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.aliothmoon.maafw.R
+import com.aliothmoon.maafw.BuildConfig
 import com.aliothmoon.maafw.domain.RemoteBackend
 import com.aliothmoon.maafw.domain.ThemeMode
 import com.aliothmoon.maafw.privileged.PermissionManager
+import com.aliothmoon.maafw.provision.ProvisionState
+import com.aliothmoon.maafw.provision.RootfsProvisioner
 import com.aliothmoon.maafw.settings.SettingsEvent
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.SettingsViewModel
@@ -78,6 +81,7 @@ import com.aliothmoon.maafw.ui.logs.AppLogDetailScreen
 import com.aliothmoon.maafw.ui.logs.AppLogScreen
 import com.aliothmoon.maafw.ui.logs.LogExportController
 import com.aliothmoon.maafw.ui.settings.SettingsScreen
+import com.aliothmoon.maafw.ui.setup.ProvisionScreen
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -120,10 +124,17 @@ fun AppRoot(
     onDarkThemeChanged: (Boolean) -> Unit,
     settingsViewModel: SettingsViewModel = koinViewModel(),
     permissionManager: PermissionManager = koinInject(),
+    provisioner: RootfsProvisioner = koinInject(),
 ) {
     val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val readiness by permissionManager.readiness.collectAsStateWithLifecycle()
     val isGranting by permissionManager.isGranting.collectAsStateWithLifecycle()
+
+    // 首启 rootfs 部署的门：未 Ready 时整屏接管，tab/二级页都在门内
+    val provisionState by provisioner.state.collectAsStateWithLifecycle()
+    var provisionSkipped by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { provisioner.start() }
+    val showProvision = provisionState !is ProvisionState.Ready && !provisionSkipped
 
     val darkTheme = when (settingsState.themeMode) {
         ThemeMode.System -> isSystemInDarkTheme()
@@ -165,6 +176,19 @@ fun AppRoot(
             isRequesting = isGranting,
         )
 
+        if (showProvision) {
+            ProvisionScreen(
+                state = provisionState,
+                onRetry = { provisioner.retry() },
+                // 跳过只留给开发包（未内置资产）：跳过只能调外壳，ALAS 起不来
+                onSkip = if (BuildConfig.DEBUG && provisionState is ProvisionState.NotBundled) {
+                    { provisionSkipped = true }
+                } else {
+                    null
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
         // 整窗的空白失焦铺在这一层；另开窗口的（sheet、Dialog）不在这棵命中树里，各自挂
         Box(
             modifier = Modifier
@@ -310,6 +334,7 @@ fun AppRoot(
                 .navigationBarsPadding()
                 .padding(bottom = if (onSubPage) 0.dp else BottomBarHeight),
         )
+        }
         }
 
         // 无条件挂在这一层：它注册的 SAF launcher 要活得比 sheet 的显隐久
