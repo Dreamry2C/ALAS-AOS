@@ -6,11 +6,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import com.aliothmoon.maafw.MaaDispatchers
-import com.aliothmoon.maafw.domain.EventNotificationLevel
 import com.aliothmoon.maafw.domain.OverlayControlMode
 import com.aliothmoon.maafw.domain.RemoteBackend
 import com.aliothmoon.maafw.domain.RunMode
-import com.aliothmoon.maafw.runner.ResolutionPreference
 import com.aliothmoon.maafw.theme.ThemeStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -47,8 +45,8 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     /**
      * 首次读盘是否已落到下面各 StateFlow 上；置位后 `.value` 才是盘上的值
      *
-     * 现有三个等待点：启动首屏（`MainActivity`）、`MaaFwApp.postCreate`（`RemoteAccessCoordinator`
-     * 一初始化就同步读 startupBackend）、`ScheduleExecutionService.handleTrigger`（投递前要 runMode）
+     * 等待点：启动首屏（`MainActivity`）与 `MaaFwApp.postCreate`（`RemoteServiceManager`
+     * 一初始化就同步读 startupBackend）
      */
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
 
@@ -61,9 +59,6 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     private val _shizukuLaunchPackage = MutableStateFlow(defaults.shizukuLaunchPackage)
     val shizukuLaunchPackage: StateFlow<String> = _shizukuLaunchPackage.asStateFlow()
 
-    private val _shizukuShortcutEnabled = MutableStateFlow(defaults.shizukuShortcutEnabled.toBoolean())
-    val shizukuShortcutEnabled: StateFlow<Boolean> = _shizukuShortcutEnabled.asStateFlow()
-
     private val _runMode = MutableStateFlow(parseRunMode(defaults.runMode))
     override val runMode: StateFlow<RunMode> = _runMode.asStateFlow()
 
@@ -73,33 +68,11 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     private val _screenSaverEnabled = MutableStateFlow(defaults.screenSaverEnabled.toBoolean())
     override val screenSaverEnabled: StateFlow<Boolean> = _screenSaverEnabled.asStateFlow()
 
-    private val _closeAppAfterTask = MutableStateFlow(defaults.closeAppAfterTask.toBoolean())
-    override val closeAppAfterTask: StateFlow<Boolean> = _closeAppAfterTask.asStateFlow()
-
-    private val _touchPreviewEnabled = MutableStateFlow(defaults.touchPreviewEnabled.toBoolean())
-    override val touchPreviewEnabled: StateFlow<Boolean> = _touchPreviewEnabled.asStateFlow()
-
-    private val _eventNotificationLevel =
-        MutableStateFlow(parseEventNotificationLevel(defaults.eventNotificationLevel))
-    val eventNotificationLevel: StateFlow<EventNotificationLevel> = _eventNotificationLevel.asStateFlow()
-
-    private val _resolutionPreference = MutableStateFlow(parseResolutionPreference(defaults.resolutionPreference))
-    override val resolutionPreference: StateFlow<ResolutionPreference> = _resolutionPreference.asStateFlow()
-
     private val _debugMode = MutableStateFlow(defaults.debugMode.toBoolean())
     override val debugMode: StateFlow<Boolean> = _debugMode.asStateFlow()
 
     private val _themeStyle = MutableStateFlow(parseThemeStyle(defaults.themeStyle))
     override val themeStyle: StateFlow<ThemeStyle> = _themeStyle.asStateFlow()
-
-    private val _wakeUnlockEnabled = MutableStateFlow(defaults.wakeUnlockEnabled.toBoolean())
-    override val wakeUnlockEnabled: StateFlow<Boolean> = _wakeUnlockEnabled.asStateFlow()
-
-    private val _wakeCredential = MutableStateFlow(defaults.wakeCredential)
-    override val wakeCredential: StateFlow<String> = _wakeCredential.asStateFlow()
-
-    private val _telemetryEnabled = MutableStateFlow(defaults.telemetryEnabled.toBoolean())
-    override val telemetryEnabled: StateFlow<Boolean> = _telemetryEnabled.asStateFlow()
 
     init {
         // 一处 collect 铺开到各字段，而不是每个字段各起一条 stateIn：
@@ -109,19 +82,11 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
                 _startupBackend.value = parseBackend(s.startupBackend)
                 _skipShizukuCheck.value = s.skipShizukuCheck.toBoolean()
                 _shizukuLaunchPackage.value = s.shizukuLaunchPackage
-                _shizukuShortcutEnabled.value = s.shizukuShortcutEnabled.toBoolean()
                 _runMode.value = parseRunMode(s.runMode)
                 _overlayControlMode.value = parseOverlayMode(s.overlayControlMode)
                 _screenSaverEnabled.value = s.screenSaverEnabled.toBoolean()
-                _closeAppAfterTask.value = s.closeAppAfterTask.toBoolean()
-                _touchPreviewEnabled.value = s.touchPreviewEnabled.toBoolean()
-                _resolutionPreference.value = parseResolutionPreference(s.resolutionPreference)
                 _debugMode.value = s.debugMode.toBoolean()
                 _themeStyle.value = parseThemeStyle(s.themeStyle)
-                _eventNotificationLevel.value = parseEventNotificationLevel(s.eventNotificationLevel)
-                _wakeUnlockEnabled.value = s.wakeUnlockEnabled.toBoolean()
-                _wakeCredential.value = s.wakeCredential
-                _telemetryEnabled.value = s.telemetryEnabled.toBoolean()
                 // 必须是最后一行：置位即宣告上面全部就位
                 _loaded.value = true
             }
@@ -140,10 +105,6 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
         context.dataStore.edit { it[shizukuLaunchPackage] = packageName }
     }
 
-    suspend fun setShizukuShortcutEnabled(enabled: Boolean) = with(AppSettingsSchema) {
-        context.dataStore.edit { it[shizukuShortcutEnabled] = enabled.toString() }
-    }
-
     override suspend fun setRunMode(mode: RunMode): Unit = with(AppSettingsSchema) {
         context.dataStore.edit { it[runMode] = mode.name }
     }
@@ -156,42 +117,12 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
         context.dataStore.edit { it[screenSaverEnabled] = enabled.toString() }
     }
 
-    override suspend fun setCloseAppAfterTask(enabled: Boolean): Unit = with(AppSettingsSchema) {
-        context.dataStore.edit { it[closeAppAfterTask] = enabled.toString() }
-    }
-
-    override suspend fun setTouchPreviewEnabled(enabled: Boolean): Unit = with(AppSettingsSchema) {
-        context.dataStore.edit { it[touchPreviewEnabled] = enabled.toString() }
-    }
-
-    override suspend fun setResolutionPreference(preference: ResolutionPreference): Unit = with(AppSettingsSchema) {
-        context.dataStore.edit { it[resolutionPreference] = preference.name }
-    }
-
     override suspend fun setDebugMode(enabled: Boolean): Unit = with(AppSettingsSchema) {
         context.dataStore.edit { it[debugMode] = enabled.toString() }
     }
 
     override suspend fun setThemeStyle(style: ThemeStyle): Unit = with(AppSettingsSchema) {
         context.dataStore.edit { it[themeStyle] = style.name }
-    }
-
-    suspend fun setEventNotificationLevel(level: EventNotificationLevel) = with(AppSettingsSchema) {
-        context.dataStore.edit { it[eventNotificationLevel] = level.name }
-    }
-
-    override suspend fun setWakeUnlockEnabled(enabled: Boolean): Unit = with(AppSettingsSchema) {
-        context.dataStore.edit { it[wakeUnlockEnabled] = enabled.toString() }
-    }
-
-    /** 只留数字：注入按键只能打出 0-9，图案与密码锁屏的面板模拟不出来 */
-    override suspend fun setWakeCredential(credential: String): Unit = with(AppSettingsSchema) {
-        val digits = credential.filter(Char::isDigit)
-        context.dataStore.edit { it[wakeCredential] = digits }
-    }
-
-    override suspend fun setTelemetryEnabled(enabled: Boolean): Unit = with(AppSettingsSchema) {
-        context.dataStore.edit { it[telemetryEnabled] = enabled.toString() }
     }
 
     /** 盘上是历史遗留或手改的非法值时回落默认，不让设置读取本身抛异常 */
@@ -204,12 +135,6 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     private fun parseOverlayMode(raw: String): OverlayControlMode =
         runCatching { OverlayControlMode.valueOf(raw) }.getOrDefault(OverlayControlMode.FLOAT_BALL)
 
-    private fun parseResolutionPreference(raw: String): ResolutionPreference =
-        runCatching { ResolutionPreference.valueOf(raw) }.getOrDefault(ResolutionPreference.P720)
-
     private fun parseThemeStyle(raw: String): ThemeStyle =
         runCatching { ThemeStyle.valueOf(raw) }.getOrDefault(ThemeStyle.DEFAULT)
-
-    private fun parseEventNotificationLevel(raw: String): EventNotificationLevel =
-        runCatching { EventNotificationLevel.valueOf(raw) }.getOrDefault(EventNotificationLevel.DEFAULT)
 }

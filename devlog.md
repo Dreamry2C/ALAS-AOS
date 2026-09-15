@@ -4,6 +4,16 @@
 
 ## 未发版
 
+### 2026-09-16 · M4-d 收官 ✅：设置/构建死账清仓（死 pref×7 + 分辨率安慰剂 + runner 包 + toml/baselineprofile/okhttp/tracing）
+
+- **M2-b 遗留②③④⑤ 一次清完**（阶段五前的卫生面，账本全核销）：
+  - **死 pref×7 删除**（`AppSettings`/`AppSettingsManager`/`AppSettingsGateway` 三层）：`shizukuShortcutEnabled`（首页已删）/`closeAppAfterTask`+`touchPreviewEnabled`（消费者随 MaaRunner 删）/`eventNotificationLevel`（通知管线删，domain 枚举连坐删）/`wakeUnlockEnabled`+`wakeCredential`（定时任务删）/`telemetryEnabled`（telemetry 删）。DataStore 里的旧值变孤儿键，无害。
+  - **分辨率安慰剂连根拔**：排查发现 `resolutionPreference` 纯设置页自循环——`setVirtualDisplayResolution`（AIDL 端点）无人调用、VD 恒走 `DefaultDisplayConfig` 1280×720（桥 screencap 协议钉死）。设置页 720P/1080P 卡是** placebo UI**，连 pref/gateway/manager/SettingsContracts/SettingsViewModel/SettingsScreen 卡/字符串三键全删；`DefaultDisplayConfig` 注释改明「改分辨率要连桥协议与 guest 校验一起动，不做用户可选项」。
+  - **`runner/` 包连包删**：`DisplayResolution.kt`（`screenSize()` 零调用、enum 只服务安慰剂）整文件删，包目录移除；`ScreenSize`/`DisplaySizeGateway` 两处注释摘掉对它的引用。
+  - **依赖/构建死账**：okhttp、androidx.tracing.ktx 全码零 import（M2-c 桥走的是裸 socket，"留待桥用"不成立）连 dep+toml 删；debug 的 compose-runtime-tracing/perfetto 无 compiler flag 配套同删；**baselineprofile 插件+profileinstaller 连根拔**（macrobenchmark 模块 M2-b 已删，插件空转且是 AGP 9 兼容风险面，toml 里还留着"1.4.1 不认 AGP 9"的排雷注释）；`maafw.android.benchmark` 约定插件注册+实现类删；toml 死版本/死库/死插件条目（reorderable/markwon×6/jna/sentry/angus×2/jakarta/uiautomator/benchmark-macro 等）一次清。
+- **验证**：BUILD SUCCESSFUL；装包重开设置页实机截图——「其他设置」只剩启动模式（Shizuku/Root），显示/日志/关于卡无损，环境自动起球出。过程中两处手滑（AppSettings 与 Manager 各重复一次 shizukuLaunchPackage 声明/ setter）编译器当场抓获即修。
+- **边界**：junit/mockk/espresso 等 test 依赖虽暂无测试但保留（阶段五可能补）；`UserConfiguration` 侧未动。
+
 ### 2026-09-16 · M4-c 收官 ✅：载入开屏淡出（不再闪错误脸）+ 悬浮窗分工文案
 
 - **开屏无感（roadmap 阶段四第 1 条补完）**：AlasScreen 原逻辑是首帧 `loadUrl` 撞服务未起 → `onReceivedError` → 直接上错误面板（「重试连接」按钮脸），启动链走完再自动重载——用户每次开 App 先吃一张错误脸。改为 **`pageReady` 语义**：`onPageStarted` 归零、`onPageFinished && !loadFailed` 置位；`!pageReady` 期间盖全屏 overlay（`AnimatedVisibility` + `fadeOut` 淡出），overlay 分两档——真失败（phase==FAILED，或服务该活而页进不来）才给错误面板+重试，启动链还在走（PREPARING/UPDATING/STARTING，含首帧必然失败的 loadUrl）一律给 `CircularProgressIndicator` + 阶段文案的**载入开屏**。真机连拍实证：t+4s 帧抓到淡出中段（控制台已渲染、载入层半透明渐隐），t+16s 完整控制台。

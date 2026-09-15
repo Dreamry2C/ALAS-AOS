@@ -3,7 +3,6 @@ plugins {
     id("maafw.android.compose")
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -44,12 +43,6 @@ android {
     }
 }
 
-baselineProfile {
-    // 落进 src/main 而不是 src/release：测量用的 benchmark 是另一个 build type，
-    // 吃不到 src/release 的源集，不合并的话量出来会是「profile 毫无效果」
-    mergeIntoMain = true
-}
-
 dependencies {
     compileOnly(project(":hidden-api"))
 
@@ -80,10 +73,6 @@ dependencies {
     implementation(libs.androidx.datastore)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.window)
-    // 解包与项目加载各圈一段，Perfetto / macrobenchmark 里才归得了因
-    implementation(libs.androidx.tracing.ktx)
-    // Baseline Profile 在 API 33 以下靠它在启动时装入
-    implementation(libs.androidx.profileinstaller)
 
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
@@ -91,7 +80,6 @@ dependencies {
     implementation(libs.timber)
     implementation(libs.kotlinx.serialization.json)
 
-    implementation(libs.okhttp)
     // 首启解压 rootfs.tar.xz（设备端流式解 tar/xz；busybox tar 解 ubuntu 硬链接有前向引用死坑）
     implementation(libs.commons.compress)
     implementation(libs.tukaani.xz)
@@ -107,7 +95,4 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    // Perfetto 里把 slice 命名到 composable；只进 debug，release 不带
-    debugImplementation(libs.androidx.compose.runtime.tracing)
-    debugImplementation(libs.androidx.tracing.perfetto.binary)
 }

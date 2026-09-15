@@ -29,14 +29,12 @@ class SettingsViewModel(
         permissionGateway.state,
         userConfigurationStore.data,
         appSettings.themeStyle,
-        appSettings.resolutionPreference,
         appSettings.debugMode,
-    ) { remoteAccess, userConfig, themeStyle, resolution, debugMode ->
+    ) { remoteAccess, userConfig, themeStyle, debugMode ->
         SettingsUiState(
             remoteAccess = remoteAccess,
             themeMode = userConfig.themeMode,
             themeStyle = themeStyle,
-            resolutionPreference = resolution,
             debugMode = debugMode,
         )
     }.stateIn(
@@ -60,10 +58,6 @@ class SettingsViewModel(
             }
 
             is SettingsIntent.SetLanguage -> AppLocales.apply(intent.tag)
-
-            is SettingsIntent.SetResolutionPreference -> viewModelScope.launch {
-                appSettings.setResolutionPreference(intent.preference)
-            }
 
             is SettingsIntent.SetDebugMode -> viewModelScope.launch {
                 appSettings.setDebugMode(intent.enabled)

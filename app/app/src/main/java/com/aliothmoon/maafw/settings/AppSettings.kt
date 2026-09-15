@@ -29,10 +29,6 @@ data class AppSettings(
     @PrefKey(default = SHIZUKU_PACKAGE)
     val shizukuLaunchPackage: String = SHIZUKU_PACKAGE,
 
-    /** 首页是否显示「打开 Shizuku」快捷入口 */
-    @PrefKey(default = "true")
-    val shizukuShortcutEnabled: String = "true",
-
     /** [com.aliothmoon.maafw.domain.RunMode] 的 name */
     @PrefKey(default = "BACKGROUND")
     val runMode: String = "BACKGROUND",
@@ -45,23 +41,6 @@ data class AppSettings(
     @PrefKey(default = "false")
     val screenSaverEnabled: String = "false",
 
-    /**
-     * 跑完自动强停目标应用的**全局**开关；开了就一律关，含手动 Start 那轮
-     *
-     * 与 `ScheduleStrategy.closeAppAfterTask` 并存，本项优先（见 [com.aliothmoon.maafw.runner.CloseTargetAppHook]）：
-     * 规则级那条只管自己那次触发，全局这条管每一轮
-     */
-    @PrefKey(default = "false")
-    val closeAppAfterTask: String = "false",
-
-    /** 预览上是否画出注入的触点；默认开，关掉即不再向特权进程注册触点回调 */
-    @PrefKey(default = "true")
-    val touchPreviewEnabled: String = "true",
-
-    /** [com.aliothmoon.maafw.runner.ResolutionPreference] 的 name */
-    @PrefKey(default = "P720")
-    val resolutionPreference: String = "P720",
-
     /** 调试模式：开启后给特权进程传 isDebug，记录 MaaFramework 详细日志 */
     @PrefKey(default = "false")
     val debugMode: String = "false",
@@ -69,37 +48,5 @@ data class AppSettings(
     /** [com.aliothmoon.maafw.theme.ThemeStyle] 的 name；DEFAULT 暖石蓝，SEMI_DESIGN 取 Semi Design 配色 */
     @PrefKey(default = "DEFAULT")
     val themeStyle: String = "DEFAULT",
-
-    /**
-     * [com.aliothmoon.maafw.domain.EventNotificationLevel] 的 name
-     *
-     * 只管「跑完了 / 出错了」这类事件通知，前台服务常驻通知与 PI 的 focus 通知不受它影响——
-     * 前者是保活的载体，关掉整个执行就失去保护
-     */
-    @PrefKey(default = "DEFAULT")
-    val eventNotificationLevel: String = "DEFAULT",
-
-    /** 定时触发时是否亮屏解锁；默认关，注入 PIN 这种事要用户先点头。手动 Start 不走这条 */
-    @PrefKey(default = "false")
-    val wakeUnlockEnabled: String = "false",
-
-    /**
-     * 解锁用的纯数字 PIN，**明文存在本 DataStore 里**
-     *
-     * 没上 Keystore 加密：解锁必须在特权进程里拿到明文才能注入按键，加密只是把明文
-     * 挪到进程内存里晚出现一会儿，挡不住能读到 app 私有目录的攻击者。取舍写在
-     * docs/scheduled-triggers.md；导出配置时必须清空这一项
-     */
-    @PrefKey(default = "")
-    val wakeCredential: String = "",
-
-    /**
-     * PI 声明了 `telemetry.sentry` 时才有意义；默认关
-     *
-     * 与 MXU 的默认开相反：DSN 是 PI 作者的，外壳这一侧没有隐私说明的位置，
-     * 上报与否交给用户先点头
-     */
-    @PrefKey(default = "false")
-    val telemetryEnabled: String = "false",
 
 )
