@@ -219,6 +219,7 @@
 - **现象**：桥 CLICK/SWIPE 端点在新建空 VD 上回 `touch down failed`，疑似注入链路坏。
 - **根本原因**：`InputControlUtils`（同 `input -d <id> tap`）走 WAIT_FOR_FINISH 模式；**无窗口消费触摸的屏**上 framework natively 返 false（`input -d 2 tap` 同样静默 false 但 exit=0）。VD 上 `am start` 任意窗口后，同链路 CLICK/SWIPE 全 `ok:true`。
 - **解决方案**：判故障时先给 VD 放个窗口再注入；生产语义本就正确（游戏常驻 VD，必有消费者）。
+- **[2026-09-17 升级] 窗注册竞态**：窗"可见"≠"可点"——`am start --display N` 把游戏拉上 VD 后 SurfaceFlinger 先出帧（screencap/OCR 已能识别），但 input 窗注册滞后 **~1s**，此间注入照样 false。实测：am start 后首次轮询 click 100% 败，~1s 后恢复。ALAS 链路（am start→识别→立即点）首击必踩。已在桥侧修：`BridgeServer.downWithRetry()` 3s 预算/200ms 间隔重试 down，handleClick/handleSwipe 共用；耗尽后报错带诊断 `touch down failed (no touchable window on display N within 3000ms)`——裸 failed=竞态，带"no touchable window"=真空 VD（游戏没起/崩了）。
 
 ## [2026-09-16] values-en 字符串带裸撇号炸 aapt（`app's` → `app\'s`）
 
