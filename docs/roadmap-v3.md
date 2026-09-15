@@ -1,7 +1,7 @@
 # ALAS Android 一体化 APK · 路线图 v3
 
 > 修订基础：v2（`ALAS-Android-修订版路线图-v2.md`）+ 2026-09-15 三轮设计拷问结论 + m0 归档事实核查 + shizuku-m 实现核查。
-> 与 v2 的根本差异：**后台挂机是硬需求**（m0 用户拍板"手机要正常用"，`m0-archive/docs/devlog/2026-08-29.md:142`），而 m0 已实证 adb 无法触达虚拟屏（`m0-archive/docs/debug.md:281-285` §41）——因此 v2 的"adb 自连为主控"降级为探索项，**m0 桥控制面保留**，v2 的 adb 四步流水线整体移出主线。
+> 与 v2 的根本差异：**后台挂机是硬需求**（m0 用户拍板"手机要正常用"，`m0-archive/docs/devlog/2026-08-29.md:142`）。原依据 m0 §41「adb 无法触达虚拟屏」（`m0-archive/docs/debug.md:281-285`）——2026-09-15 Spike E 已将其推翻（`screencap` 吃 SF physical id、`input` 吃 logical id 后均可达，见 `spike/e-adb-virtual-display/REPORT.md`），但 VD 保活是 shell 域死穴、链路悬在 adb 会话上，**结论不变**：v2 的"adb 自连为主控"降级为探索项，**m0 桥控制面保留**，v2 的 adb 四步流水线整体移出主线。
 
 ## 0. 已确认的技术决策
 
@@ -48,7 +48,7 @@ OCR 面：ALAS → rpc.py shim → in-proc PP-OCR（2D 单通道需堆叠 3ch；
 | B' | 经 shizuku-m `tcpip:5555` connect + 一次性 RSA 授权弹窗 | 探索前置 | 仅影响 Spike E |
 | C | 幻影进程查杀关闭（`device_config put activity_manager max_phantom_processes` / `settings_enable_monitor_phantom_procs false`） | 🟢 走查（m0 已产品化） | 真机复验必须过 |
 | D | ALAS 进程管理模块 import 面探查，确定 wrapper.py 接口 | 源码阅读+小实验 | 兜底=写配置 JSON+进程组 |
-| E | adb 直控虚拟屏：先重试 `screencap -d`/`input -d` 不同 display flags 组合，再试 scrcpy-server `--new-display` | 上行探索 | 失败回落 m0 桥，不阻塞主线 |
+| E | adb 直控虚拟屏：先重试 `screencap -d`/`input -d` 不同 display flags 组合，再试 scrcpy-server `--new-display` | 上行探索 | 失败回落 m0 桥，不阻塞主线。**→ 已执行（2026-09-15）：能力面推翻 §41（截屏/注入均可达），但 VD 保活死穴 + 手势劫持事件 → 维持桥为主、登记诊断/备用，见 `spike/e-adb-virtual-display/REPORT.md`** |
 | F | rootfs 内 onnxruntime + PP-OCR 精度复测：油数 100 次 ≥98%（沿用 m0 DoD） | 验收前置 | 不达标则排查 onnxruntime/模型，不过不进阶段一 |
 
 **进入阶段一条件**：A（主或备）、C、F 通过；B'/E 结果只决定控制面未来是否可切换到 adb，记录归档。
@@ -66,6 +66,7 @@ OCR 面：ALAS → rpc.py shim → in-proc PP-OCR（2D 单通道需堆叠 3ch；
 
 - 基线 = `m0-archive/vendor/MaaFwApp` @ b2b0f54 复活（含 WebView `vh` 塌缩修复、桥、虚拟屏管理、Shizuku 安装辅助——全部真机验证过）。
 - **保留**：特权进程（虚拟屏 + 截屏/注入）、桥代理（5 端点）、全屏 WebView 容器、Shizuku 权限与配对辅助、前台保活 + 电池优化引导。
+- **VD flag 硬约束（2026-09-15 手势劫持事件后立）**：建虚拟屏**禁止** `SHOULD_SHOW_SYSTEM_DECORATIONS` 与 `ROTATES_WITH_CONTENT`，flag 集照 `VirtualDisplayManager.kt:178-202`（含 `STEAL_TOP_FOCUS_DISABLED`）；建屏后回归断言：`dumpsys display` 中 VD 不含 `FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS`、`GestureNavAnim/GestureSildeOut/NavigationBar0` 仍在 display 0；属主进程保活照 m0 每 4s `userActivity(displayId)`。
 - **剔除**：libMaaCore.so 业务引擎（Pipeline/资源加载）、OCR 桥端点。
 - 改动尽量外挂模块化，压低 rebase 上游成本；AGPL LICENSE 与署名保留（公开动作按决策 #12 后置）。
 - **DoD**：APK 可请求 Shizuku 权限、建虚拟屏、桥 ping 通、WebView 显示空白页、呼出悬浮球。
