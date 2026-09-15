@@ -361,7 +361,7 @@
     <string name="dialog_shizuku_switch_to_root">切换至 Root 模式</string>
     <string name="dialog_shizuku_skip_check">跳过检查（不推荐）</string>
     <string name="dialog_shizuku_not_running_title">Shizuku 未启动</string>
-    <string name="dialog_shizuku_not_running_message">检测到 Shizuku 已安装但服务未启动，请打开 Shizuku 应用并启动服务。</string>
+    <string name="dialog_shizuku_not_running_message">检测到 Shizuku 已安装但服务未启动。每次重启手机后都需要重新激活：打开 shizuku-m 点「启动」（无需连接 WLAN 或电脑），启动成功后返回本应用即可自动继续。</string>
     <string name="dialog_shizuku_open_app">打开 Shizuku</string>
     <string name="dialog_sui_detected_title">检测到 Sui</string>
     <string name="dialog_sui_detected_message">当前由 Sui 提供 Shizuku 服务。Sui 以 Root 身份运行，本应用可能无法正常工作，请以实际测试为准。</string>
