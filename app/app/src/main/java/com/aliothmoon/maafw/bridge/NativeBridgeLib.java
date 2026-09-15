@@ -39,6 +39,11 @@ public class NativeBridgeLib {
      */
     public static native Bitmap getFrameBufferBitmap();
 
+    /**
+     * BridgeServer screencap 端点专用：BGR 裸字节直出，跳过 Bitmap 转换；无可用帧返回 null
+     */
+    public static native byte[] getFrameBufferBytes();
+
     @FastNative
     public static native long getFrameCount();
 
