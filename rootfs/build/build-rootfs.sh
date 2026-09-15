@@ -11,7 +11,7 @@
 #   ALAS_REF        master                          ALAS 分支/tag；传 40 位 commit sha 则按 commit 浅 fetch
 #   ALAS_REPO       https://gitee.com/LmeSzinc/AzurLaneAutoScript.git
 #   ROOTFS_VERSION  0.1.0                           写入 BUILD_MANIFEST.rootfs_version
-#   UBUNTU_BASE     https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-arm64.tar.gz
+#   UBUNTU_BASE     https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz
 #   WORK_DIR        $GITHUB_WORKSPACE/work          构建工作区（runner 工作区内）
 #
 # 产物：
@@ -24,7 +24,7 @@ set -euo pipefail
 ALAS_REF="${ALAS_REF:-master}"
 ALAS_REPO="${ALAS_REPO:-https://gitee.com/LmeSzinc/AzurLaneAutoScript.git}"
 ROOTFS_VERSION="${ROOTFS_VERSION:-0.1.0}"
-UBUNTU_BASE="${UBUNTU_BASE:-https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-arm64.tar.gz}"
+UBUNTU_BASE="${UBUNTU_BASE:-https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-$REPO_ROOT}"
