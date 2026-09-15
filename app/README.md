@@ -1,3 +1,5 @@
+> ⚠️ **本文件为上游 MaaFwApp README 存档，不描述本仓库产品。** 本目录是 MaaFwApp fork 的减法改造副本（b2b0f54 起），功能已大幅不同——例如分辨率选项已移除（VD 恒 1280×720）、新增 proot ALAS 环境等。产品说明见仓库根目录 [README.md](../README.md)，改动账册见根目录 devlog.md。
+
 # MaaFwApp
 
 MaaFramework 的 Android GUI
