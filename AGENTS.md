@@ -1,6 +1,6 @@
 # MaaAL 项目规则
 
-## 当前阶段：v3 · 阶段〇（Spike 验证）
+## 当前阶段：v3 · 阶段三（管道穿透与生命周期）
 
 - **开发宪法 = `docs/roadmap-v3.md`**（2026-09-15 定稿，13 项已确认决策）。新阶段账册：结构查 `development.md`，交接查 `handoff/`（取最新），流水查 `devlog.md`，坑点查 `debug.md`——均按下方「通用 Agent 约束」维护。
 - m0 历史归档在 `m0-archive/`（其 `docs/` 为历史资料，只读）；v3 对 m0 的复用清单见 roadmap-v3 附录 A。
