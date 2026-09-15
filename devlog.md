@@ -4,6 +4,16 @@
 
 ## 未发版
 
+### 2026-09-16 · M2-c 收官 ✅：特权进程内 Kotlin 重写 m0 桥（TCP 22300，5 端点）
+
+- **`BridgeServer.kt`（368 行新增）+ JNI 裸帧出口**，commit `05164f8` 已 push。m0 Python Agent 桥（`m0-archive/spike/m0/agent/main.py`）由特权进程内 Kotlin 服务整体替代，协议与冻结客户端 `rootfs/patches/module/device/method/maaal.py` 逐点兼容。
+- **协议对照**：行分隔 JSON + screencap 响应行后随裸帧；每回复（含错误帧）echo 请求 id；ping/screencap/click/swipe/shell 五端点（ocr 按 roadmap 剔除，ALAS 改走 in-proc PP-OCR）；shell 剥 `LD_LIBRARY_PATH` + PATH 前缀 + stdout/stderr 各 64KB 上限（超限照读照丢防管道死锁）+ 超时 `destroyForcibly`；请求行 64KB 防呆；per-client daemon 线程。
+- **screencap 直通 native**：新 JNI `getFrameBufferBytes()` 走 `GetLockedPixels/UnlockPixels` 读者锁（持锁压到一次 memcpy）；帧缓冲原生 **BGR 3ch** 正是 m0 线上格式（客户端 `[:3][::-1]` 翻 RGB）；尺寸经 `VirtualDisplayManager.getConfig()` 交叉校验，防 VD 重启半途发错尺寸帧。
+- **注入**：`InputControlUtils.down/move/up(contact 0, displayId)`，displayId 每请求现取（VD 重建不僵）；click=down→50ms→up；swipe 绝对时间轴线性插值（~16ms/步，步数 max(1,duration/16)），x1==x2 自然退化长按；**move 失败也补 up**——悬着的 ACTION_DOWN 会劫持 VD 触摸直到 VD 重启（直注路径必须自己兜，m0 由 controller 内部兜底）。`setContactSupport(false)` 在 start() 防御性调用（原调用点 MaaRunner.prepare 已删）。
+- **生命周期**：`RemoteServiceImpl.init` 启动（ctor 不抛铁律→runCatching）、`cleanup()` 停止；`isRunning()` 预留 M2-d FGS 状态源。
+- **评审记录**：DEVICE_LOCK 有意扩到整段（含 2.7MB 发帧，loopback <10ms；m0 只锁 controller 段——soak 见卡顿再议）；半帧 desync 与 m0 同疾（客户端 reconnect-retry 重同步）；畸形请求错误文本与 m0 有出入（冻结客户端永不产生，形状一致）。
+- 构建绿（BUILD SUCCESSFUL，CMake 重编过）。真机 ping/screencap/建屏验证属 M2-d DoD。
+
 ### 2026-09-16 · M2-b 减法收官 ✅：剔除 MaaCore/PI/定时任务/推送业务管线，宿主外壳收敛，构建绿
 
 - **终验 BUILD SUCCESSFUL**（3s，103 tasks）。APK `app-debug.apk` 80,972,217 → **80,958,388 B**（−14KB；debug dex 未压缩 + fork clone 基线本就不含 jniLibs，包体大头是三方库不是业务码，降幅小属预期）。全 dex 抽查：16 个被删类 0 命中，保留类（StubRunnerPort/RemoteServiceImpl/RunForegroundService 等）在。
