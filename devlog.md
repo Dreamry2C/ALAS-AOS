@@ -4,6 +4,12 @@
 
 ## 未发版
 
+### 2026-09-16 · 装机验证收官 ✅：WebUI 锁定补丁真机实证 LOCKED-OK + 全链体检上岗
+
+- **补丁真机静态验证（adb 恢复后）**：新 APK `install -r` Success → 冷启环境全起 → proot 一次性 python 在 guest 内 import `module.webui.patch` 后核 `ProcessManager.start/stop`——**均为 `patch_maaal_scheduler_lock.<locals>._locked`，LOCKED-OK**。锁壳在真实 guest 环境按设计生效；剩演示日用户点 WebUI Start 的行为确认（应只留 warning）。
+- **全链体检脚本上岗**（`.tmp/device-healthcheck.sh`，8 项）：首跑 9 PASS / 1 异常——screencap 无帧，定位为**手机待机**（物理屏 OFF → 无线调试掉线 + VD 未建，唤醒自愈，非故障；已入 debug.md）。脚本已修正：screencap 项区分「待机无帧（WARN）」与「真故障（FAIL）」。
+- **排障技法入库**：nativeLibraryDir 从 `/proc/<prootPid>/cmdline` argv[0] 拿（/data/app 对 app uid 不可 glob）；guest 内落 `maaal_lock_check.py` 跑 proot 一次性执行、用完即删。
+
 ### 2026-09-16 · 阶段五硬化 · WebUI 启停通道锁定（双头管理决策收尾，补丁+构建绿，装机验证待 adb 恢复）
 
 - **评估结论（M4-a 推迟项）**：WebUI 有两处 Start/Stop 按钮（overview 页 + daemon 页，`app.py:456/688`），都汇入 `ProcessManager.start/stop`（gui 进程内）——用户误点会 spawn **第二个 runner** 与 wrapper 管理的 runner 抢设备输入。双头管理决策「悬浮窗=唯一控制面」需要的不只是文档警告，要通道级锁死。
