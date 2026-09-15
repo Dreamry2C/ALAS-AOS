@@ -10,48 +10,40 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.os.SystemClock
 import androidx.core.app.NotificationCompat
-import androidx.core.graphics.drawable.IconCompat
 import com.aliothmoon.maafw.MainActivity
 import com.aliothmoon.maafw.R
-import com.aliothmoon.maafw.runner.RunnerPhase
-import com.aliothmoon.maafw.runner.RunnerPort
-import com.aliothmoon.maafw.runner.RunnerState
-import com.aliothmoon.maafw.runner.isBusy
+import com.aliothmoon.maafw.constant.DefaultDisplayConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 
 /**
- * 执行期间把 app 进程钉成前台
+ * 虚拟屏存续期间把 app 进程钉成前台
  *
- * 不是为了显示进度——是为了活着：app 进程一死，特权进程的看门狗随即自杀并释放虚拟屏，
- * 表现成「任务跑一半自己停了」。实测 MIUI 的 ProcessManager 会对 Adj=905 的空进程
+ * 不是为了显示状态——是为了活着：app 进程一死，特权进程的看门狗随即自杀并释放虚拟屏，
+ * 表现成「环境跑一半自己没了」。实测 MIUI 的 ProcessManager 会对 Adj=905 的空进程
  * 直接 force-stop（`SwipeUpClean: force-stop <pkg> Adj=905`），前台服务是唯一挡得住的一层
  *
- * 同一条通知顺带走 Live Update：进度来自 [RunnerState]
+ * 观察源是 [HostState.snapshot]：虚拟屏在（displayId 有效）就常驻，屏撤了自己走。
+ * 桥可达性只上文案，不作为退出判据——桥短暂抖动不该把保活撤掉
  *
  * 只提供 [start] 不提供外部 stop：`startForegroundService` 之后若 `stopService` 抢在
  * onCreate 之前到达，系统会因 startForeground 未调用直接杀进程。终态退出由本服务自己
- * 观察 [RunnerPort.state] 完成
+ * 观察 [HostState.snapshot] 完成
  */
 class RunForegroundService : Service() {
 
-    private val runnerPort: RunnerPort by inject()
+    private val hostState: HostState by inject()
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var observeJob: Job? = null
-
-    /** 通知刷新节流的上次落点；进度回调能一秒来好几条 */
-    private var lastUpdateAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -59,9 +51,9 @@ class RunForegroundService : Service() {
         super.onCreate()
         ensureChannel()
         // 必须先 startForeground 再判终态：慢一步就是 ForegroundServiceDidNotStartInTimeException
-        val initial = runnerPort.state.value
+        val initial = hostState.snapshot.value
         startAsForeground(buildNotification(initial))
-        if (!initial.phase.isBusy) {
+        if (initial.vdDisplayId == DefaultDisplayConfig.DISPLAY_NONE) {
             stopNow()
             return
         }
@@ -70,9 +62,9 @@ class RunForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // 系统可能只走 onStartCommand；FGS 提升要在这里再保一次
-        val snapshot = runnerPort.state.value
+        val snapshot = hostState.snapshot.value
         startAsForeground(buildNotification(snapshot))
-        if (!snapshot.phase.isBusy) {
+        if (snapshot.vdDisplayId == DefaultDisplayConfig.DISPLAY_NONE) {
             stopNow()
         } else {
             observe()
@@ -88,28 +80,16 @@ class RunForegroundService : Service() {
 
     private fun observe() {
         if (observeJob?.isActive == true) return
-        observeJob = serviceScope.launch { observeProgress() }
+        observeJob = serviceScope.launch { observeSnapshot() }
     }
 
-    private suspend fun observeProgress() {
-        var lastPostedPhase: RunnerPhase? = null
-        runnerPort.state.collectLatest { state ->
-            if (!state.phase.isBusy) {
-                lastPostedPhase = null
+    private suspend fun observeSnapshot() {
+        hostState.snapshot.collectLatest { snapshot ->
+            if (snapshot.vdDisplayId == DefaultDisplayConfig.DISPLAY_NONE) {
                 stopNow()
                 return@collectLatest
             }
-            val now = SystemClock.elapsedRealtime()
-            val wait = MIN_UPDATE_INTERVAL_MS - (now - lastUpdateAt)
-            if (wait > 0 && state.phase == lastPostedPhase) delay(wait)
-            if (!runnerPort.state.value.phase.isBusy) {
-                lastPostedPhase = null
-                stopNow()
-                return@collectLatest
-            }
-            lastUpdateAt = SystemClock.elapsedRealtime()
-            lastPostedPhase = state.phase
-            notify(buildNotification(state))
+            notify(buildNotification(snapshot))
         }
     }
 
@@ -122,8 +102,8 @@ class RunForegroundService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             getString(R.string.notification_channel_run),
-            // LOW：常驻不该出声。MIN 进不了状态栏，部分 ROM 还当成前台服务不成立；
-            // Live Update 也只禁 MIN。重要性建成就改不了，沿用 run_execution
+            // LOW：常驻不该出声。MIN 进不了状态栏，部分 ROM 还当成前台服务不成立
+            // 重要性建成就改不了，沿用 run_execution
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
             description = getString(R.string.notification_channel_run_desc)
@@ -140,49 +120,29 @@ class RunForegroundService : Service() {
         }
     }
 
-    private fun buildNotification(state: RunnerState): Notification {
-        val snapshot = RunProgressSnapshots.from(state.phase, state.activeExecution, null)
-        val style = NotificationCompat.ProgressStyle()
-            .setStyledByProgress(true)
-            .setProgressIndeterminate(snapshot.indeterminate)
-            .setProgressTrackerIcon(
-                IconCompat.createWithResource(this, R.drawable.ic_progress_tracker),
-            )
-            .addProgressSegment(
-                NotificationCompat.ProgressStyle.Segment(RunProgressSnapshots.PROGRESS_MAX)
-                    .setColor(snapshot.barColor),
-            )
-        if (!snapshot.indeterminate) {
-            style.setProgress(snapshot.progress)
+    private fun buildNotification(snapshot: HostSnapshot): Notification {
+        val contentRes = if (snapshot.bridgeReachable) {
+            R.string.notification_host_content_ok
+        } else {
+            R.string.notification_host_content_degraded
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setColor(snapshot.barColor)
-            .setContentTitle(getString(snapshot.title.stringRes))
-            .setContentText(snapshot.contentText.takeIf { it.isNotBlank() })
-            // ProgressStyle 只在 36+ 生效；经典模板仍靠 setProgress，否则 9–15 没有条子
-            .setProgress(
-                RunProgressSnapshots.PROGRESS_MAX,
-                snapshot.progress,
-                snapshot.indeterminate,
-            )
-            .setStyle(style)
+            .setContentTitle(getString(R.string.notification_host_title))
+            .setContentText(getString(contentRes, snapshot.vdDisplayId))
             .setContentIntent(contentIntent())
             .setOngoing(true)
             .setRequestPromotedOngoing(notificationManager.canRequestPromotedOngoing())
             .setSilent(true)
             .setOnlyAlertOnce(true)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .apply {
-                snapshot.shortCriticalText?.let { setShortCriticalText(it) }
-            }
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
             .build()
     }
 
     /** 通知权限被拒时 notify/cancel 会抛 SecurityException，不能让它掀翻 FGS 主线程 */
     private fun notify(notification: Notification) {
         runCatching { notificationManager.notify(NOTIFICATION_ID, notification) }
-            .onFailure { Timber.w(it, "Failed to update run notification") }
+            .onFailure { Timber.w(it, "Failed to update host notification") }
     }
 
     private val notificationManager: NotificationManager
@@ -203,7 +163,6 @@ class RunForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "run_execution"
         private const val NOTIFICATION_ID = 1001
-        private const val MIN_UPDATE_INTERVAL_MS = 1_000L
 
         fun start(context: Context) {
             runCatching {
@@ -211,4 +170,10 @@ class RunForegroundService : Service() {
             }.onFailure { Timber.w(it, "Failed to start foreground service") }
         }
     }
+}
+
+/** 16 以下没有实时动态开关，请求会被忽略 */
+private fun NotificationManager.canRequestPromotedOngoing(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return true
+    return canPostPromotedNotifications()
 }

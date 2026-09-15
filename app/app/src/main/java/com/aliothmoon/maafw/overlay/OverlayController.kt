@@ -8,21 +8,15 @@ import android.graphics.Color
 import android.view.ViewGroup
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.aliothmoon.maafw.MainActivity
 import com.aliothmoon.maafw.domain.OverlayControlMode
-import com.aliothmoon.maafw.domain.RunMode
 import com.aliothmoon.maafw.overlay.border.BorderOverlayManager
-import com.aliothmoon.maafw.runner.RunnerPhase
-import com.aliothmoon.maafw.runner.RunnerPort
-import com.aliothmoon.maafw.runner.isBusy
 import com.aliothmoon.maafw.service.AccessibilityHelperService
+import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.settings.AppSettingsGateway
 import com.aliothmoon.maafw.theme.MaaFwTheme
 import com.petterp.floatingx.FloatingX
@@ -36,17 +30,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
- * 前台模式的控制层
+ * 外壳控制层：悬浮球/面板是环境状态的开关与仪表盘
+ *
+ * 观察 [HostState]：环境起来（虚拟屏在且桥通）出控制球/边框，环境撤了收起来。
+ * 球点开出面板，面板上「启动环境 = 特权连接 → setup() → startVirtualDisplay()」
+ * 与「停止环境 = stopVirtualDisplay()」两个动作直接打 [HostState]
  */
 class OverlayController(
     private val context: Application,
-    private val runnerPort: RunnerPort,
+    private val hostState: HostState,
     private val appSettings: AppSettingsGateway,
     val borderOverlayManager: BorderOverlayManager,
     private val viewModelOwner: OverlayViewModelOwner,
@@ -54,15 +50,10 @@ class OverlayController(
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private val _isActive = MutableStateFlow(false)
-
-    /** 用户是否已开启控制层；未开启时即便进了运行态也不出球、不出边框 */
-    val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
-
     private val isPanelLocked = MutableStateFlow(true)
 
     private var currentMode: OverlayControlMode = OverlayControlMode.FLOAT_BALL
-    private var phaseJob: Job? = null
+    private var hostJob: Job? = null
     private var panelLayout: Pair<Int, Int>? = null
 
     private val configCallback = object : ComponentCallbacks {
@@ -79,69 +70,39 @@ class OverlayController(
 
     fun setup() {
         context.registerComponentCallbacks(configCallback)
-        scope.launch {
-            appSettings.runMode.collect { mode ->
-                when (mode) {
-                    RunMode.FOREGROUND -> {
-                        install()
-                        configCallback.onConfigurationChanged(context.resources.configuration)
-                        observePhase()
-                    }
-
-                    RunMode.BACKGROUND -> {
-                        stopObservingPhase()
-                        hideAll()
-                        uninstall()
-                    }
-                }
-            }
-        }
+        install()
+        configCallback.onConfigurationChanged(context.resources.configuration)
+        observeHost()
         scope.launch {
             appSettings.overlayControlMode.collect { applyMode(it) }
         }
     }
 
-    // ── 执行态 ──
+    // ── 环境态 ──
 
-    private fun observePhase() {
-        if (phaseJob != null) return
-        phaseJob = scope.launch {
-            var previous: RunnerPhase = runnerPort.state.value.phase
-            runnerPort.state.collect { state ->
-                onPhaseChanged(previous, state.phase)
-                previous = state.phase
+    private fun observeHost() {
+        if (hostJob != null) return
+        hostJob = scope.launch {
+            var wasUp = hostState.snapshot.value.environmentUp
+            hostState.snapshot.collect { snapshot ->
+                val up = snapshot.environmentUp
+                if (up == wasUp) return@collect
+                wasUp = up
+                if (up) showControl() else hideControl()
             }
         }
     }
 
-    private fun stopObservingPhase() {
-        phaseJob?.cancel()
-        phaseJob = null
+    private suspend fun showControl() {
+        when (currentMode) {
+            OverlayControlMode.FLOAT_BALL -> showBall()
+            OverlayControlMode.ACCESSIBILITY -> borderOverlayManager.show()
+        }
     }
 
-    /**
-     * 只在用户开过控制层之后才响应
-     * 定时触发那条链是静默启动的，用户没开控制层就不该被突然弹出的悬浮球打断
-     */
-    private suspend fun onPhaseChanged(previous: RunnerPhase, current: RunnerPhase) {
-        if (!_isActive.value) return
-        when {
-            !previous.isBusy && current.isBusy -> {
-                hidePanel()
-                when (currentMode) {
-                    OverlayControlMode.FLOAT_BALL -> showBall()
-                    OverlayControlMode.ACCESSIBILITY -> borderOverlayManager.show()
-                }
-            }
-
-            previous.isBusy && !current.isBusy -> {
-                when (currentMode) {
-                    OverlayControlMode.FLOAT_BALL -> hideBall()
-                    OverlayControlMode.ACCESSIBILITY -> borderOverlayManager.hide()
-                }
-                showPanel()
-            }
-        }
+    private suspend fun hideControl() {
+        hideBall()
+        borderOverlayManager.hide()
     }
 
     // ── 装卸 ──
@@ -181,24 +142,20 @@ class OverlayController(
         Timber.d("Control overlay attached")
     }
 
-    private fun uninstall() {
-        FloatingX.uninstallAll()
-        Timber.d("Control overlay detached")
-    }
-
     private fun createPanelView(): ComposeView = newComposeView().apply {
         panelLayout?.let { layoutParams = ViewGroup.LayoutParams(it.first, it.second) }
         setContent {
             val themeStyle by appSettings.themeStyle.collectAsState()
             MaaFwTheme(themeStyle = themeStyle) {
                 // 不用 collectAsStateWithLifecycle：悬浮窗隐藏时 owner 停在 CREATED，
-                // 那样收不到运行态变化，再显示出来就是过期数据
-                val state by runnerPort.state.collectAsState()
+                // 那样收不到环境态变化，再显示出来就是过期数据
+                val snapshot by hostState.snapshot.collectAsState()
                 val locked by isPanelLocked.collectAsState()
                 OverlayPanel(
-                    state = state,
+                    snapshot = snapshot,
                     isLocked = locked,
-                    onStop = { scope.launch { runnerPort.stop() } },
+                    onStart = { scope.launch { hostState.ensureEnvironmentStarted() } },
+                    onStop = { scope.launch { hostState.stopEnvironment() } },
                     onBackToApp = ::bringAppToFront,
                     onLockToggle = { setPanelLocked(it) },
                     onClose = ::onPanelClosed,
@@ -211,8 +168,8 @@ class OverlayController(
         setContent {
             val themeStyle by appSettings.themeStyle.collectAsState()
             MaaFwTheme(themeStyle = themeStyle) {
-                val state by runnerPort.state.collectAsState()
-                FloatBall(phase = state.phase, onClick = ::onBallClick)
+                val snapshot by hostState.snapshot.collectAsState()
+                FloatBall(running = snapshot.environmentUp, onClick = ::onBallClick)
             }
         }
     }
@@ -233,7 +190,11 @@ class OverlayController(
 
     private fun onPanelClosed() {
         hidePanel()
-        if (currentMode == OverlayControlMode.FLOAT_BALL) showBall()
+        if (currentMode == OverlayControlMode.FLOAT_BALL &&
+            hostState.snapshot.value.environmentUp
+        ) {
+            showBall()
+        }
     }
 
     private fun bringAppToFront() {
@@ -252,35 +213,6 @@ class OverlayController(
     }
 
     // ── 显隐 ──
-
-    /** 由 UI 显式开启；不自动开是因为悬浮窗要盖住别人的画面，得用户点头 */
-    fun show() {
-        if (appSettings.runMode.value != RunMode.FOREGROUND) {
-            Timber.w("Not in foreground mode; ignoring control overlay show request")
-            return
-        }
-        _isActive.value = true
-        when (currentMode) {
-            OverlayControlMode.ACCESSIBILITY -> {
-                hideBall()
-                registerVolumeKeyListener()
-                showPanel()
-            }
-
-            OverlayControlMode.FLOAT_BALL -> {
-                unregisterVolumeKeyListener()
-                showBall()
-            }
-        }
-    }
-
-    suspend fun hideAll() {
-        hidePanel()
-        hideBall()
-        borderOverlayManager.hide()
-        unregisterVolumeKeyListener()
-        _isActive.value = false
-    }
 
     private fun showPanel() {
         viewModelOwner.start()
@@ -308,11 +240,11 @@ class OverlayController(
             OverlayControlMode.FLOAT_BALL -> hideBall()
         }
         currentMode = mode
-        if (!_isActive.value) return
+        if (!hostState.snapshot.value.environmentUp) return
         when (mode) {
             OverlayControlMode.ACCESSIBILITY -> {
                 registerVolumeKeyListener()
-                if (runnerPort.state.value.phase.isBusy) borderOverlayManager.show()
+                borderOverlayManager.show()
             }
 
             OverlayControlMode.FLOAT_BALL -> {

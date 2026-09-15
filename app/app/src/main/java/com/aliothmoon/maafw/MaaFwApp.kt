@@ -4,10 +4,10 @@ import android.app.Application
 import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.di.AppCoroutineScope
 import com.aliothmoon.maafw.di.coreModule
+import com.aliothmoon.maafw.di.hostModule
 import com.aliothmoon.maafw.di.logModule
 import com.aliothmoon.maafw.di.overlayModule
 import com.aliothmoon.maafw.di.privilegedModule
-import com.aliothmoon.maafw.di.runnerModule
 import com.aliothmoon.maafw.di.viewModelModule
 import com.aliothmoon.maafw.log.AppLogWriter
 import com.aliothmoon.maafw.log.CrashHandler
@@ -16,6 +16,7 @@ import com.aliothmoon.maafw.overlay.OverlayController
 import com.aliothmoon.maafw.overlay.screensaver.ScreenSaverOverlayManager
 import com.aliothmoon.maafw.privileged.PermissionManager
 import com.aliothmoon.maafw.privileged.RemoteServiceManager
+import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.settings.AppSettingsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +47,7 @@ class MaaFwApp : Application() {
             modules(
                 coreModule,
                 privilegedModule,
-                runnerModule,
+                hostModule,
                 logModule,
                 overlayModule,
                 viewModelModule,
@@ -64,6 +65,7 @@ class MaaFwApp : Application() {
         koin.get<PermissionManager>()
         val provider = koin.get<AppSettingsManager>().startupBackend::value
         RemoteServiceManager.initialize(this, provider)
+        koin.get<HostState>().start()
         koin.get<OverlayController>().setup()
         koin.get<ScreenSaverOverlayManager>().setup()
     }

@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Home
@@ -16,7 +14,6 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -25,23 +22,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.aliothmoon.maafw.R
-import com.aliothmoon.maafw.i18n.asString
-import com.aliothmoon.maafw.runner.RunnerPhase
-import com.aliothmoon.maafw.runner.RunnerState
-import com.aliothmoon.maafw.runner.isBusy
-import com.aliothmoon.maafw.service.RunProgressSnapshots
+import com.aliothmoon.maafw.constant.DefaultDisplayConfig
+import com.aliothmoon.maafw.service.HostSnapshot
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.MaaButton
-import com.aliothmoon.maafw.ui.i18n.asUiText
 
 /**
- * 悬浮控制面板
+ * 悬浮控制面板：环境状态的仪表盘 + 启停开关
  */
 @Composable
 fun OverlayPanel(
-    state: RunnerState,
+    snapshot: HostSnapshot,
     isLocked: Boolean,
+    onStart: () -> Unit,
     onStop: () -> Unit,
     onBackToApp: () -> Unit,
     onLockToggle: (Boolean) -> Unit,
@@ -63,48 +57,37 @@ fun OverlayPanel(
         ) {
             PanelHeader(isLocked, onLockToggle, onClose)
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
             ) {
-                Text(
-                    text = state.phase.asUiText().asString(),
-                    style = MaterialTheme.typography.titleMedium,
+                StatusRow(
+                    labelRes = R.string.overlay_host_privileged,
+                    value = stringResource(
+                        if (snapshot.privilegedConnected) {
+                            R.string.host_state_connected
+                        } else {
+                            R.string.host_state_disconnected
+                        }
+                    ),
                 )
-                state.activeExecution?.let { execution ->
-                    execution.currentTaskLabel?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (execution.totalTaskCount > 0) {
-                        Text(
-                            text = "${execution.completedTaskCount}/${execution.totalTaskCount}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        LinearProgressIndicator(
-                            progress = {
-                                RunProgressSnapshots.progressValue(
-                                    done = execution.completedTaskCount,
-                                    total = execution.totalTaskCount,
-                                    hasCurrentTask = !execution.currentTaskName.isNullOrBlank(),
-                                ) / RunProgressSnapshots.PROGRESS_MAX.toFloat()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-                state.latestResult?.let {
-                    Text(
-                        text = it.asUiText().asString(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                StatusRow(
+                    labelRes = R.string.overlay_host_bridge,
+                    value = stringResource(
+                        if (snapshot.bridgeReachable) {
+                            R.string.host_state_ok
+                        } else {
+                            R.string.host_state_unreachable
+                        }
+                    ),
+                )
+                StatusRow(
+                    labelRes = R.string.overlay_host_display,
+                    value = if (snapshot.vdDisplayId != DefaultDisplayConfig.DISPLAY_NONE) {
+                        "#${snapshot.vdDisplayId}"
+                    } else {
+                        stringResource(R.string.host_state_display_none)
+                    },
+                )
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -125,15 +108,31 @@ fun OverlayPanel(
                     )
                 }
                 MaaButton(
-                    onClick = onStop,
-                    enabled = state.phase.isBusy,
+                    onClick = if (snapshot.environmentUp) onStop else onStart,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(stringResource(R.string.runner_stop))
+                    Text(
+                        stringResource(
+                            if (snapshot.environmentUp) {
+                                R.string.overlay_host_stop
+                            } else {
+                                R.string.overlay_host_start
+                            }
+                        )
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun StatusRow(labelRes: Int, value: String) {
+    Text(
+        text = stringResource(labelRes, value),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

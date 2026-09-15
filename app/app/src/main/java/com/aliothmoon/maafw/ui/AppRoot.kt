@@ -156,7 +156,8 @@ fun AppRoot(
         // 未装/未启动/未授权时的引导；needsGuidance 为 false 时自身不渲染
         ShizukuReadinessDialog(
             readiness = readiness,
-            onInstall = { permissionManager.openShizuku(context) },
+            // NotInstalled 档：不内置安装包，确认键 = 用户装完后重跑探测
+            onInstall = { permissionManager.refresh() },
             onOpenApp = { permissionManager.openShizuku(context) },
             onRequestAuth = { scope.launch { permissionManager.requestRemoteAccess() } },
             onDismiss = { scope.launch { permissionManager.skipShizukuCheck() } },

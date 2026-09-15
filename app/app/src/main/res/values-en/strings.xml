@@ -42,8 +42,6 @@
     <!-- Runner toggle -->
     <string name="runner_start">Start tasks</string>
     <string name="runner_foreground_blocked">Foreground mode is active; switch to background mode first</string>
-    <string name="runner_stop">Stop</string>
-    <string name="runner_stopping">Stopping…</string>
 
     <!-- Configuration sheet -->
     <string name="config_title">Configurations</string>
@@ -94,23 +92,6 @@
         <item quantity="other">Diagnostics: %1$d (%2$d errors)</item>
     </plurals>
 
-    <!-- Runner phase / result -->
-    <string name="phase_unavailable">Unavailable: %1$s</string>
-    <string name="phase_idle">Idle</string>
-    <string name="phase_preparing">Preparing</string>
-    <string name="phase_running">Running</string>
-    <string name="phase_stopping">Stopping</string>
-    <plurals name="result_completed">
-        <item quantity="one">All completed (%1$d task)</item>
-        <item quantity="other">All completed (%1$d tasks)</item>
-    </plurals>
-    <plurals name="result_completed_with_failures">
-        <item quantity="one">Completed with %1$d failed task</item>
-        <item quantity="other">Completed with %1$d failed tasks</item>
-    </plurals>
-    <string name="result_cancelled">Cancelled</string>
-    <string name="result_failed">Failed: %1$s</string>
-
     <!-- Settings screen -->
     <string name="settings_section_global_option">Task settings</string>
     <string name="settings_section_resource_option">Resource settings</string>
@@ -150,26 +131,33 @@
     <string name="welcome_title">Welcome</string>
 
     <!-- Notifications -->
-    <string name="notification_channel_run">Task execution</string>
-    <string name="notification_channel_run_desc">Stays up while a run is in progress so the system does not reclaim the process</string>
+    <string name="notification_channel_run">ALAS runtime guard</string>
+    <string name="notification_channel_run_desc">Guards the virtual display and bridge so the system does not reclaim the process</string>
     <string name="notification_channel_focus">Project messages</string>
     <string name="notification_channel_focus_desc">Alerts the PI project asks to push to you during a run</string>
     <string name="notification_focus_title">Project message</string>
-    <string name="notification_run_preparing">Preparing</string>
-    <string name="notification_run_running">Running</string>
-    <string name="notification_run_stopping">Stopping</string>
+    <string name="notification_host_title">Guarding ALAS environment</string>
+    <string name="notification_host_content_ok">Virtual display #%1$d · bridge OK</string>
+    <string name="notification_host_content_degraded">Virtual display #%1$d · bridge unreachable</string>
 
-    <!-- Foreground control layer -->
+    <!-- Floating control layer -->
     <string name="accessibility_service_description">Press volume up and down together to open the control panel in primary-display mode. Only key events are filtered; screen content is never read.</string>
     <string name="overlay_panel_title">Control panel</string>
     <string name="overlay_back_to_app">Back to app</string>
     <string name="overlay_lock">Lock position</string>
     <string name="overlay_unlock">Unlock position</string>
     <string name="overlay_ball_idle">Idle</string>
-    <string name="overlay_ball_preparing">Starting</string>
     <string name="overlay_ball_running">Running</string>
-    <string name="overlay_ball_stopping">Stopping</string>
-    <string name="overlay_ball_unavailable">Unavailable</string>
+    <string name="overlay_host_start">Start environment</string>
+    <string name="overlay_host_stop">Stop environment</string>
+    <string name="overlay_host_privileged">Privileged process: %1$s</string>
+    <string name="overlay_host_bridge">Bridge: %1$s</string>
+    <string name="overlay_host_display">Virtual display: %1$s</string>
+    <string name="host_state_connected">connected</string>
+    <string name="host_state_disconnected">disconnected</string>
+    <string name="host_state_ok">OK</string>
+    <string name="host_state_unreachable">unreachable</string>
+    <string name="host_state_display_none">not created</string>
     <string name="settings_overlay_mode">Overlay mode</string>
     <string name="settings_overlay_mode_ball">Floating ball mode</string>
     <string name="settings_overlay_mode_accessibility">Shortcut mode</string>
@@ -182,7 +170,7 @@
     <string name="settings_screen_saver_auto">Turn the screen off while running</string>
     <string name="settings_screen_saver_hint">Blacks out the screen while a background run is in progress, leaving only the clock, battery and the latest log line; swipe right to unlock, and it is removed automatically when the run ends</string>
     <string name="settings_screen_saver_show">Turn off now</string>
-    <string name="screensaver_idle">Waiting for task to start…</string>
+    <string name="screensaver_idle">Guarding environment…</string>
     <string name="screensaver_swipe_to_unlock">Swipe right to unlock</string>
 
     <!-- Schedules -->
@@ -282,9 +270,8 @@
     <string name="dialog_ok">OK</string>
 
     <!-- ALAS tab: WebUI container -->
-    <string name="alas_webui_not_running">ALAS WebUI is not running (Termux service down)</string>
-    <string name="alas_webui_retry">Retry</string>
-    <string name="alas_webui_start_termux">Launch Termux service</string>
+    <string name="alas_webui_not_running">ALAS is served by the app\'s built-in environment. The first launch needs initialization; if it stays down, check the runtime environment and retry</string>
+    <string name="alas_webui_retry">Retry connection</string>
 
     <!-- Option editor -->
     <string name="option_input_invalid">Invalid input</string>
@@ -367,9 +354,9 @@
     <string name="home_status_ready">Ready</string>
     <string name="home_service_connect">Reload service</string>
     <string name="home_service_disconnect">Close service</string>
-    <string name="dialog_shizuku_not_installed_title">Shizuku Not Installed</string>
-    <string name="dialog_shizuku_not_installed_message">This app depends on the Shizuku service. Shizuku was not detected on your device; please install it first.</string>
-    <string name="dialog_shizuku_install_confirm">Install Shizuku</string>
+    <string name="dialog_shizuku_not_installed_title">shizuku-m Not Detected</string>
+    <string name="dialog_shizuku_not_installed_message">This app relies on the privileged service provided by shizuku-m (a modified Shizuku), which was not detected on this device. Install shizuku-m first (see the project README), then tap below to re-check.</string>
+    <string name="dialog_shizuku_install_confirm">Installed, re-check</string>
     <string name="dialog_shizuku_switch_to_root">Switch to Root</string>
     <string name="dialog_shizuku_skip_check">Skip check (not recommended)</string>
     <string name="dialog_shizuku_not_running_title">Shizuku Not Running</string>
