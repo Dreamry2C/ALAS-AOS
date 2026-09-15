@@ -3,7 +3,6 @@ package com.aliothmoon.maafw.settings
 import com.aliothmoon.maafw.domain.RemoteBackend
 import com.aliothmoon.maafw.domain.ThemeMode
 import com.aliothmoon.maafw.privileged.RemoteAccessState
-import com.aliothmoon.maafw.runner.ResolutionPreference
 import com.aliothmoon.maafw.theme.ThemeStyle
 
 /**
@@ -16,7 +15,6 @@ data class SettingsUiState(
     val remoteAccess: RemoteAccessState = RemoteAccessState(),
     val themeMode: ThemeMode = ThemeMode.System,
     val themeStyle: ThemeStyle = ThemeStyle.DEFAULT,
-    val resolutionPreference: ResolutionPreference = ResolutionPreference.P720,
     val debugMode: Boolean = false,
 )
 
@@ -30,8 +28,6 @@ sealed interface SettingsIntent {
 
     /** null 恢复跟随系统；切换后 Activity 重建 */
     data class SetLanguage(val tag: String?) : SettingsIntent
-
-    data class SetResolutionPreference(val preference: ResolutionPreference) : SettingsIntent
 
     data class SetDebugMode(val enabled: Boolean) : SettingsIntent
 }

@@ -28,7 +28,6 @@ import androidx.compose.ui.res.stringResource
 import com.aliothmoon.maafw.BuildConfig
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.domain.RemoteBackend
-import com.aliothmoon.maafw.runner.ResolutionPreference
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import com.aliothmoon.maafw.domain.ThemeMode
@@ -228,7 +227,7 @@ private fun LogCard(
 }
 
 /**
- * 启动模式与后台模式分辨率：都是「跑起来之前得先定」的环境选项（对齐 MaaMeow 的「其他设置」）
+ * 启动模式（特权后端）：「跑起来之前得先定」的环境选项（对齐 MaaMeow 的「其他设置」）
  */
 @Composable
 private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
@@ -239,16 +238,6 @@ private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit
             options = RemoteBackend.entries.map { it to it.display },
             selected = state.remoteAccess.configuredBackend,
             onSelect = { onIntent(SettingsIntent.SetBackend(it)) },
-        )
-        Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
-        MaaFieldLabel(stringResource(R.string.settings_resolution))
-        MaaSingleChoiceFlow(
-            options = listOf(
-                ResolutionPreference.P720 to stringResource(R.string.settings_resolution_720p),
-                ResolutionPreference.P1080 to stringResource(R.string.settings_resolution_1080p),
-            ),
-            selected = state.resolutionPreference,
-            onSelect = { onIntent(SettingsIntent.SetResolutionPreference(it)) },
         )
     }
 }

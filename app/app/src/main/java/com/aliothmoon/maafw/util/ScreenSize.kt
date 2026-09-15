@@ -11,8 +11,8 @@ import kotlin.math.abs
 /**
  * 主屏尺寸的读取与 16:9 换算（对齐 MaaMeow 的 `Misc` 同名几个函数）
  *
- * 与后台虚拟屏那套（`ResolutionPreference` / `DisplayResolution`）无关：那边是自己建的屏，
- * 尺寸由外壳指定；这里读的是物理主屏，前台模式在上面直接采集与注入
+ * 与后台虚拟屏无关：那边是自己建的屏，尺寸由外壳指定（`DefaultDisplayConfig`）；
+ * 这里读的是物理主屏，前台模式在上面直接采集与注入
  *
  * 调用方是进程级组件（`DisplaySizeController`），手上只有 Application context，
  * 所以取屏幕的方式受限——见 [physical] 上的说明

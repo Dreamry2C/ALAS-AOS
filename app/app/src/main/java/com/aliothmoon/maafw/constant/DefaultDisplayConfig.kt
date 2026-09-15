@@ -1,9 +1,8 @@
 package com.aliothmoon.maafw.constant
 
 /**
- * 虚拟显示器的兜底参数
- * 实际分辨率由用户选的 [com.aliothmoon.maafw.runner.ResolutionPreference] 决定，
- * 这里只在 payload 没带上尺寸时兜底（docs/privileged-runtime.md §7）
+ * 虚拟显示器的参数：ALAS 桥配置（screencap 1280×720）钉死这套尺寸，
+ * 改分辨率要连桥协议与 guest 侧校验一起动，故不做用户可选项
  */
 object DefaultDisplayConfig {
     /** 建屏时的名字，只在 dumpsys 里可见 */
