@@ -1,20 +1,43 @@
 package com.aliothmoon.maafw.settings
 
 import com.aliothmoon.maafw.domain.RemoteBackend
+import com.aliothmoon.maafw.domain.ThemeMode
 import com.aliothmoon.maafw.privileged.RemoteAccessState
+import com.aliothmoon.maafw.runner.ResolutionPreference
+import com.aliothmoon.maafw.theme.ThemeStyle
 
 /**
  * 设置页聚合态
  *
- * 目前只承载后端选择；Shizuku 子设置（skip/shortcut/launchPackage）与运行模式那簇
- * 后续迁进来时再扩字段。后端的写走 PermissionGateway.setBackend（带 unbind 副作用），
- * 不直接落 AppSettings——跳过 unbind 会连着错的特权进程
+ * 后端的写走 PermissionGateway.setBackend（带 unbind 副作用），不直接落 AppSettings——
+ * 跳过 unbind 会连着错的特权进程
  */
 data class SettingsUiState(
     val remoteAccess: RemoteAccessState = RemoteAccessState(),
+    val themeMode: ThemeMode = ThemeMode.System,
+    val themeStyle: ThemeStyle = ThemeStyle.DEFAULT,
+    val resolutionPreference: ResolutionPreference = ResolutionPreference.P720,
+    val debugMode: Boolean = false,
 )
 
 sealed interface SettingsIntent {
     /** 切换 Shizuku / Root 后端；落到 AppSettings.startupBackend 并断开当前特权进程 */
     data class SetBackend(val backend: RemoteBackend) : SettingsIntent
+
+    data class SetThemeMode(val mode: ThemeMode) : SettingsIntent
+
+    data class SetThemeStyle(val style: ThemeStyle) : SettingsIntent
+
+    /** null 恢复跟随系统；切换后 Activity 重建 */
+    data class SetLanguage(val tag: String?) : SettingsIntent
+
+    data class SetResolutionPreference(val preference: ResolutionPreference) : SettingsIntent
+
+    data class SetDebugMode(val enabled: Boolean) : SettingsIntent
+}
+
+/** 一次性副作用；路由层消费 */
+sealed interface SettingsEvent {
+    /** 调试模式已落盘，重启让日志管线以新状态起来 */
+    data object RestartApp : SettingsEvent
 }

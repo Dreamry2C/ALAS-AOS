@@ -20,9 +20,6 @@ object AppPaths {
     lateinit var LOG_DIR: File
         private set
 
-    lateinit var FOCUS_DIR: File
-        private set
-
     lateinit var DEBUG_DIR: File
         private set
 
@@ -32,7 +29,6 @@ object AppPaths {
         }
         ROOT = root
         LOG_DIR = File(root, AppFiles.LOG_DIR)
-        FOCUS_DIR = File(LOG_DIR, AppFiles.FOCUS_DIR)
         DEBUG_DIR = File(root, AppFiles.DEBUG_DIR)
     }
 }

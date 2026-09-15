@@ -50,13 +50,5 @@ gradlePlugin {
             id = "maafw.kotlin.jvm"
             implementationClass = "com.aliothmoon.maafw.gradle.KotlinJvmConventionPlugin"
         }
-        register("piAssets") {
-            id = "maafw.pi.assets"
-            implementationClass = "com.aliothmoon.maafw.gradle.PiAssetsConventionPlugin"
-        }
-        register("agentRuntime") {
-            id = "maafw.agent.runtime"
-            implementationClass = "com.aliothmoon.maafw.gradle.AgentRuntimeConventionPlugin"
-        }
     }
 }

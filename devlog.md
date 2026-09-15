@@ -4,6 +4,16 @@
 
 ## 未发版
 
+### 2026-09-16 · M2-b 减法收官 ✅：剔除 MaaCore/PI/定时任务/推送业务管线，宿主外壳收敛，构建绿
+
+- **终验 BUILD SUCCESSFUL**（3s，103 tasks）。APK `app-debug.apk` 80,972,217 → **80,958,388 B**（−14KB；debug dex 未压缩 + fork clone 基线本就不含 jniLibs，包体大头是三方库不是业务码，降幅小属预期）。全 dex 抽查：16 个被删类 0 命中，保留类（StubRunnerPort/RemoteServiceImpl/RunForegroundService 等）在。
+- **刀①构建系统**：删 `app/macrobenchmark/`；build-logic 删 PiAssets/AgentRuntime 两 Convention 插件；app 模块去两插件 id + baselineProfile + jna/sentry/markwon/angus.mail/jakarta.activation/reorderable 依赖（okhttp/tracing 按底稿 §七保留）；proguard 删 JNA/markwon/SMTP 段，R8 关键类清单删 maa 两条。
+- **刀②业务包整删**：`maa/ project/ schedule/ notification/ telemetry/ session/`；remote 删 MaaRunner/ExecAgentHost/AgentInstaller/AgentRuntimeDescriptor（AgentHost 连锁）；log 删 RunLogArchive/Detail；di 删 Notification/Project/ScheduleModule；`assets/shizuku.apk` + ShizukuInstallHelper + 两个构建脚本（setup_maa_framework/build_agent_bundle）删。
+- **刀③留壳改造**：RunnerPort 接口原样保留（RunnerContracts.kt 并入 RunnerEvent.toLogText），DI 改绑 **StubRunnerPort**；**RemoteServiceImpl 空实现**（setup 留 phantom killer 禁用，run/maaVersion 返 false/null，AIDL 四文件全保留）；RunForegroundService 重写为只观察 runnerPort.state，RunProgressSnapshot 迁 `service/` 包；PermissionManager 内化 Shizuku 探测（installShizuku 删，openShizuku 保留）。
+- **刀④UI**：删 tasks/schedule/home/notification/options 五页 + 9 个业务组件；**AppRoot 重写为 2 tab（Alas+Settings）**；Routes 只剩 ALAS/SETTINGS/APP_LOG(_DETAIL)；SettingsScreen 重写为 Display/Log/Other/About 四卡（SettingsViewModel 扩三参 + themeMode/language/resolution 意图 + RestartApp 事件）。
+- **刀⑤杂项**：Manifest 删 boot/alarm 两权限 + schedule 三组件 + Sentry meta-data；VirtualDisplayManager 删死常量 ROTATES_WITH_CONTENT；ShellDirs/AppPaths/AppFiles 删 AGENT_DIR/JNA_TMPDIR/FOCUS_DIR/PI_DIR。
+- **遗留**：① readiness 弹窗 NotInstalled 档 onInstall 无真实安装能力（决策=不内置 APK），现接 openShizuku 语义降级，文案待用户决策；② AppSettings 里 wakeUnlock/telemetryEnabled 等成死 pref（未清 schema）；③ okhttp/tracing 已无引用但保留（M2-c 桥可能用上）；④ toml 未用条目未清；⑤ Koin 图仅编译期核对，真机运行验证留后续里程碑。
+
 ### 2026-09-16 · M2-a 基线构建绿 ✅（三跑迭代：Aliyun 镜像 + floatingx-compose 补齐）
 
 - **基线 assembleDebug 第三跑 BUILD SUCCESSFUL**（1m48s，105 tasks；`app/app/build/outputs/apk/debug/app-debug.apk` 81MB）。本机可构建实证，M2-b 减法对照基准就位。APK 缺 MaaFramework jniLibs（拷贝时已排除）属预期，M2-b 连引用一起剔除。

@@ -111,3 +111,17 @@ sealed interface RunnerCommandResult {
     data object Accepted : RunnerCommandResult
     data class Rejected(val reason: UiText) : RunnerCommandResult
 }
+
+/** 屏保那一行只要一句话，带上 details_json 就糊了 */
+fun RunnerEvent.toLogText(): String = when (this) {
+    is RunnerEvent.Log -> message
+    is RunnerEvent.Progress -> "$taskName $completed/$total"
+    is RunnerEvent.Focus -> focus.content
+    is RunnerEvent.AgentOutput -> line
+    is RunnerEvent.AgentConnected -> label
+    is RunnerEvent.MalformedCallback -> MALFORMED_LABEL
+    is RunnerEvent.Callback -> message
+}
+
+/** 事件名为空时拿不到可指称的东西，给个固定标签，原文进 detail */
+internal const val MALFORMED_LABEL = "<malformed callback>"

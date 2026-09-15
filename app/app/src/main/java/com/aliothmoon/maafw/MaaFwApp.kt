@@ -5,12 +5,9 @@ import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.di.AppCoroutineScope
 import com.aliothmoon.maafw.di.coreModule
 import com.aliothmoon.maafw.di.logModule
-import com.aliothmoon.maafw.di.notificationModule
 import com.aliothmoon.maafw.di.overlayModule
 import com.aliothmoon.maafw.di.privilegedModule
-import com.aliothmoon.maafw.di.projectModule
 import com.aliothmoon.maafw.di.runnerModule
-import com.aliothmoon.maafw.di.scheduleModule
 import com.aliothmoon.maafw.di.viewModelModule
 import com.aliothmoon.maafw.log.AppLogWriter
 import com.aliothmoon.maafw.log.CrashHandler
@@ -20,7 +17,6 @@ import com.aliothmoon.maafw.overlay.screensaver.ScreenSaverOverlayManager
 import com.aliothmoon.maafw.privileged.PermissionManager
 import com.aliothmoon.maafw.privileged.RemoteServiceManager
 import com.aliothmoon.maafw.settings.AppSettingsManager
-import com.aliothmoon.maafw.telemetry.TelemetryController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -49,13 +45,10 @@ class MaaFwApp : Application() {
             androidContext(app)
             modules(
                 coreModule,
-                projectModule,
                 privilegedModule,
                 runnerModule,
                 logModule,
-                notificationModule,
                 overlayModule,
-                scheduleModule,
                 viewModelModule,
             )
         }.koin
@@ -73,6 +66,5 @@ class MaaFwApp : Application() {
         RemoteServiceManager.initialize(this, provider)
         koin.get<OverlayController>().setup()
         koin.get<ScreenSaverOverlayManager>().setup()
-        koin.get<TelemetryController>().setup()
     }
 }
