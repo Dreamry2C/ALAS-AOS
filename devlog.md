@@ -4,6 +4,15 @@
 
 ## 未发版
 
+### 2026-09-16 · M3-a 收官 ✅：首启 rootfs 解压流水线（进度条门）真机全绿 + 幻影键修正
+
+- **代码（`f8d8cbe`）**：`provision/RootfsProvisioner`（状态机 Checking/NotBundled/LowDisk/Extracting/Ready/Failed）+ `ui/setup/ProvisionScreen` + AppRoot 门（未 Ready 整屏接管，开发包未内置可跳过）+ `di/ProvisionModule`。真机：~90s 解出 971MB（315MB 压缩包），进度条平滑，二启秒过门。
+- **险些出货的大坑（已入 debug.md）**：解压目标最初写 AppPaths.ROOT（getExternalFilesDir=/sdcard）——/sdcard 模拟存储**不支持符号链接**（ubuntu-base 740 个）且 noexec，Spike A 实证 proot 可用的位置是**内部 filesDir**。提交前自查拦下。
+- **解压技术选型**：busybox tar 解 ubuntu-base 硬链接前向引用必炸（M1-d 坑②）→ commons-compress + tukaani xz 纯 Java 流式解；符号链接 `Os.symlink`（实测 740 全数落地）、硬链接物化副本（前向引用解完兜底）、可执行位保留（python3→3.12 `-rwx--x--x`）、zip-slip 防护、256KB 节流进度（openFd 读真实长度，noCompress+xz 已配）、≥2GB 磁盘校验。
+- **版本闸门**：assets 侧 `rootfs/BUILD_MANIFEST`（入库，678B）vs marker `.provisioned`（实测写出 0.1.0）；升级=换新包重解。rootfs.tar.xz 随包内置（gitignore，APK 392MB）——一键安装符合决策 #3；Gitee Release 100MB 附件上限放不下，分发走 GitHub Release。
+- **幻影键修正**：`PermissionGrantHelper.disablePhantomProcessKiller` 原来是 m0 时代两旧键（Spike C 实测**无效**：`settings_config_disable_monitor_phantom_procs`/`phantom_process_killer_enable`）+ 有效副手段；已换成 Spike C 实证对（`settings_enable_monitor_phantom_procs false` 主 + `device_config max_phantom_processes 2147483647` 副），设备侧 `settings get` 双双确认写入。
+- **遗留**：部署页期间 HostState 并行起 VD/球（可接受，阶段四再评）；M3-b = FGS 拉 proot（libproot.so 进 jniLibs）+ 自愈清锁 + Gitee 热更新 + wrapper。
+
 ### 2026-09-16 · M2-d 收官 ✅：HostState 脱钩 + DoD 真机验证 6/6 + 悬浮球消失之谜定案
 
 - **代码（`8c02157`）**：新建 `service/HostState.kt`（快照=特权连接+桥可达+vdDisplayId；environmentUp=桥通且屏在；4s 裸 socket ping 22300 探测；ensureEnvironmentStarted=bind→setup→startVD→FGS 一键链；stopEnvironment=stopVD）+ `di/HostModule.kt`；OverlayController/OverlayPanel/FloatBall/RunForegroundService 全脱钩 RunnerPort（StubRunnerPort/RunnerContracts 删除）；AlasScreen 错误页改「重试连接」；NotInstalled 档改「我已安装，重新检测」+ shizuku-m 自装引导文案。
