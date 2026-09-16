@@ -4,11 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -113,7 +117,12 @@ fun HangarScreen(
                 onEnterFullscreen = onEnterFullscreen,
                 modifier = Modifier.fillMaxWidth(),
             )
-            ConfigCard(alas = alas, onSelect = alasController::selectConfig)
+            ConfigToolRow(
+                alas = alas,
+                onSelect = alasController::selectConfig,
+                onToolStart = { alasController.startTool(it) },
+                onToolStop = { alasController.stopTool() },
+            )
             AlasControlPanel(
                 snapshot = snapshot,
                 alas = alas,
@@ -124,6 +133,7 @@ fun HangarScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
+                showTools = false,
             )
         }
     }
@@ -203,43 +213,56 @@ private fun PreviewPlaceholder(textRes: Int) {
 }
 
 /**
- * 运行配置选择：列出 config/ 下的实例名（wrapper /configs）。
- * 一行形制：左标签，右下拉按钮直接显示当前配置名（点击展开切换）。
- * 调度器在跑时锁选择——生效配置以 /status 回报的 runningConfig 为准，选择下次启动生效
+ * 运行配置 + 工具 双模块行：左卡上「运行配置」标签、下配置下拉框；
+ * 右列「半自动点击」「活动剧情」两个按钮上下排，与开始挂机同款实心形制。
+ * 行高取左右最大固有高（IntrinsicSize），右列两按钮均分填满，大小随模块自适应。
+ * 某工具在跑时对应槽位变「停止」（槽位即归属）；启停互斥归 wrapper，可用性只看可达/忙碌。
+ * 调度器在跑时锁配置切换——生效配置以 /status 回报的 runningConfig 为准，选择下次启动生效
  */
 @Composable
-private fun ConfigCard(
+private fun ConfigToolRow(
     alas: AlasRunState,
     onSelect: (String) -> Unit,
+    onToolStart: (String) -> Unit,
+    onToolStop: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    MaaCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Max),
+        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
+    ) {
+        MaaCard(modifier = Modifier.weight(1f)) {
             Text(
                 text = stringResource(R.string.hangar_config_label),
                 style = MaterialTheme.typography.titleMedium,
             )
+            Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
             Box {
                 MaaOutlinedButton(
                     onClick = { expanded = true },
                     enabled = !alas.runnerAlive && alas.configs.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        text = if (alas.runnerAlive) {
-                            alas.runningConfig ?: alas.selectedConfig
-                        } else {
-                            alas.selectedConfig
-                        },
-                    )
-                    Icon(
-                        imageVector = Icons.Outlined.ArrowDropDown,
-                        contentDescription = null,
-                        modifier = Modifier.size(MaaDesignTokens.IconSize.sm),
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (alas.runnerAlive) {
+                                alas.runningConfig ?: alas.selectedConfig
+                            } else {
+                                alas.selectedConfig
+                            },
+                        )
+                        Icon(
+                            imageVector = Icons.Outlined.ArrowDropDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(MaaDesignTokens.IconSize.sm),
+                        )
+                    }
                 }
                 DropdownMenu(
                     expanded = expanded,
@@ -257,5 +280,47 @@ private fun ConfigCard(
                 }
             }
         }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+        ) {
+            ToolSlotButton(
+                labelRes = R.string.hangar_tool_semi_auto,
+                running = alas.toolAlive && alas.toolName == AlasRunState.TOOL_SEMI_AUTO,
+                onStart = { onToolStart(AlasRunState.TOOL_SEMI_AUTO) },
+                onStop = onToolStop,
+                enabled = alas.reachable && !alas.busy,
+                modifier = Modifier.weight(1f),
+            )
+            ToolSlotButton(
+                labelRes = R.string.hangar_tool_event_story,
+                running = alas.toolAlive && alas.toolName == AlasRunState.TOOL_EVENT_STORY,
+                onStart = { onToolStart(AlasRunState.TOOL_EVENT_STORY) },
+                onStop = onToolStop,
+                enabled = alas.reachable && !alas.busy,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** 工具槽位按钮：与开始挂机同款实心形制；本槽工具在跑时变「停止」（槽位即归属） */
+@Composable
+private fun ToolSlotButton(
+    labelRes: Int,
+    running: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    MaaButton(
+        onClick = if (running) onStop else onStart,
+        enabled = enabled,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Text(stringResource(if (running) R.string.hangar_tool_stop else labelRes))
     }
 }
