@@ -167,6 +167,8 @@ class OverlayController(
                     onStop = { scope.launch { hostState.stopEnvironment() } },
                     onAlasStart = { alasController.startAlas() },
                     onAlasStop = { alasController.stopAlas() },
+                    onToolStart = { alasController.startTool(it) },
+                    onToolStop = { alasController.stopTool() },
                     onBackToApp = ::bringAppToFront,
                     onLockToggle = { setPanelLocked(it) },
                     onClose = ::onPanelClosed,

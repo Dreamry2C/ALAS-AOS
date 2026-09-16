@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,13 +74,17 @@ import com.aliothmoon.maafw.provision.RootfsProvisioner
 import com.aliothmoon.maafw.settings.SettingsEvent
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.SettingsViewModel
+import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.util.Misc
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaFwTheme
 import com.aliothmoon.maafw.ui.components.clearFocusOnBlankTap
 import com.aliothmoon.maafw.ui.alas.AlasScreen
 import com.aliothmoon.maafw.ui.components.ShizukuReadinessDialog
+import com.aliothmoon.maafw.ui.hangar.FullscreenPreview
 import com.aliothmoon.maafw.ui.hangar.HangarScreen
+import com.aliothmoon.maafw.ui.hangar.PreviewTouchAction
+import com.aliothmoon.maafw.ui.hangar.rememberMovablePreview
 import com.aliothmoon.maafw.ui.navigation.Routes
 import com.aliothmoon.maafw.ui.logs.AppLogDetailScreen
 import com.aliothmoon.maafw.ui.logs.AppLogScreen
@@ -165,6 +170,17 @@ fun AppRoot(
         val scope = rememberCoroutineScope()
         val snackbarHostState = remember { SnackbarHostState() }
         var exportSheetVisible by remember { mutableStateOf(false) }
+
+        // 预览面（SurfaceView）的所有权在这一层：全屏宿主必须在 Scaffold 之外才盖得住
+        // 底部 tab 栏，而 movableContent 要求内嵌与全屏两处调用点同属一棵组合树（m0 同款）
+        val hostState: HostState = koinInject()
+        val hangarActive = pagerState.currentPage == TopDestination.Hangar.ordinal
+        var previewFullscreen by rememberSaveable { mutableStateOf(false) }
+        val previewContent = rememberMovablePreview(
+            active = hangarActive,
+            onSurfaceAvailable = { hostState.attachPreviewSurface(it) },
+            onSurfaceDestroyed = { hostState.detachPreviewSurface() },
+        )
 
         val context = LocalContext.current
         LaunchedEffect(Unit) {
@@ -280,7 +296,10 @@ fun AppRoot(
             ) { page ->
                 when (TopDestination.entries[page]) {
                     TopDestination.Hangar -> HangarScreen(
-                        active = pagerState.currentPage == TopDestination.Hangar.ordinal,
+                        active = hangarActive,
+                        // 全屏时这里让位，同一份 previewContent 搬到下面的全屏宿主
+                        previewContent = previewContent.takeUnless { previewFullscreen },
+                        onEnterFullscreen = { previewFullscreen = true },
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -352,6 +371,21 @@ fun AppRoot(
                 .navigationBarsPadding()
                 .padding(bottom = if (onSubPage) 0.dp else BottomBarHeight),
         )
+
+        // 全屏预览：挂在 Scaffold 之外，才盖得住底部 tab 栏与系统栏（m0 同款）
+        if (previewFullscreen) {
+            FullscreenPreview(
+                onExit = { previewFullscreen = false },
+                onTouch = { x, y, action ->
+                    when (action) {
+                        PreviewTouchAction.Down -> hostState.touchDown(x, y)
+                        PreviewTouchAction.Move -> hostState.touchMove(x, y)
+                        PreviewTouchAction.Up -> hostState.touchUp(x, y)
+                    }
+                },
+                content = previewContent,
+            )
+        }
         }
         }
 

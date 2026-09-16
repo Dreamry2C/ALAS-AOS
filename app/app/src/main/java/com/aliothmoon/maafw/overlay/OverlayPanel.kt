@@ -42,6 +42,8 @@ fun OverlayPanel(
     onStop: () -> Unit,
     onAlasStart: () -> Unit,
     onAlasStop: () -> Unit,
+    onToolStart: (String) -> Unit,
+    onToolStop: () -> Unit,
     onBackToApp: () -> Unit,
     onLockToggle: (Boolean) -> Unit,
     onClose: () -> Unit,
@@ -66,6 +68,8 @@ fun OverlayPanel(
                 alas = alas,
                 onAlasStart = onAlasStart,
                 onAlasStop = onAlasStop,
+                onToolStart = onToolStart,
+                onToolStop = onToolStop,
                 modifier = Modifier.weight(1f),
             )
             Row(

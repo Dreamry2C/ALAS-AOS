@@ -9,11 +9,20 @@
 GET  /status        → {"runner_alive": bool, "pid": int|null, "config": str|null,
                        "runner_wanted": bool, "runner_respawns": int,
                        "gui_alive": bool, "gui_pid": int|null,
-                       "log_file": str|null, "log_lines": int}
+                       "log_file": str|null, "log_lines": int,
+                       "tool_alive": bool, "tool_name": str|null, "tool_pid": int|null}
 POST /start?config=N → 幂等拉起 runner 子进程（已在跑则直接返回现状）；N = config/ 下的
                        实例配置名（默认 alas），runner.py argv[1] 透传；
-                       置 wanted——此后 runner 意外退出由监管循环按退避自动重拉
+                       置 wanted——此后 runner 意外退出由监管循环按退避自动重拉；
+                       工具在跑先停工具（反向互斥，见下）
 POST /stop          → 杀进程组：os.killpg(SIGTERM) → 3s → SIGKILL；复位 wanted 不再重拉
+POST /tool/start?name=T&config=N
+                    → 拉起 ALAS 工具任务（T ∈ daemon|event_story：半自动点击常驻 /
+                       活动剧情一次性自退），runner.py argv[2] 透传；幂等：同名在跑
+                       直接返回，不同工具在跑先停旧的；与挂机互斥——runner 在跑先
+                       stop_runner（复位 wanted 防重拉），工具结束后**不自动恢复
+                       runner**；N 缺省用 runner 现值配置、再缺省 alas
+POST /tool/stop     → 杀工具进程组（SIGTERM → 3s → SIGKILL），返回 was_alive/exit_code
 GET  /logs?tail=N   → ./log/ 下最新 *.txt 的尾部 N 行（默认 200，上限 2000）
 GET  /configs       → {"configs": [str]}：config/*.json 去掉 template* 的实例名列表，
                        'alas' 固定排最前；供 App 侧下拉选择运行配置
@@ -29,6 +38,9 @@ GET  /configs       → {"configs": [str]}：config/*.json 去掉 template* 的�
   MAAAL_WEBUI=0 可关 WebUI（省内存/调试）。
 - 停止语义等同 m0 的 ProcessManager.stop（其本身就是 kill()，无 graceful）：
   ALAS 无 SIGTERM handler，SIGTERM 即默认终止；3s 不死补 SIGKILL。
+- 工具进程与挂机互斥（共用同一块虚拟屏）：锁序固定 _tool_lock → _runner_lock，
+  /tool/start 与 /start 都把「停对方 + 拉自己」放进 _tool_lock 临界区完成，
+  两个 HTTP 线程不会互等；工具由 _tool_supervisor 只记录退出码，绝不重拉。
 - 防孤儿（m0 教训）：① 父退出前 atexit + SIGTERM handler 清理 runner；
   ② stdin 管道破裂自尽——monitor 线程阻塞读 stdin，父进程（proot 启动器）死亡
   导致管道 EOF 时，杀掉 runner 进程组并退出。stdin 是 tty（手工调试）时不挂监控。
@@ -85,6 +97,16 @@ _RUNNER_HEALTHY_UPTIME = 300.0
 _runner_wanted = threading.Event()
 _runner_respawns = 0       # 非预期死亡后的重拉次数，/status 汇报
 
+# 工具任务（ALAS 工具进程，runner.py argv[2] 透传）：与挂机共用同一块虚拟屏，严格互斥。
+# 专用 _tool_lock，不与 _runner_lock 混用；锁序固定 _tool_lock → _runner_lock。
+_TOOL_TASKS = ('daemon', 'event_story')  # 工具白名单，与 runner.py 侧对齐（两处同改）
+_tool = None               # subprocess.Popen | None
+_tool_lock = threading.Lock()
+_tool_started_at = None    # float | None
+_tool_name = None          # str | None：本次拉起的工具名，/status 汇报用
+_tool_config = None        # str | None：本次拉起的实例名
+_tool_exit_code = None     # int | None：最近一次工具退出码（自然死亡或被杀）
+
 
 # ---------------------------------------------------------------- runner 进程组管理
 
@@ -110,13 +132,18 @@ def _spawn_runner(config_name):
 
 def start_runner(config_name='alas'):
     """幂等：已在跑直接返回现状（不发新配置）。返回 (alive, pid, started_now)。
-    /start 即表态「要它跑」：置 wanted，监管循环接管其后的意外死亡。"""
+    /start 即表态「要它跑」：置 wanted，监管循环接管其后的意外死亡。
+    与工具互斥（反向）：工具在跑先停——「停工具 + 拉 runner」同在 _tool_lock
+    临界区完成，锁序 _tool_lock → _runner_lock 与 start_tool 一致。"""
     _runner_wanted.set()
-    with _runner_lock:
-        if _runner_alive():
-            return True, _runner.pid, False
-        proc = _spawn_runner(config_name)
-        return True, proc.pid, True
+    with _tool_lock:
+        if _tool_alive():
+            _stop_tool_locked()
+        with _runner_lock:
+            if _runner_alive():
+                return True, _runner.pid, False
+            proc = _spawn_runner(config_name)
+            return True, proc.pid, True
 
 
 def stop_runner():
@@ -188,6 +215,101 @@ def _runner_supervisor():
                       f'config={cfg} (#{_runner_respawns})', flush=True)
             except OSError as e:
                 print(f'MaaAL wrapper: runner respawn failed: {e}', file=sys.stderr, flush=True)
+
+
+# ---------------------------------------------------------------- 工具进程管理（ALAS 工具任务）
+
+def _tool_alive():
+    return _tool is not None and _tool.poll() is None
+
+
+def _spawn_tool(name, config_name):
+    """拉起一次工具任务：runner.py <config> <name>。返回 Popen。调用方须持 _tool_lock。
+    与 _spawn_runner 同款环境/cwd/日志处理（ALAS 日志走 ./log/ 文件，不走管道）。"""
+    global _tool, _tool_started_at, _tool_name, _tool_config, _tool_exit_code
+    _tool = subprocess.Popen(
+        [sys.executable, RUNNER_PATH, config_name, name],
+        cwd=BASE_DIR,
+        preexec_fn=os.setsid,  # 独立进程组，停止走 os.killpg
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    _tool_started_at = time.time()
+    _tool_name = name
+    _tool_config = config_name
+    _tool_exit_code = None
+    return _tool
+
+
+def _stop_tool_locked():
+    """SIGTERM → 3s → SIGKILL 杀工具进程组。调用方须持 _tool_lock。
+    返回 (was_alive, exit_code)，形制与 stop_runner 一致。"""
+    global _tool, _tool_name, _tool_config, _tool_exit_code
+    if not _tool_alive():
+        return False, _tool.returncode if _tool else None
+    pgid = os.getpgid(_tool.pid)
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    deadline = time.time() + _STOP_GRACE_SEC
+    while time.time() < deadline and _tool.poll() is None:
+        time.sleep(0.05)
+    if _tool.poll() is None:
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        _tool.wait(timeout=5)
+    code = _tool.returncode
+    _tool = None
+    _tool_name = None
+    _tool_config = None
+    _tool_exit_code = code
+    return True, code
+
+
+def start_tool(name, config_name=None):
+    """幂等：同名工具在跑直接返回现状。返回 (alive, pid, started_now)。
+    与挂机互斥：先 stop_runner（复位 wanted，监管循环不再重拉）再拉工具；
+    不同工具在跑先停旧的。「停对方 + 拉自己」整个在 _tool_lock 临界区完成。"""
+    with _tool_lock:
+        if _tool_alive() and _tool_name == name:
+            return True, _tool.pid, False
+        if config_name is None:
+            # 缺省沿用 runner 现值配置；须在 stop_runner 前取（它会清 _runner_config）
+            config_name = _runner_config or 'alas'
+        if _tool_alive():
+            _stop_tool_locked()  # 换工具：先停旧的
+        stop_runner()  # 无条件调：兼清 _runner_wanted，防 supervisor 退避期重拉破互斥
+        proc = _spawn_tool(name, config_name)
+        return True, proc.pid, True
+
+
+def stop_tool():
+    """SIGTERM → 3s → SIGKILL，杀工具进程组。返回 (was_alive, exit_code)。
+    工具无 wanted/重拉语义，停后也不自动恢复 runner（决策：工具结束后保持停止）。"""
+    with _tool_lock:
+        return _stop_tool_locked()
+
+
+def _tool_supervisor():
+    """工具退出记录循环：wait() 阻塞到当前工具死亡，落 exit_code。
+    **不重拉工具、不自动恢复 runner**（决策：工具结束后保持停止）；
+    被 stop_tool/start_tool 换掉的进程不覆写状态（_tool is proc 校验）。"""
+    global _tool_exit_code
+    while not _closing.is_set():
+        with _tool_lock:
+            proc = _tool
+        if proc is None:
+            if _closing.wait(0.5):
+                break
+            continue
+        proc.wait()
+        with _tool_lock:
+            if _tool is proc:  # 自然死亡：留 _tool 作墓碑，/status 依 poll() 实时判死
+                _tool_exit_code = proc.returncode
 
 
 # ---------------------------------------------------------------- WebUI（gui.py）监管
@@ -268,10 +390,12 @@ def _gui_supervisor():
 
 def _cleanup():
     """父退出前清理：atexit + SIGTERM 都汇到这里。先置 _closing 让监管循环退出，
-    再杀 runner 与 gui，防止 supervisor 在我们杀完又重拉。"""
+    再杀 runner、工具与 gui，防止 supervisor 在我们杀完又重拉。"""
     _closing.set()
     if _runner_alive():
         stop_runner()
+    if _tool_alive():
+        stop_tool()
     _stop_gui()
 
 
@@ -418,6 +542,9 @@ class _Handler(BaseHTTPRequestHandler):
                 if _gui_alive() and _gui_started_at else None,
                 'log_file': log_file,
                 'log_lines': _count_lines(log_file) if log_file else 0,
+                'tool_alive': _tool_alive(),
+                'tool_name': _tool_name if _tool_alive() else None,
+                'tool_pid': _tool.pid if _tool_alive() else None,
             })
         elif url.path == '/configs':
             self._json({'configs': _list_configs()})
@@ -449,6 +576,24 @@ class _Handler(BaseHTTPRequestHandler):
         elif url.path == '/stop':
             was_alive, code = stop_runner()
             self._json({'runner_alive': False, 'was_alive': was_alive, 'exit_code': code})
+        elif url.path == '/tool/start':
+            qs = parse_qs(url.query)
+            tool_name = qs.get('name', [''])[0]
+            if tool_name not in _TOOL_TASKS:
+                self._json({'error': f'invalid tool name: {tool_name!r} '
+                                     f'(expect one of {list(_TOOL_TASKS)})'}, code=400)
+                return
+            config_name = qs.get('config', [None])[0] or None
+            if config_name is not None and not _CONFIG_RE.match(config_name):
+                self._json({'error': 'invalid config name'}, code=400)
+                return
+            alive, pid, started_now = start_tool(tool_name, config_name)
+            self._json({'ok': True, 'tool_alive': alive, 'tool_name': tool_name,
+                        'pid': pid, 'started_now': started_now})
+        elif url.path == '/tool/stop':
+            was_alive, code = stop_tool()
+            self._json({'ok': True, 'tool_alive': False,
+                        'was_alive': was_alive, 'exit_code': code})
         else:
             self._json({'error': 'not found'}, code=404)
 
@@ -460,6 +605,7 @@ def main():
     signal.signal(signal.SIGINT, _on_signal)
     _arm_stdin_watchdog()
     threading.Thread(target=_runner_supervisor, daemon=True).start()
+    threading.Thread(target=_tool_supervisor, daemon=True).start()
     if os.environ.get('MAAAL_WEBUI', '1') != '0':
         threading.Thread(target=_gui_supervisor, daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), _Handler)

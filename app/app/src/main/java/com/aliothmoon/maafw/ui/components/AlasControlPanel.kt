@@ -2,6 +2,7 @@ package com.aliothmoon.maafw.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +13,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -37,6 +39,8 @@ fun AlasControlPanel(
     alas: AlasRunState,
     onAlasStart: () -> Unit,
     onAlasStop: () -> Unit,
+    onToolStart: (String) -> Unit,
+    onToolStop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -103,6 +107,11 @@ fun AlasControlPanel(
                 )
             )
         }
+        AlasToolSection(
+            alas = alas,
+            onToolStart = onToolStart,
+            onToolStop = onToolStop,
+        )
         Text(
             text = stringResource(R.string.overlay_alas_hint),
             style = MaterialTheme.typography.bodySmall,
@@ -157,4 +166,74 @@ private fun AlasStatusRow(labelRes: Int, value: String) {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/**
+ * 工具区：半自动点击 / 活动剧情
+ *
+ * 与调度器的互斥（启工具自动停 runner、启 runner 自动停工具）由 wrapper 集中执行，
+ * 可用性只沿用面板既有的 wrapper 可达/忙碌判断，不拿 runnerAlive/toolAlive 互相禁用
+ */
+@Composable
+private fun AlasToolSection(
+    alas: AlasRunState,
+    onToolStart: (String) -> Unit,
+    onToolStop: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs)) {
+        Text(
+            text = stringResource(R.string.hangar_tool_label),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        if (alas.toolAlive) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+            ) {
+                Text(
+                    text = stringResource(R.string.hangar_tool_running, toolDisplayName(alas.toolName)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                MaaButton(
+                    onClick = onToolStop,
+                    enabled = alas.reachable && !alas.busy,
+                ) {
+                    Text(stringResource(R.string.hangar_tool_stop))
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+            ) {
+                MaaOutlinedButton(
+                    onClick = { onToolStart(AlasRunState.TOOL_SEMI_AUTO) },
+                    enabled = alas.reachable && !alas.busy,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.hangar_tool_semi_auto))
+                }
+                MaaOutlinedButton(
+                    onClick = { onToolStart(AlasRunState.TOOL_EVENT_STORY) },
+                    enabled = alas.reachable && !alas.busy,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.hangar_tool_event_story))
+                }
+            }
+        }
+    }
+}
+
+/** /status 回报的工具名 → 展示名；未知名原样显示，null 兜底为「工具」 */
+@Composable
+private fun toolDisplayName(name: String?): String = when (name) {
+    AlasRunState.TOOL_SEMI_AUTO -> stringResource(R.string.hangar_tool_semi_auto)
+    AlasRunState.TOOL_EVENT_STORY -> stringResource(R.string.hangar_tool_event_story)
+    null -> stringResource(R.string.hangar_tool_label)
+    else -> name
 }
