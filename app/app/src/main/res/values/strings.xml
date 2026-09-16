@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">MaaFwApp</string>
+    <string name="app_name">MaaAzurLane</string>
 
     <!-- 通用 -->
     <string name="common_close">关闭</string>
@@ -449,7 +449,7 @@
     <string name="log_export_running">正在打包…</string>
     <string name="log_export_failed">导出失败：没有可导出的日志</string>
     <string name="log_export_saved">已保存为 %1$s</string>
-    <string name="log_export_subject">MaaFwApp 日志</string>
+    <string name="log_export_subject">MaaAzurLane 日志</string>
 
     <!-- 设置页「日志」分组入口 -->
     <string name="settings_section_log">日志</string>
@@ -551,7 +551,7 @@
     <string name="notification_include_log_details">推送内容附带运行日志</string>
     <string name="notification_section_test">测试推送</string>
     <string name="notification_test_title">测试通知</string>
-    <string name="notification_test_message">这是一条来自 MaaFwApp 的测试通知</string>
+    <string name="notification_test_message">这是一条来自 MaaAzurLane 的测试通知</string>
 
     <!-- 推送渠道名 -->
     <string name="notification_provider_server_chan">Server 酱</string>

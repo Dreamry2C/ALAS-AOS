@@ -4,6 +4,12 @@
 
 ## 未发版
 
+### 2026-09-17 · 交付 ✅：应用更名 MaaAzurLane + m0 大凤 logo 入主 launcher 图标
+
+- **改名**：`values/strings.xml` 与 `values-en/strings.xml` 的 `app_name`（MaaFwApp → **MaaAzurLane**），`log_export_subject` / `notification_test_message` 的产品名引用同步统一。aapt dump badging 实证 `application-label: 'MaaAzurLane'`。**applicationId 未动**（仍 com.aliothmoon.maafw；appId 改名是 roadmap 长期债，Release 前零成本窗口另议——届时 run-as 路径/账册/脚本里的包名引用要全量换）。
+- **图标**：用户指定旧文件夹图标 = `m0-archive/logo.png`（512² 大凤 Q 版蓝底，m0 项目 logo）。PIL 生成脚本（`.tmp/ev/make_icons.py`）产出全套入库图标：5 密度 × {`ic_launcher` 满幅方图、`ic_launcher_round` 圆形 alpha、`ic_launcher_foreground` = #16243c 画布 + logo 72% 居中（角色全进 adaptive 安全区，防裁头饰）}；`ic_launcher_background` 色 #beaaa0 → **#16243c**（取样自 logo 渐变底四角均值，splash 背景同源）。
+- **验证**：BUILD SUCCESSFUL；aapt `application: label='MaaAzurLane' icon='res/mipmap-anydpi-v26/ic_launcher.xml'`（adaptive 链引用正确）；webp 产物目视抽查（角色居中、圆版裁切干净）；装机 Success。桌面视觉确认留用户目视（两轮截图尝试均撞手机锁屏，不越纪律）。
+
 ### 2026-09-17 · 修复 ✅：活动列表冻结——args.json 整文件补丁把 WebUI 冻在烘焙日（幽影迷城不可见）
 
 - **用户现象**：桌面版 ALAS 已是「幽影迷城」（event_20260908_cn），手机端 WebUI 活动下拉仍停在「沉溺于星光之城」（event_20260813_cn）。
