@@ -214,6 +214,12 @@
 - **根本原因**：与 base.py 案同源——`patches/module/config/argument/{args.json,argument.yaml}` 是整文件覆盖补丁，每次启动 AlasOverlay 重放把 args.json 冻回补丁年代。args.json 是 WebUI 活动选项的唯一来源（`campaign/Readme.md` → config_updater.py 生成链 → args.json），上游 git 跟踪它、热更新本可带新，补丁重放又打回。全量 diff（补丁版 vs 上游 92c07aa 版）：16 项差异里 MaaAL 真定制只有 2 行（ScreenshotMethod/ControlMethod 各追加 `maaal` 选项），其余全是冻结漂移。
 - **解决方案**：**生成产物不补丁化，现场再生**——① 删双源 args.json/argument.yaml 补丁（共 4 文件）；② 新增 `seeds/regen_args.py`：跑 ALAS 完整生成链（活动列表随 `campaign/Readme.md` 走），再后处理补 `maaal` 选项与 zh-CN 显示名（全幂等）；③ ProotHost 启动链热更新后无条件跑（失败降级警告不阻塞）。**坑中坑**：生成器必须用 `python -m module.config.config_updater` 模块方式跑——直传脚本路径时 `sys.path[0]=module/config/`，`from deploy.utils import` 直接 ModuleNotFoundError；且 ProotHost 对 runGuest 失败只 Timber.w（logcat 被 HONOR 噪音分钟级冲掉），首装静默失败一轮，靠「args.json mtime 停在装机前 + 内容与补丁版逐字节等大」才现形。验证锚点：args.json mtime 刷新 + `Event.Campaign.Event.option` 含 `event_20260908_cn` + `maaal` 选项仍在。
 
+## [2026-09-17] WebUI「闲置」状态环原地转圈被误读为卡住——ALAS fill 圆环忘了停 Bootstrap 动画
+
+- **现象**：手机端 WebUI 任务状态「Alas ◎ 闲置」的圆环不停旋转，像一直在加载；桌面 gooey 客户端同状态是静止圆。初判疑似 WebView 渲染适配问题。
+- **根本原因**：与 WebView 无关。ALAS WebUI `set_status`（`module/webui/app.py:215-221`）四态全用 `put_loading_text`（widgets.py:517 = `put_loading` + 文字行），闲置态 `color="secondary", fill=True`。`alas.css` 的 `*[style*="--loading-border-fill--"]` 把 fill 态定制成四边同色 border 的**完整圆环**（1.5rem / .2em solid currentColor），但只改了几何，**没覆盖 Bootstrap `.spinner-border` 自带的 `.75s linear infinite` 旋转动画**——对称圆环原地空转。Running 态用转圈合理，闲置态语义就是「没动」，动画纯属误导。
+- **解决方案**：`patches/assets/gui/css/alas.css` 的 fill 规则补 `animation: none;`（一行，打在 ALAS 自己的 fill 专用选择器上，Running/Warning 动态态不受影响）。补丁基座 = 设备现役上游版（diff 只多 2 行）。排查锚点：用户说「桌面正常」时先想**桌面看的可能是另一个前端**（gooey ≠ WebUI），别直奔 WebView 适配。
+
 ## [2026-09-17] adb exec-out 不递 stdin EOF——设备写文件用 base64 分块法
 
 - **现象**：`adb exec-out sh -c "run-as app sh -c 'cat > file'" < local` 永久悬挂（本地 stdin 文件读完，EOF 不过 adb 通道），任务挂 10 分钟零输出。

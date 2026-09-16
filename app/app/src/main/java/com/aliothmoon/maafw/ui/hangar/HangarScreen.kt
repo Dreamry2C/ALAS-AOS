@@ -277,6 +277,7 @@ private fun PreviewSurface(
 
 /**
  * 运行配置选择：列出 config/ 下的实例名（wrapper /configs）。
+ * 一行形制：左标签，右下拉按钮直接显示当前配置名（点击展开切换）。
  * 调度器在跑时锁选择——生效配置以 /status 回报的 runningConfig 为准，选择下次启动生效
  */
 @Composable
@@ -285,35 +286,28 @@ private fun ConfigCard(
     onSelect: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    MaaCard(title = stringResource(R.string.hangar_config_label)) {
+    MaaCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
-                Text(
-                    text = if (alas.runnerAlive) {
-                        alas.runningConfig ?: alas.selectedConfig
-                    } else {
-                        alas.selectedConfig
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                if (alas.runnerAlive) {
-                    Text(
-                        text = stringResource(R.string.hangar_config_running_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            Text(
+                text = stringResource(R.string.hangar_config_label),
+                style = MaterialTheme.typography.titleMedium,
+            )
             Box {
                 MaaOutlinedButton(
                     onClick = { expanded = true },
                     enabled = !alas.runnerAlive && alas.configs.isNotEmpty(),
                 ) {
-                    Text(stringResource(R.string.hangar_config_switch))
+                    Text(
+                        text = if (alas.runnerAlive) {
+                            alas.runningConfig ?: alas.selectedConfig
+                        } else {
+                            alas.selectedConfig
+                        },
+                    )
                     Icon(
                         imageVector = Icons.Outlined.ArrowDropDown,
                         contentDescription = null,

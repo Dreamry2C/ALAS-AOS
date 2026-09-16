@@ -4,6 +4,13 @@
 
 ## 未发版
 
+### 2026-09-17 · 修复 ✅：WebUI「闲置」状态环不停转圈 + 运行配置卡压缩为一行
+
+- **问题 1（闲置转圈）**：用户对比桌面 gooey（静态圆）质疑手机 WebView 适配。实查非适配 bug——ALAS WebUI 的 `set_status` 四态全用 `put_loading_text`（`module/webui/app.py:215-221`），闲置态 `fill=True` 命中 `alas.css` 的 `*[style*="--loading-border-fill--"]` 定制（四边同色 border = 完整圆环），但 **Bootstrap `.spinner-border` 的旋转动画没被覆盖**——完整圆环原地旋转，视觉上就是「转圈」，被误读为卡住/加载中。
+- **修复 1**：`patches/assets/gui/css/alas.css`（双源）fill 规则补 `animation: none;`——一行打在 ALAS 自己的 fill 专用选择器上，Running（success 绿）/Warning（grow 脉冲）等动态态不受影响。已 base64 分块法直写设备活文件（diff 校验只多 2 行），刷新 WebUI 即静态圆。
+- **问题 2（配置卡两行→一行）**：`HangarScreen.kt` 的 `ConfigCard` 重构——去掉 MaaCard 标题行与配置名独立 Column/running hint 小字，改为单行 Row：左「运行配置」标签，右下拉按钮**直接显示当前配置名**（runnerAlive 时显 runningConfig），点击展开切换；锁定逻辑（runnerAlive 禁切）不变。`hangar_config_switch`/`hangar_config_running_hint` 资源不再被引用（保留无妨）。
+- **验证**：BUILD SUCCESSFUL + 装机 Success；锁屏通知栏实证「MaaAzurLane」新名与新图标系统级生效、前台守护在岗（未建虚拟屏 = 锁屏门控设计行为）。UI 目视两项（静态圆、一行配置栏）待用户亮屏确认。
+
 ### 2026-09-17 · 交付 ✅：应用更名 MaaAzurLane + m0 大凤 logo 入主 launcher 图标
 
 - **改名**：`values/strings.xml` 与 `values-en/strings.xml` 的 `app_name`（MaaFwApp → **MaaAzurLane**），`log_export_subject` / `notification_test_message` 的产品名引用同步统一。aapt dump badging 实证 `application-label: 'MaaAzurLane'`。**applicationId 未动**（仍 com.aliothmoon.maafw；appId 改名是 roadmap 长期债，Release 前零成本窗口另议——届时 run-as 路径/账册/脚本里的包名引用要全量换）。
