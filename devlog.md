@@ -6,10 +6,11 @@
 
 ### 2026-09-17 · 修复 ✅：WebUI「闲置」状态环不停转圈 + 运行配置卡压缩为一行
 
-- **问题 1（闲置转圈）**：用户对比桌面 gooey（静态圆）质疑手机 WebView 适配。实查非适配 bug——ALAS WebUI 的 `set_status` 四态全用 `put_loading_text`（`module/webui/app.py:215-221`），闲置态 `fill=True` 命中 `alas.css` 的 `*[style*="--loading-border-fill--"]` 定制（四边同色 border = 完整圆环），但 **Bootstrap `.spinner-border` 的旋转动画没被覆盖**——完整圆环原地旋转，视觉上就是「转圈」，被误读为卡住/加载中。
-- **修复 1**：`patches/assets/gui/css/alas.css`（双源）fill 规则补 `animation: none;`——一行打在 ALAS 自己的 fill 专用选择器上，Running（success 绿）/Warning（grow 脉冲）等动态态不受影响。已 base64 分块法直写设备活文件（diff 校验只多 2 行），刷新 WebUI 即静态圆。
+- **问题 1（闲置转圈）**：真实根因（CDP 实证，首版推断翻车）——pywebio 的 `.style()` 把 `--loading-border-fill--` 标记写到 put_html 的**外包装 div**（spinner 父级）上，ALAS 的 fill 定制（`alas.css` 的 `*[style*="--loading-border-fill--"]`）全部落在 wrapper：画出无圆角静态方框（= 用户截图里「状态行神秘方框」本体），而真正的 `.spinner-border.text-secondary` 保持 Bootstrap 默认——0.75s 旋转 + border-right 透明缺口。首版修复（4e2178e 往 alas.css fill 规则补 `animation:none`）打在 wrapper 上对 spinner **完全无效**，真机两帧对比（缺口弧帧间移动）现形。
+- **修复 1（终版，遵用户约束：不动 ALAS 代码防热更新冲突）**：WebView 层注入（`AlasScreen.kt` 的 `IDLE_SPINNER_FIX_JS`，onPageFinished 幂等注入 `<style>`）——`.spinner-border.text-secondary{animation:none !important;border-right-color:currentColor !important}` 停转+补缺成完整圆（仅 secondary 命中：闲置/UpToDate/RemoteNotRunning 三个 fill 态，Running/Warning 颜色不同照常旋转）；`div[style*="--loading-border-fill--"]{border:none !important;width:auto !important;height:auto !important}` 剥掉 wrapper 方框 artifact。设备 alas.css 已还原上游 pristine（exec-out 拉回 diff=空），仓内双源补丁 git rm。
+- **验证 1**：CDP（`webview_devtools_remote_<pid>` + Runtime.evaluate）计算样式实证——spinner `animName:none`、`borderRight==borderLeft`、wrapper `borderTopStyle:none`；两帧截图像素级零差异；目视「Alas ◯ 闲置」完整静态灰圆、方框消失。
 - **问题 2（配置卡两行→一行）**：`HangarScreen.kt` 的 `ConfigCard` 重构——去掉 MaaCard 标题行与配置名独立 Column/running hint 小字，改为单行 Row：左「运行配置」标签，右下拉按钮**直接显示当前配置名**（runnerAlive 时显 runningConfig），点击展开切换；锁定逻辑（runnerAlive 禁切）不变。`hangar_config_switch`/`hangar_config_running_hint` 资源不再被引用（保留无妨）。
-- **验证**：BUILD SUCCESSFUL + 装机 Success；锁屏通知栏实证「MaaAzurLane」新名与新图标系统级生效、前台守护在岗（未建虚拟屏 = 锁屏门控设计行为）。UI 目视两项（静态圆、一行配置栏）待用户亮屏确认。
+- **验证**：BUILD SUCCESSFUL + 装机 Success；锁屏通知栏实证「MaaAzurLane」新名与新图标系统级生效、前台守护在岗（未建虚拟屏 = 锁屏门控设计行为）。配置卡一行化截图验证通过；闲置环修复经 CDP + 两帧对比实证（见上，首版修复曾翻车重做）。
 
 ### 2026-09-17 · 交付 ✅：应用更名 MaaAzurLane + m0 大凤 logo 入主 launcher 图标
 
