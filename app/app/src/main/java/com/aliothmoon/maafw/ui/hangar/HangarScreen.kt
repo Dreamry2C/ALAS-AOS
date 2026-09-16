@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.OndemandVideo
@@ -22,13 +24,16 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,8 +42,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.constant.DefaultDisplayConfig
@@ -227,23 +235,40 @@ private fun ConfigToolRow(
     onToolStop: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Max),
-        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
-    ) {
-        MaaCard(modifier = Modifier.weight(1f)) {
+    // 弹层宽度对齐锚按钮：DropdownMenu 默认按内容包宽，量出按钮宽显式喂给它
+    var menuWidthPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    // 模块整体压高 ~30%：关掉 M3 的 48dp 最小交互尺寸强制（本行按钮/下拉显式给矮高）
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Max),
+            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
+        ) {
+        MaaCard(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            contentPadding = PaddingValues(
+                horizontal = MaaDesignTokens.Card.innerPadding,
+                vertical = MaaDesignTokens.Spacing.xs,
+            ),
+        ) {
             Text(
                 text = stringResource(R.string.hangar_config_label),
                 style = MaterialTheme.typography.titleMedium,
             )
-            Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
+            Spacer(Modifier.height(MaaDesignTokens.Spacing.xxs))
             Box {
                 MaaOutlinedButton(
                     onClick = { expanded = true },
                     enabled = !alas.runnerAlive && alas.configs.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(32.dp)
+                        .onGloballyPositioned { menuWidthPx = it.size.width },
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -267,6 +292,7 @@ private fun ConfigToolRow(
                 DropdownMenu(
                     expanded = expanded,
                     onDismissRequest = { expanded = false },
+                    modifier = Modifier.width(with(density) { menuWidthPx.toDp() }),
                 ) {
                     alas.configs.forEach { name ->
                         DropdownMenuItem(
@@ -284,7 +310,7 @@ private fun ConfigToolRow(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs),
         ) {
             ToolSlotButton(
                 labelRes = R.string.hangar_tool_semi_auto,
@@ -305,6 +331,7 @@ private fun ConfigToolRow(
         }
     }
 }
+}
 
 /** 工具槽位按钮：与开始挂机同款实心形制；本槽工具在跑时变「停止」（槽位即归属） */
 @Composable
@@ -320,6 +347,7 @@ private fun ToolSlotButton(
         onClick = if (running) onStop else onStart,
         enabled = enabled,
         modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
     ) {
         Text(stringResource(if (running) R.string.hangar_tool_stop else labelRes))
     }

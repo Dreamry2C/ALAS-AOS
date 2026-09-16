@@ -4,6 +4,15 @@
 
 ## 未发版
 
+### 2026-09-17 · UI v3 ✅：双模块行压高对齐 + 配置下拉弹层宽度适配（用户三轮反馈收口）
+
+- **反馈**：①「模块上下高度大，缩 30%」；②「左边再缩、标签与下拉间距更小、右两按钮与左卡上下对齐」；③「下拉框的下拉（弹层）也做好大小适配」。
+- **根因（两层）**：a) 右列按钮被 M3 48dp 最小交互尺寸强制（`minimumInteractiveComponentSize` 吃掉显式 `height()`）——`CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp)` 关掉（**M3 1.4 该 local 是非空 Dp，`provides null` 编译不过**）；b) 0.dp 只撤外层强制，M3 Button 内层 `defaultMinSize(minHeight=40.dp)` 仍在——右列固有高 2×40+4=84dp 仍是行高驱动方（实测 250px≈83dp，按钮各 39.7dp）。
+- **对齐方案**：左卡 `fillMaxHeight()` 拉伸至行高——实测左/右顶 1018=1018、底 1269≈1268（像素级对齐）；左卡内容自然高 ~75dp（MaaCard 内建 `spacedBy(sm=8)` 叠加 Spacer(xxs=2)，标签-下拉实距 10dp），卡内底部留白 ~8dp 目视不可见。
+- **弹层适配**：`DropdownMenu` 默认按内容包宽且偏移——锚按钮挂 `onGloballyPositioned` 量宽，`Modifier.width(menuWidthPx.toDp())` 喂给弹层。实测弹层与锚按钮同宽 475px、左右缘重合（x≈95/570）。
+- **构建插曲**：外包 CompositionLocalProvider 时 `ConfigToolRow` 少一个闭括号（`ToolSlotButton` 变局部函数报 private 不可用 + Unresolved reference）+ `provides null` 类型错误，一次修齐。
+- **验证**：BUILD SUCCESSFUL + 装机；截屏量测对齐；adb 点开下拉实证弹层宽度。
+
 ### 2026-09-17 · UI ✅：挂机页运行配置/工具合并为左右双模块行（用户点单）
 
 - **布局**：原「运行配置」单行卡 + 面板底部「工具」区（含标签）→ 合并为一行双模块：左卡上「运行配置」标签、下全宽配置下拉（`MaaOutlinedButton` + SpaceBetween 文字/箭头）；右列「半自动点击」「活动剧情」两按钮上下排，与开始挂机同款实心 `MaaButton`。行高 `IntrinsicSize.Max` 取左右最大固有高，右列两按钮 weight 均分填满——大小随模块自适应。「工具」字段移除。
