@@ -34,4 +34,6 @@ adb 遥控点击必须当帧截屏取坐标（布局漂移首点落空）；全�
 
 ## 后续修订（同日）
 
-- **UI 双模块行**（用户点单）：运行配置卡与工具区合并为一行——左卡（上「运行配置」标签、下全宽下拉）| 右列（半自动点击/活动剧情，开始挂机同款实心按钮，IntrinsicSize 行高均分自适应）；「工具」标签移除；工具在跑时对应槽位变「停止」。`AlasControlPanel` 加 `showTools` 开关：悬浮窗保留原工具区，挂机页用新行。已装机截屏验证双形态。
+- **UI 双模块行 v2**（用户点单，commit `51d4c3d` 已 push）：运行配置卡与工具区合并为一行——左卡（上「运行配置」标签、下全宽下拉）| 右列（半自动点击/活动剧情，开始挂机同款实心按钮，IntrinsicSize 行高均分自适应）；「工具」标签移除；工具在跑时对应槽位变「停止」。`AlasControlPanel` 加 `showTools` 开关：悬浮窗保留原工具区，挂机页用新行。已装机截屏验证双形态。
+- **UI v3 压高对齐 + 弹层适配 ✅（同日第三轮收口，已装机验证）**：用户反馈「模块高度缩 30%」→「左边再缩、间距更小、右按钮与左卡上下对齐」→「下拉弹层也做大小适配」。根因两层：M3 48dp 最小交互尺寸强制（用 `LocalMinimumInteractiveComponentSize provides 0.dp` 关掉——M3 1.4 是非空 Dp，`provides null` 编译不过）+ M3 Button 内层 `defaultMinSize(40dp)` 不受该 local 管（右列 84dp 仍驱动行高）。终案：左卡 `fillMaxHeight()` 拉伸对齐（实测左右顶 1018=1018、底 1269≈1268）；弹层宽度用 `onGloballyPositioned` 量锚按钮宽喂 `DropdownMenu`（实测同宽 475px，缘对齐 x≈95/570）。行高实测 250px≈83dp（v2 时 104dp，-20%）。详见 devlog 2026-09-17 UI v3 条。
+- **adb 插曲**：WiFi adb 掉线一次（device offline），`adb disconnect` + `adb connect 192.168.50.190:5555` 恢复。

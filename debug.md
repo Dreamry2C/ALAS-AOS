@@ -4,6 +4,12 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-17] M3 按钮最小高度是两层：关 Local 只撤外层，内层 `defaultMinSize(40dp)` 照常在
+
+- **现象**：双模块行要把两按钮压到 ~31dp/个。外包 `CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides X)` 后：①`provides null` 直接编译失败（M3 1.4 该 local 是非空 `Dp`）；②改 `provides 0.dp` 后按钮仍实测 39.7dp 高，行高仍被右列 84dp 驱动，左卡短一截底边对不齐。
+- **根本原因**：M3 `Button`/`OutlinedButton` 的最小高度分两层——外层 `minimumInteractiveComponentSize()` 读 `LocalMinimumInteractiveComponentSize`（默认 48dp，0.dp 即关闭）；**内层内容 Row 的 `defaultMinSize(minHeight = 40.dp)` 不受任何 CompositionLocal 管**，撤掉外层后它成为新的固有高下限。且 `minimumInteractiveComponentSize` 会吃掉调用方显式给的 `height()`（取 max），这就是早先 `height(32.dp)` 无效的原因。
+- **解决方案**：外层关 Local 用 `provides 0.dp`（不是 null）；内层 40dp 若必须突破，只能绕开 M3 Button 自制轻量按钮（Surface+clickable）。本轮需求靠「左卡 `fillMaxHeight()` 拉伸至行高」对齐左右上下缘即可，不必突破 40dp。另：弹层宽度适配——`DropdownMenu` 默认按内容包宽，锚按钮 `onGloballyPositioned` 量宽后 `Modifier.width(px.toDp())` 显式喂给弹层（勿赌 `ExposedDropdownMenuBox.menuAnchor` 的点击行为版本差异）。
+
 ## [2026-09-16] 待机屏灭的连锁反应：无线调试掉线 + VD 无帧 + nativeLibraryDir 的正确拿法
 
 - **现象**：手机待机（物理屏 OFF）期间——①adb 5555 拒连（无线调试休眠掉线），唤醒后 `adb connect` 即回；②桥 screencap 返回 `no frame available`，`dumpsys display` 里 VD 不在列——但 app/proot/WebUI/桥全部健在；③`run-as` 里 glob `/data/app/~~*/<pkg>-*/lib/arm64` 展开不了（目录不可遍历），proot 一次性执行拿不到 nativeLibraryDir。
