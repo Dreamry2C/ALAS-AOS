@@ -28,7 +28,7 @@
 - ✅ CDP 计算样式：spinner `animName:none`、`borderRight==borderLeft`、wrapper `borderTopStyle:none`。
 - ✅ 两帧截图像素级零差异；目视「Alas ◯ 闲置」完整静态灰圆、方框消失（与桌面 gooey 观感一致）。
 - ✅ 设备 alas.css = 上游 pristine，ALAS 树零改动，热更新无忧。
-- ⏳ 留用户目视终验（亮屏看 ALAS 页状态行）。
+- ✅ 用户目视终验通过（状态行静态圆，不再转圈）。
 
 ## 设备状态
 
