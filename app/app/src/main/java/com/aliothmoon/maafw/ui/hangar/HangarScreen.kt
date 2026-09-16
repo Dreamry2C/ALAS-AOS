@@ -56,6 +56,7 @@ import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.ui.components.AlasControlPanel
 import com.aliothmoon.maafw.ui.components.MaaButton
+import com.aliothmoon.maafw.ui.components.ToolSlotButton
 import com.aliothmoon.maafw.ui.components.MaaCard
 import com.aliothmoon.maafw.ui.components.MaaOutlinedButton
 import com.aliothmoon.maafw.ui.components.maaClickable
@@ -334,24 +335,4 @@ private fun ConfigToolRow(
         }
     }
 }
-}
-
-/** 工具槽位按钮：与开始挂机同款实心形制；本槽工具在跑时变「停止」（槽位即归属） */
-@Composable
-private fun ToolSlotButton(
-    labelRes: Int,
-    running: Boolean,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    enabled: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    MaaButton(
-        onClick = if (running) onStop else onStart,
-        enabled = enabled,
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-    ) {
-        Text(stringResource(if (running) R.string.hangar_tool_stop else labelRes))
-    }
 }
