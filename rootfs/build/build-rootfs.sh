@@ -65,6 +65,7 @@ require_file "$ASSETS/build/spike-f-ocr-gate.py"
 require_file "$ASSETS/patches/assets_fix.py"
 require_file "$ASSETS/seeds/deploy.yaml"
 require_file "$ASSETS/seeds/maaal_update.sh"
+require_file "$ASSETS/seeds/regen_args.py"
 require_file "$ASSETS/shims/jellyfish.py"
 require_file "$ASSETS/models/ocr/det.onnx"
 require_file "$ASSETS/models/ocr/rec.onnx"
@@ -198,6 +199,10 @@ install -D -m 0644 "$ASSETS/seeds/seed_config.py" "$ROOTFS_DIR/opt/alas/seeds/se
 # ALAS 热更新脚本：设备端唯一更新通道（内置更新器已被 AutoUpdate:false 锁死），
 # 阶段三 App 侧 AlasUpdater 经 proot 拉起；协议见脚本头注释
 install -D -m 0755 "$ASSETS/seeds/maaal_update.sh" "$ROOTFS_DIR/opt/alas/seeds/maaal_update.sh"
+
+# args 现场再生器：args.json/argument.yaml 不补丁化，每次启动重跑 ALAS 生成链
+# 并补回 maaal 桥选项（活动列表永不冻结）；App 侧 ProotHost 经 proot 拉起
+install -D -m 0755 "$ASSETS/seeds/regen_args.py" "$ROOTFS_DIR/opt/alas/seeds/regen_args.py"
 
 # PP-OCR 模型三件套 → /opt/alas/models/ocr/
 # 注意：这是 v3 自定义路径（非 ALAS 上游约定）——in-proc 版 module/ocr/rpc.py 默认按

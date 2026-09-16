@@ -208,6 +208,12 @@
 - **根本原因**：补丁施加机制是 `cp -rf patches/module/. → /opt/alas/module/`（build-rootfs.sh:175）**整文件覆盖**。`patches/module/base/base.py` 是 m0 时代全量拷贝（自有改动仅 early_ocr_import 的 MaaAL 预热块 9 行），热更新把 ALAS 推到上游 master 后，base.py 被补丁冻回旧版（`color_threshold`），而同树 login.py 已是新版（`threshold`），API 撞车。排查锚点：设备 login.py 与上游 master 逐字节 diff 为空 → 设备跟踪 master → 补丁按 master 重打即收敛。
 - **解决方案**：全量补丁**重打** = 上游 master 原样 + MaaAL 块（脚本锚点替换，diff 应只剩自有改动）；直写设备活文件 + diff 校验。长期教训：① 补丁文件里的自有改动必须压缩到最小并 BEGIN/END 标记（本次正是靠标记确认只有 9 行）；② ALAS 热更新后任意 API 型 TypeError，先怀疑补丁漂移，diff 设备文件与上游 master 即现形；③ 理想终态是差分补丁（git apply）替代整文件覆盖。
 
+## [2026-09-17] 补丁冻结第二案：args.json 整文件补丁把活动列表冻在补丁年代（幽影迷城不可见）
+
+- **现象**：桌面版 ALAS 已是「幽影迷城」（event_20260908_cn），手机端 WebUI 活动下拉仍停在「沉溺于星光之城」（event_20260813_cn）；但设备 ALAS commit 与上游 master HEAD 逐字一致（92c07aa），`campaign/event_20260908_cn/` 地图资源、i18n 译名全部到位——只有活动**选项列表**旧。
+- **根本原因**：与 base.py 案同源——`patches/module/config/argument/{args.json,argument.yaml}` 是整文件覆盖补丁，每次启动 AlasOverlay 重放把 args.json 冻回补丁年代。args.json 是 WebUI 活动选项的唯一来源（`campaign/Readme.md` → config_updater.py 生成链 → args.json），上游 git 跟踪它、热更新本可带新，补丁重放又打回。全量 diff（补丁版 vs 上游 92c07aa 版）：16 项差异里 MaaAL 真定制只有 2 行（ScreenshotMethod/ControlMethod 各追加 `maaal` 选项），其余全是冻结漂移。
+- **解决方案**：**生成产物不补丁化，现场再生**——① 删双源 args.json/argument.yaml 补丁（共 4 文件）；② 新增 `seeds/regen_args.py`：跑 ALAS 完整生成链（活动列表随 `campaign/Readme.md` 走），再后处理补 `maaal` 选项与 zh-CN 显示名（全幂等）；③ ProotHost 启动链热更新后无条件跑（失败降级警告不阻塞）。**坑中坑**：生成器必须用 `python -m module.config.config_updater` 模块方式跑——直传脚本路径时 `sys.path[0]=module/config/`，`from deploy.utils import` 直接 ModuleNotFoundError；且 ProotHost 对 runGuest 失败只 Timber.w（logcat 被 HONOR 噪音分钟级冲掉），首装静默失败一轮，靠「args.json mtime 停在装机前 + 内容与补丁版逐字节等大」才现形。验证锚点：args.json mtime 刷新 + `Event.Campaign.Event.option` 含 `event_20260908_cn` + `maaal` 选项仍在。
+
 ## [2026-09-17] adb exec-out 不递 stdin EOF——设备写文件用 base64 分块法
 
 - **现象**：`adb exec-out sh -c "run-as app sh -c 'cat > file'" < local` 永久悬挂（本地 stdin 文件读完，EOF 不过 adb 通道），任务挂 10 分钟零输出。

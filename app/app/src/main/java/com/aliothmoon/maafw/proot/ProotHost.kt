@@ -131,6 +131,14 @@ class ProotHost(
             runAssetsFix()
         }
 
+        // args.json/argument.yaml 已不再是补丁（整文件覆盖曾把活动列表冻回烘焙日）：
+        // 每次启动现场再生 args（活动列表随 campaign/Readme.md 走）并补回 maaal 桥选项。
+        // 失败降级为警告——args.json 仍是上游 git 版，可启动，但 maaal 选项可能缺失。
+        setState(ProotPhase.PREPARING, "再生 args 配置")
+        runGuest(listOf("/usr/bin/python3", "seeds/regen_args.py"), REGEN_ARGS_TIMEOUT_MS)?.let { r ->
+            if (r.exit != 0) Timber.w("regen_args exit=%s out=%s", r.exit, r.output.takeLast(500))
+        }
+
         setState(ProotPhase.STARTING, "拉起 proot 会话")
         val proc = runCatching { spawnSession() }.getOrElse {
             fail("exec proot: ${it.message}")
@@ -389,6 +397,7 @@ class ProotHost(
         private const val GUEST_ALAS_ROOT = "/opt/alas"
         private const val SERVICES_UP_MS = 90_000L
         private const val SHORT_EXEC_MS = 60_000L
+        private const val REGEN_ARGS_TIMEOUT_MS = 360_000L
         private const val STOP_GRACE_MS = 8_000L
         private const val RESTART_BACKOFF_INIT_MS = 3_000L
         private const val RESTART_BACKOFF_MAX_MS = 60_000L
