@@ -22,7 +22,7 @@ D1 触摸转发常驻（只在全屏态生效）；D2 启动工具=自动停挂�
 - HTTP：/status 三字段 ✓；daemon 启停（截图循环实跑、exit -15）✓；幂等 started_now=false ✓；非法名 400 ✓。
 - UI 点「活动剧情」全链：tool_alive=event_story → app_start 游戏 → 登录处理 → page_event → story 模式 → **finish 自退**（剧情已清，43s）→ tool_alive 回落不恢复 ✓。
 - 触摸 E2E：预览卡→横屏全屏 ✓；点游戏返回键→页面真切（幽影迷城→12章）✓；拖拽→地图平移 ✓；X→退出回竖屏、镜像无损回卡 ✓。
-- **未实弹**：互斥 D2/D6（需挂机会话，不私按）；半自动点击完整验收（D10 留用户）。
+- **已实弹（用户终验通过）**：互斥 D2/D6 与半自动点击完整验收（D10）——用户实测后确认「功能完好，可以照常运行」（2026-09-17 收官）。
 
 ## 坑（已入 debug.md）
 
@@ -39,4 +39,5 @@ adb 遥控点击必须当帧截屏取坐标（布局漂移首点落空）；全�
 - **退出残留审查 ✅（同日，免新措施）**：两种杀法实测——`am force-stop` t+2s 全灭（进程/三端口/VD）；`kill -9` app 本体 t+3s proot 树灭（stdin EOF 看门狗实证），sticky 服务复活 app 后特权/桥/VD 自动重连但 proot 环境不拉起（恢复力缺口，非残留，留后续决策）。机制清单见 devlog 同日条目。
 - **daemon 预启动修复 ✅（同日第四轮，已装机验证）**：用户实弹发现「半自动点击不拉游戏、原地空转」。根因=ALAS 上游 daemon 任务设计不含 app_start（`AzurLaneDaemon.run()` 直接 `while 1: screenshot()` 盯当前屏，官方前提游戏已在跑；event_story 才自带 app_start）。修复=runner.py 在 daemon 前先 `alas.run('start')`（LoginHandler.app_start+handle_app_login，双源同步，ALAS 代码零改动）。日志链实证：APP START→Login success→GUILD_POPUP_CANCEL→Daemon 绑定后零黑帧 WARNING；预览卡实见游戏主界面。另：左卡 contentPadding 上 sm/下 xs（「运行配置」标签下移）。**D10 半自动点击手动终验条件已齐（游戏能拉起了），仍留用户。**
 - **UI v3 压高对齐 + 弹层适配 ✅（同日第三轮收口，已装机验证）**：用户反馈「模块高度缩 30%」→「左边再缩、间距更小、右按钮与左卡上下对齐」→「下拉弹层也做大小适配」。根因两层：M3 48dp 最小交互尺寸强制（用 `LocalMinimumInteractiveComponentSize provides 0.dp` 关掉——M3 1.4 是非空 Dp，`provides null` 编译不过）+ M3 Button 内层 `defaultMinSize(40dp)` 不受该 local 管（右列 84dp 仍驱动行高）。终案：左卡 `fillMaxHeight()` 拉伸对齐（实测左右顶 1018=1018、底 1269≈1268）；弹层宽度用 `onGloballyPositioned` 量锚按钮宽喂 `DropdownMenu`（实测同宽 475px，缘对齐 x≈95/570）。行高实测 250px≈83dp（v2 时 104dp，-20%）。详见 devlog 2026-09-17 UI v3 条。
+- **用户终验 ✅（收官）**：半自动点击手动终验（D10）+ 工具⇄挂机互斥实弹（D2/D6）由用户实测通过——「功能完好，可以照常运行」。本篇全部事项闭环，无遗留。
 - **adb 插曲**：WiFi adb 掉线一次（device offline），`adb disconnect` + `adb connect 192.168.50.190:5555` 恢复。
