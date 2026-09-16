@@ -2,7 +2,7 @@
 
 免 root 的 Android 端 [ALAS](https://github.com/LmeSzinc/AzurLaneAutoScript)（AzurLaneAutoScript）运行环境：仅靠 Shizuku（修改版）即可在手机后台虚拟屏里挂机《碧蓝航线》自动化，前台正常使用手机互不干扰。
 
-> ⚠️ 本 README 为阶段五交付草案：标 `TODO-阶段五` 的小节（支持机型清单、仓库地址、shizuku-m 获取方式）随多 ROM 实测与仓库公开回填。
+> 标 `TODO` 的 shizuku-m 获取方式随其分发安排回填；支持机型清单随更多实测持续补充。
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
 
@@ -33,10 +33,10 @@
 
 ## 安装
 
-**前置**：一台未 root 的 Android 手机 + 自行安装并激活 shizuku-m（获取方式：`TODO-阶段五`）。
+**前置**：一台未 root 的 Android 手机（arm64）+ 自行安装并激活 shizuku-m（获取方式：`TODO`，分发安排另行公布）。
 
 1. 安装 shizuku-m，打开点「启动」（无需连接 WLAN 或电脑）。
-2. 安装 MaaAL APK（Release 页下载：`TODO-阶段五`），打开并按引导授权 Shizuku。
+2. 安装 MaaAzurLane APK（[Release 页](https://github.com/Shinarin/MaaAL/releases)下载 `MaaAzurLane-v<版本号>-android-arm64.apk`），打开并按引导授权 Shizuku。
 3. 等待首启部署完成（解压 rootfs + 热更新检查），自动进入挂机页。
 4. 安装《碧蓝航线》（国服 `com.bilibili.azurlane`），在控制台配置后即可从挂机页或悬浮窗「开始挂机」。
 
@@ -50,7 +50,7 @@
 
 ## 支持机型 / ROM
 
-`TODO-阶段五`：多 ROM 实测矩阵见 [docs/rom-matrix.md](docs/rom-matrix.md)，当前已验证基线：
+多 ROM 实测矩阵见 [docs/rom-matrix.md](docs/rom-matrix.md)（持续补充），当前已验证基线：
 
 | 机型 | ROM | Android | 状态 |
 |------|-----|---------|------|
@@ -69,11 +69,8 @@
 
 ## 仓库
 
-`TODO-阶段五`（决策 #12：三个仓库公开，发布页附源码链接，AGPL 义务）
-
-- 主仓库（本仓）：App + rootfs 构建链 + 补丁集
-- shizuku-m：提权组件 fork
-- （分发/资源仓待定）
+- 主仓库（本仓）：[Shinarin/MaaAL](https://github.com/Shinarin/MaaAL)——App + rootfs 构建链 + 补丁集，Release 页附源码（AGPL 义务）。
+- shizuku-m：提权组件 fork，分发渠道另行公布。
 
 ## 构建与开发
 
