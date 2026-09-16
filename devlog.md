@@ -4,6 +4,33 @@
 
 ## 未发版
 
+### 2026-09-17 · 交付 ✅：ALAS 工具栏 App 独立开启（半自动点击/活动剧情）+ 全屏触摸转发复活
+
+- **功能落地**：挂机页新增「工具」区——「半自动点击」「活动剧情」两按钮，工具运行时变「<名字> 运行中」+「停止」；悬浮窗面板复用同一 `AlasControlPanel` 自动获得。全屏态复活（点预览卡进横屏全屏、X/返回键退出），**全屏画面可点可拖、注入虚拟屏**——半自动点击的「手动」半边因此真正可用；内嵌小画面保持只读防误触。
+- **wrapper 工具通道**（双源同步：`assets/alas/overlay/` ↔ `rootfs/overlays/`，wrapper.py 471→617 行、runner.py 51→70 行）：runner.py 支持 `runner.py <config> [task]`（task∈{daemon,event_story}→`AzurLaneAutoScript(config).run(task, skip_first_screenshot=True)`；无 task 原 loop 不变；非法值退出码 2）。wrapper 新增 `POST /tool/start?name=&config=`、`POST /tool/stop`、`/status` 追加 `tool_alive/tool_name/tool_pid`。互斥=「停对方+拉自己」整个放 `_tool_lock` 临界区（全局锁序 `_tool_lock→_runner_lock`，无反向嵌套）；`start_tool` 无条件 `stop_runner()`（兼清 wanted 防退避期重拉破互斥）；工具自然退出留墓碑（/status 依 `poll()` 实时判死），**不重拉工具、不自动恢复 runner**（D3）；`_cleanup` 四路（atexit/SIGTERM/SIGINT/stdin-watchdog）杀工具防孤儿。
+- **Kotlin**：`AlasRunController` 加 toolAlive/toolName 解析 + startTool/stopTool（零门控，互斥全归 wrapper）；`AlasControlPanel` 加 `AlasToolSection`（共享组件）；新文件 `ui/hangar/HangarPreview.kt`——m0 原版移植（`FullscreenPreview`/`previewTouchInput` contain 换算+黑边丢弃/`rememberMovablePreview` movableContentOf/`PreviewTouchAction`）；`HostState` 加 touchDown/Move/Up 直通现存 AIDL（`RemoteServiceImpl.kt:215-219` → `InputControlUtils` 带 VD displayId 注入）；`AppRoot` 顶层挂全屏浮层盖住底部 tab 栏。
+- **真机验收（全过）**：① /status 三字段在岗；daemon 启动→截图循环实跑（日志黑帧 WARNING=无 VD 空跑，无害）→停止 exit -15；幂等 `started_now=false`；非法名 400。② **UI 点「活动剧情」全链**：tool_alive=event_story → ALAS app_start 游戏 → 登录处理 → page_event → Mode_switch story → **finish 自退**（用户剧情已清，43s 全程）→ tool_alive 准时回落 False、不恢复（D3 墓碑语义实证）。③ **触摸转发 E2E**：预览卡→横屏全屏（隐系统栏、X 右上）；点游戏返回键→页面真切（幽影迷城→12章地图）；拖拽→地图平移；X→退出回竖屏挂机页，镜像无损回卡。
+- **未实弹**：互斥 D2/D6 需挂机会话（不私按开始挂机）——代码路径已审，用户下次挂机自然验证；半自动点击完整验收留用户手动配合（D10）。
+- **坑（已入 debug.md）**：adb 遥控点击必须当帧截屏取坐标——日志板高度漂移让工具区下移 ~100px，旧坐标首点落空；全屏 X 触摸目标小，偏 14px 落黑边被 previewTouchInput 边界检查丢弃（设计行为）。
+- **账册**：handoff `2026-09-17-tools-touch.md`；debug.md 新增「adb 遥控 UI 两坑」。
+
+### 2026-09-17 · 定案 ⏳：工具栏独立开启 + 触摸转发——grilling 访谈 10 项决策锁定（余 1 问确认中）
+
+- **Round 1（用户答 1a/2a/3b/4a/5a）**：触摸转发常驻可点；启动工具=自动停挂机（正向互斥）；工具结束**不自动恢复**挂机（保持停止，要挂机自己再点）；入口=挂机页操作面板「工具」区+悬浮窗面板复用同一控制组件；实现通道=wrapper.py 加 `/tool/start`、`/tool/stop`、`/status` 扩展 tool 字段（webui 锁定补丁不动）。
+- **Round 2（用户答 6a/7原版描述/8a/9a/10a）**：反向互斥对称（工具运行时按开始挂机=自动停工具开挂机）；手势=单指点+拖拽；工具参数（`Daemon.EnterMap`/`EventStory.SkipBattle`）用 config 现值、要改去 webui 工具页（已实证参数保存走 `_save_config`→`write_file` 直写 config JSON，不经被锁的 ProcessManager）；验收=我做构建/触摸转发/活动剧情无头验证，半自动点击留用户手动配合几分钟。
+- **第 7 条关键事实（m0-archive/vendor/MaaFwApp 原版实读）**：用户描述的「悬浮窗点击→横屏 720p 全屏态→右上角 X 退出回 app」= 原版 `LivePreview`（内嵌预览卡，`maaClickable(onEnterFullscreen)`）→ `FullscreenPreview`（`TasksPreviewSection.kt:178-229`：隐藏系统栏、SENSOR_LANDSCAPE、黑底 contain 缩放、Close X、BackHandler 退出）→ `previewTouchInput`（`:237-267`：contain 换算 VD 坐标、黑边丢弃、Down/Move/Up）→ `SessionIntent.PreviewTouch` → `previewPort.touchDown/Move/Up`（`SessionViewModel.kt:517-521`）→ AIDL。**全屏态就是原版原生的触摸转发家**；现 fork 的 AIDL `touchDown/Move/Up`（`RemoteServiceImpl.kt:215-219`，`InputControlUtils.injectInputEvent` 带 VD displayId）仍在、只是调用方在挂机页重构时丢了——复活=移植原版 UI 链 + 接到现存 AIDL。
+- **Q11（用户答 a）**：挂机页内嵌卡复刻原版——点内嵌卡=进全屏态，触摸转发只在全屏态生效（内嵌小画面永不误触进游戏）。**设计树走完，11 项决策全部锁定，待用户确认共识后开工**。
+
+### 2026-09-17 · 调研 ✅：工具栏「半自动点击 / 活动剧情」App 单独开启——事实摸底（grilling 访谈中）
+
+- **用户诉求**：ALAS 工具栏的半自动点击、活动剧情不参与挂机队列、webui 里也不能单独开启，想在 App 里单独启动这两个工具。
+- **事实（双探索代理：设备 /opt/alas 实读 + 仓库实读）**：
+  1. webui 工具页本来有专属 Start/Stop（`module/webui/app.py:685-694` → `ProcessManager.start(task)` spawn 独立进程跑 `AzurLaneAutoScript(config).run('daemon'/'event_story')`）；但 fork 锁定补丁 `patch_maaal_scheduler_lock` 把 `ProcessManager.start/stop` 整个封死（总览页+工具页同一 funnel）——**webui 里确实开不了，且是 M4-a 有意锁的**（wrapper 薄 HTTP 22400 是唯一控制面，防第二 runner 抢屏）。
+  2. 半自动点击 = 任务 `Daemon`（`module/daemon/daemon.py:8-67`），常驻 `while 1` 循环**无自停条件**（源码注释原话），停止=杀进程；活动剧情 = 任务 `EventStory`（`module/eventstory/eventstory.py:203-216`），**一次性**约 3 分钟跑完自退（遇剧情战斗杀游戏跳过）。两者无 Scheduler 参数组 → 永远不能进挂机队列，只能工具页按钮或无头启动。
+  3. **关键坑**：游戏跑在 shizuku 虚拟屏上，App 挂机页画面是**只读镜像、无触摸转发**（AIDL `touchDown/Move/Up` + `InputControlUtils.injectInputEvent` 带 displayId 的注入通道存在，但全仓无调用方）。半自动点击要用户手动进图/开战斗/点地图 → **不做触摸转发它就不可用**。
+  4. 工具与挂机 runner 共用同一虚拟屏/maaal 桥（22300），并发会抢屏；webui 内 ProcessManager 槽位互斥对本 fork 失效（runner 不经 ProcessManager）→ 互斥必须由 wrapper 控制面集中执行。
+- **待定决策（已发用户，等回答）**：触摸转发做不做（半自动的前提）、互斥/结束后恢复策略、入口位置（挂机页/悬浮窗/新 tab）、实现通道（推荐 wrapper.py 加 `/tool/*` 端点，与现有控制面同源）。
+
 ### 2026-09-17 · 修复 ✅：WebUI「闲置」状态环不停转圈 + 运行配置卡压缩为一行
 
 - **问题 1（闲置转圈）**：真实根因（CDP 实证，首版推断翻车）——pywebio 的 `.style()` 把 `--loading-border-fill--` 标记写到 put_html 的**外包装 div**（spinner 父级）上，ALAS 的 fill 定制（`alas.css` 的 `*[style*="--loading-border-fill--"]`）全部落在 wrapper：画出无圆角静态方框（= 用户截图里「状态行神秘方框」本体），而真正的 `.spinner-border.text-secondary` 保持 Bootstrap 默认——0.75s 旋转 + border-right 透明缺口。首版修复（4e2178e 往 alas.css fill 规则补 `animation:none`）打在 wrapper 上对 spinner **完全无效**，真机两帧对比（缺口弧帧间移动）现形。

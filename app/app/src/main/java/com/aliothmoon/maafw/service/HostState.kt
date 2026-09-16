@@ -148,6 +148,26 @@ class HostState(
             .onFailure { Timber.w(it, "detachPreviewSurface failed") }
     }
 
+    /**
+     * 全屏预览上的手动操作：坐标由 UI 换算到虚拟屏坐标系后传入，
+     * 直通 AIDL 同名方法（oneway，内部带虚拟屏 displayId 注入，见 RemoteServiceImpl）。
+     * 高频（一次滑动几十条），失败静默——特权断线时快照清零，注入也随之失去目标
+     */
+    fun touchDown(x: Int, y: Int) {
+        runCatching { servicePort.serviceOrNull()?.touchDown(x, y) }
+            .onFailure { Timber.w(it, "touchDown failed") }
+    }
+
+    fun touchMove(x: Int, y: Int) {
+        runCatching { servicePort.serviceOrNull()?.touchMove(x, y) }
+            .onFailure { Timber.w(it, "touchMove failed") }
+    }
+
+    fun touchUp(x: Int, y: Int) {
+        runCatching { servicePort.serviceOrNull()?.touchUp(x, y) }
+            .onFailure { Timber.w(it, "touchUp failed") }
+    }
+
     /** m0 桥协议最小客户端：一行请求一行响应，判 "pong":true */
     private fun pingBridge(): Boolean {
         Socket().use { socket ->

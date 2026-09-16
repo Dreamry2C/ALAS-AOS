@@ -44,9 +44,17 @@ data class AlasRunState(
     val selectedConfig: String = DEFAULT_CONFIG,
     /** 正在跑的实例名（/status 回报）；没在跑为 null */
     val runningConfig: String? = null,
+    /** ALAS 工具（半自动点击/活动剧情）是否在跑（/status 回报） */
+    val toolAlive: Boolean = false,
+    /** 在跑的工具名（TOOL_* 常量）；没在跑为 null */
+    val toolName: String? = null,
 ) {
     companion object {
         const val DEFAULT_CONFIG = "alas"
+
+        /** wrapper /tool/start 认识的工具名：半自动点击、活动剧情 */
+        const val TOOL_SEMI_AUTO = "daemon"
+        const val TOOL_EVENT_STORY = "event_story"
     }
 }
 
@@ -92,6 +100,18 @@ class AlasRunController(
 
     fun stopAlas() = postThenRefresh("$BASE/stop")
 
+    /**
+     * 工具启停：与调度器同一条 postThenRefresh 通道。
+     * 互斥（启工具先停 runner、启 runner 先停工具）由 wrapper 集中执行，这里不做门控
+     */
+    fun startTool(name: String) {
+        val tool = URLEncoder.encode(name, "UTF-8")
+        val config = URLEncoder.encode(_state.value.selectedConfig, "UTF-8")
+        postThenRefresh("$BASE/tool/start?name=$tool&config=$config")
+    }
+
+    fun stopTool() = postThenRefresh("$BASE/tool/stop")
+
     private fun postThenRefresh(url: String) {
         scope.launch(MaaDispatchers.IO) {
             _state.update { it.copy(busy = true) }
@@ -117,6 +137,7 @@ class AlasRunController(
                     reachable = false, runnerAlive = false, pid = null,
                     guiAlive = false, logLines = 0, logTail = emptyList(),
                     configs = emptyList(), runningConfig = null,
+                    toolAlive = false, toolName = null,
                 )
             }
             return
@@ -125,6 +146,8 @@ class AlasRunController(
         val runnerAlive = j.optBoolean("runner_alive")
         val pid = if (j.isNull("pid")) null else j.optInt("pid")
         val runningConfig = if (j.isNull("config")) null else j.optString("config")
+        val toolAlive = j.optBoolean("tool_alive")
+        val toolName = if (j.isNull("tool_name")) null else j.optString("tool_name")
         val guiAlive = j.optBoolean("gui_alive")
         val logLines = j.optInt("log_lines")
         val configs = runCatching {
@@ -146,6 +169,7 @@ class AlasRunController(
                 reachable = true, runnerAlive = runnerAlive, pid = pid,
                 guiAlive = guiAlive, logLines = logLines, logTail = tail,
                 configs = configs, runningConfig = runningConfig,
+                toolAlive = toolAlive, toolName = toolName,
             )
         }
     }

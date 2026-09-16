@@ -284,3 +284,8 @@
 
 - **现象**：① `adb install -r <apk> | tail -1 && am start …`——install 失败（stat 不到文件）但管道退出码是 tail 的 0，`am start` 照跑，旧包被重启造成"新代码已上机"假象；② `adb install /d/VSCodeCache/...` 报 `failed to stat`——Windows adb.exe 不解析 MSYS 挂载路径。
 - **解决方案**：安装命令独立成行、不看管道退出码（判据=输出含 `Success`）；给 Windows 侧工具（adb/python/gradle）一律传 `D:\...` 或 `D:/...` 形式路径（AGENTS.md"只吃 Windows 路径"的又一实例）；`cd app` 后相对路径会叠成 `app/app/app/...`，跨目录操作用绝对路径。
+
+## [2026-09-17] adb 遥控 UI 两坑：布局漂移让旧坐标落空 + 全屏小目标偏 14px 被黑边丢弃
+
+- **现象**：① 按几十秒前截屏的坐标 `input tap` 工具区按钮，什么都没发生（wrapper 无日志无进程）——期间日志板高度变化把工具区下移 ~100px，tap 落在标签与按钮间的空白；② 全屏态点右上角 X，偏 14px 落到游戏画面外的黑边，被 `previewTouchInput` 边界检查丢弃（设计行为：黑边/越界坐标不注入），全屏没退出。
+- **解决方案**：adb 遥控点击必须**当帧截屏、当帧取坐标**（动态布局高度随时在变）；全屏 X 这类小目标从原图 region crop 量准中心再点（IconButton 实际触摸目标远小于直觉）。通用判据：凡是「点了没反应」，先假设坐标漂移，拿最新帧重算。
