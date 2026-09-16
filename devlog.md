@@ -4,6 +4,14 @@
 
 ## 未发版
 
+### 2026-09-17 · 修复 ✅：半自动点击不拉游戏（runner 预启动）+ 运行配置标签下移
+
+- **现象**：点「半自动点击」后游戏不被拉起，工具对黑帧原地空转；「开始挂机」却能正常拉游戏。
+- **根因（代码+运行双实锤）**：ALAS 上游 daemon 任务设计上就不含 app_start/login——`AzurLaneDaemon.run()` 进来就是 `while 1: screenshot()` 盯当前屏（官方前提是游戏已在跑，桌面版用户自己先开游戏）。对照：event_story 自带 `app_start()`（eventstory.py:214），调度器有 GameNotRunningError→`task_call('Restart')` 兜底。运行实锤：runner.txt 里 daemon 起来后纯黑帧 WARNING 每 0.3s 刷屏、全程无 App start。
+- **修复**（runner.py 双源同步，ALAS 代码零改动）：`task=='daemon'` 时先 `alas.run('start')`（LoginHandler.app_start+handle_app_login；游戏已在跑=无害置前台收弹窗），失败则不裸进盯屏循环（exit 1 留墓碑）。
+- **验证**：装机后 HTTP 起 daemon——日志链 `APP START → App start: com.bilibili.azurlane → handle_app_login → Login success → GUILD_POPUP_CANCEL → Bind task Daemon`；daemon 绑定后**零黑帧 WARNING**；预览卡实见游戏主界面（舰娘看板）。
+- **UI 微调**：左卡 contentPadding 上 sm/下 xs（原上下 xs）——卡被行高拉伸后内容靠顶，上 padding 多给一档让「运行配置」标签下移、上下留白趋均；PaddingValues 无 (horizontal,top,bottom) 重载，用 (start,top,end,bottom)。
+
 ### 2026-09-17 · UI v3 ✅：双模块行压高对齐 + 配置下拉弹层宽度适配（用户三轮反馈收口）
 
 - **反馈**：①「模块上下高度大，缩 30%」；②「左边再缩、标签与下拉间距更小、右两按钮与左卡上下对齐」；③「下拉框的下拉（弹层）也做好大小适配」。
