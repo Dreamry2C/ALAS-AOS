@@ -4,6 +4,15 @@
 
 ## 未发版
 
+### 2026-09-17 · 悬浮窗工具按钮样式适配 ✅ + app 退出进程残留审查 ✅（免新措施）
+
+- **样式适配**：悬浮窗操作面板工具区原为描边按钮 + 「X 运行中+停止」两行式——换成与挂机页同款实心槽位按钮。`ToolSlotButton` 从 HangarScreen 提升为共享组件（移入 AlasControlPanel.kt），挂机页/悬浮窗同一份槽位语义：本槽在跑变「停止」，另一槽可点=换工具。`toolDisplayName` 随旧行式退役。实机验证：面板两实心按钮与「开始挂机」同形制；点「半自动点击」左槽变「停止」，日志板同步实证 daemon 预启动链（APP START→handle_app_login→APP LOGIN）。
+- **退出残留审查（代码清点 + 两种杀法实测）**：
+  - 机制清点：proot 树 = wrapper stdin 管道 EOF 看门狗（ProcessBuilder 默认 PIPE，挂得上）+ `_cleanup` 四路（atexit/SIGTERM/SIGINT/stdin-watchdog）+ 单实例锁；特权进程 = linkToDeath 主路径 + 5s `/proc/<appPid>` 心跳兜底 → `destroy()` 逐项 cleanup（桥/电源/主屏/**VD**）→ exitProcess；一次性 proot 执行 = 超时 destroyForcibly。
+  - 实测 1（`am force-stop`）：t+2s 我方进程全灭（含 shell-uid 特权进程）、22400/22267/22300 全释放、VD 撤除。
+  - 实测 2（`kill -9` 仅 app 本体，模拟崩溃/划卡）：t+3s proot 树全灭（stdin 看门狗 EOF 自尽链路实证）、旧特权死；随后 **sticky 前台服务让 app 复活**（Android 设计行为）——新特权/桥/VD 自动重连，但 proot 环境（wrapper/gui/runner）**不自动拉起**，用户点开 app 才恢复。
+  - **结论：无进程残留，无需新增自动停止措施。** 已知缺口（恢复力，非残留）：崩溃复活后挂机不自愈——留作后续决策。
+
 ### 2026-09-17 · 修复 ✅：半自动点击不拉游戏（runner 预启动）+ 运行配置标签下移
 
 - **现象**：点「半自动点击」后游戏不被拉起，工具对黑帧原地空转；「开始挂机」却能正常拉游戏。

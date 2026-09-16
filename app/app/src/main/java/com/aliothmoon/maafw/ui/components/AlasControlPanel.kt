@@ -2,6 +2,7 @@ package com.aliothmoon.maafw.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,12 +14,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.constant.DefaultDisplayConfig
@@ -173,8 +174,9 @@ private fun AlasStatusRow(labelRes: Int, value: String) {
 }
 
 /**
- * 工具区：半自动点击 / 活动剧情
+ * 工具区：半自动点击 / 活动剧情——与挂机页同款实心槽位按钮（[ToolSlotButton]）
  *
+ * 某工具在跑时对应槽位变「停止」（槽位即归属），另一槽保持可点=换工具；
  * 与调度器的互斥（启工具自动停 runner、启 runner 自动停工具）由 wrapper 集中执行，
  * 可用性只沿用面板既有的 wrapper 可达/忙碌判断，不拿 runnerAlive/toolAlive 互相禁用
  */
@@ -190,54 +192,49 @@ private fun AlasToolSection(
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        if (alas.toolAlive) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
-            ) {
-                Text(
-                    text = stringResource(R.string.hangar_tool_running, toolDisplayName(alas.toolName)),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                MaaButton(
-                    onClick = onToolStop,
-                    enabled = alas.reachable && !alas.busy,
-                ) {
-                    Text(stringResource(R.string.hangar_tool_stop))
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
-            ) {
-                MaaOutlinedButton(
-                    onClick = { onToolStart(AlasRunState.TOOL_SEMI_AUTO) },
-                    enabled = alas.reachable && !alas.busy,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.hangar_tool_semi_auto))
-                }
-                MaaOutlinedButton(
-                    onClick = { onToolStart(AlasRunState.TOOL_EVENT_STORY) },
-                    enabled = alas.reachable && !alas.busy,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.hangar_tool_event_story))
-                }
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+        ) {
+            ToolSlotButton(
+                labelRes = R.string.hangar_tool_semi_auto,
+                running = alas.toolAlive && alas.toolName == AlasRunState.TOOL_SEMI_AUTO,
+                onStart = { onToolStart(AlasRunState.TOOL_SEMI_AUTO) },
+                onStop = onToolStop,
+                enabled = alas.reachable && !alas.busy,
+                modifier = Modifier.weight(1f),
+            )
+            ToolSlotButton(
+                labelRes = R.string.hangar_tool_event_story,
+                running = alas.toolAlive && alas.toolName == AlasRunState.TOOL_EVENT_STORY,
+                onStart = { onToolStart(AlasRunState.TOOL_EVENT_STORY) },
+                onStop = onToolStop,
+                enabled = alas.reachable && !alas.busy,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
 
-/** /status 回报的工具名 → 展示名；未知名原样显示，null 兜底为「工具」 */
+/**
+ * 工具槽位按钮（共享）：与开始挂机同款实心形制；本槽工具在跑时变「停止」（槽位即归属）。
+ * 挂机页（ConfigToolRow 右列）与悬浮窗工具区（[AlasToolSection]）共用
+ */
 @Composable
-private fun toolDisplayName(name: String?): String = when (name) {
-    AlasRunState.TOOL_SEMI_AUTO -> stringResource(R.string.hangar_tool_semi_auto)
-    AlasRunState.TOOL_EVENT_STORY -> stringResource(R.string.hangar_tool_event_story)
-    null -> stringResource(R.string.hangar_tool_label)
-    else -> name
+fun ToolSlotButton(
+    labelRes: Int,
+    running: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    MaaButton(
+        onClick = if (running) onStop else onStart,
+        enabled = enabled,
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+    ) {
+        Text(stringResource(if (running) R.string.hangar_tool_stop else labelRes))
+    }
 }
