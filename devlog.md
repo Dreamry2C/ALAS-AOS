@@ -4,6 +4,16 @@
 
 ## 未发版
 
+### 2026-09-17 · 修复 ✅：活动列表冻结——args.json 整文件补丁把 WebUI 冻在烘焙日（幽影迷城不可见）
+
+- **用户现象**：桌面版 ALAS 已是「幽影迷城」（event_20260908_cn），手机端 WebUI 活动下拉仍停在「沉溺于星光之城」（event_20260813_cn）。
+- **排查链（全部设备实据）**：设备 ALAS commit = 上游 master HEAD（92c07aa）✅、热更新通道健康；`campaign/event_20260908_cn/` 地图资源、i18n「幽影迷城」译名已到位——只有 args.json（WebUI 活动选项唯一来源）旧：设备版与 m0 遗产补丁版逐字节等大，活动选项双双冻在 `[event_20260625_cn, event_20260813_cn]`。全量 diff（补丁版 vs 上游 92c07aa）：16 项差异中 MaaAL 真定制仅 2 行（ScreenshotMethod/ControlMethod 各加 `maaal`），其余全是冻结漂移——与 base.py 案同病（cp -rf 整文件覆盖）。
+- **修复（生成产物不补丁化，现场再生）**：① 删双源 `patches/module/config/argument/{args.json,argument.yaml}`（4 文件）；② 新增 `seeds/regen_args.py`（双源同步）：`python -m module.config.config_updater` 跑完整生成链（活动列表随 `campaign/Readme.md` 走），后处理补 `maaal` 选项 + zh-CN 显示名「MaaAL 桥」（幂等，占位也升级）；③ ProotHost 启动链热更新后无条件跑（`REGEN_ARGS_TIMEOUT_MS=360s`，失败降级警告不阻塞）；④ build-rootfs.sh 铺装 + fail-fast 清单同步。
+- **坑中坑（两轮静默失败）**：ⓐ 生成器直传脚本路径炸 `ModuleNotFoundError: deploy`（sys.path[0]=module/config/），必须 `-m` 模块方式跑；runGuest 失败只 Timber.w，logcat 被 HONOR 噪音分钟级冲掉——靠「args.json mtime 停在装机前」现形，手动复现 proot 一次性 exec（pm path 推 nativeLibDir + baseEnv 同款配方）拿到完整 traceback 后修掉。ⓑ i18n 顶层是**组名、无任务层**（`zh['Emulator']['ScreenshotMethod']`），第一版后处理按 args.json 的任务层取道静默落空。ⓒ 一轮验证撞上手机锁屏，proot 启动链被 readiness 门控按住（设计行为，亮屏自愈）。
+- **真机验证（端到端，非手动）**：装机 → 启动链自动 regen → args.json / zh-CN.json mtime 自动刷新；`Event.Campaign.Event.option = ['event_20260813_cn','event_20260908_cn']`（幽影迷城回归）；`maaal` 选项双在；`"maaal": "MaaAL 桥"` 显示名生效。生成链设备端耗时 0.5s（热缓存），启动链成本可忽略。
+- **锁屏插曲**：用户问「设了充电保持唤醒为何锁屏」——实测 `stay_on_while_plugged_in=15`（全选）、`mStayOn=true` 当前生效中；stay_awake 只防**自动**息屏，不防手动电源键锁屏，也不防 plugged 状态一过性丢失（`screen_off_timeout=60s` 极短，失保 1 分钟即锁）。
+- **账册**：debug.md 新增「补丁冻结第二案」；handoff `2026-09-17-args-regen-fix.md`。
+
 ### 2026-09-17 · 修复 ✅：「ALAS 重启即断连」——base.py 全量补丁冻结漂移 + runner 崩溃自拉起
 
 - **用户现象**：挂机中 ALAS 一旦发起游戏重启（Restart 任务），任务断开、要重新手点「开始挂机」。日志用户导不出，我经 run-as 直读设备 `/opt/alas/log/` 定位。
