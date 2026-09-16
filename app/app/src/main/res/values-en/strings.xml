@@ -1,5 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name">MaaFwApp</string>
+    <string name="app_name">MaaAzurLane</string>
 
     <!-- Common -->
     <string name="common_close">Close</string>
@@ -453,7 +453,7 @@
     <string name="log_export_running">Packing…</string>
     <string name="log_export_failed">Export failed: nothing to export</string>
     <string name="log_export_saved">Saved as %1$s</string>
-    <string name="log_export_subject">MaaFwApp logs</string>
+    <string name="log_export_subject">MaaAzurLane logs</string>
 
     <!-- Settings "Logs" group entries -->
     <string name="settings_section_log">Logs</string>
@@ -555,7 +555,7 @@
     <string name="notification_include_log_details">Attach the run log to the message</string>
     <string name="notification_section_test">Test push</string>
     <string name="notification_test_title">Test notification</string>
-    <string name="notification_test_message">This is a test notification from MaaFwApp</string>
+    <string name="notification_test_message">This is a test notification from MaaAzurLane</string>
 
     <!-- Push channel names -->
     <string name="notification_provider_server_chan">ServerChan</string>
