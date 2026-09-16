@@ -139,7 +139,7 @@ python scripts/build_agent_bundle.py \
 ./gradlew :app:assembleRelease
 ```
 
-本地迭代可以在 `local.properties` 里写 `build.debugAbi=arm64-v8a`，debug 包就只打这一个 ABI。release 始终包含 `arm64-v8a` 和 `x86_64`。
+本地迭代可以在 `local.properties` 里写 `build.debugAbi=arm64-v8a`，debug 包就只打这一个 ABI。release 只含 `arm64-v8a`（内置 rootfs 是 ARM64 Ubuntu，proot 不做指令集模拟，x86_64 跑不了 ALAS）。
 
 改完配方或上游资源后，也可以只跑同步：
 
