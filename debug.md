@@ -4,6 +4,12 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-17] ALAS 工具任务不都自己拉游戏：daemon 只盯屏，event_story 才自带 app_start
+
+- **现象**：半自动点击（daemon）起来后对纯黑帧空转（每 0.3s 一条 WARNING 刷屏），游戏不被拉起；活动剧情（event_story）却能正常拉起游戏。
+- **根本原因**：上游设计分工——`AzurLaneDaemon.run()` 直接 `while 1: screenshot()` 盯当前屏（桌面版官方用法=用户自己先开游戏）；`EventStory.run()` 内部有 `self.app_start()`（eventstory.py:214）；调度器路径另有 GameNotRunningError→`task_call('Restart')` 兜底。**三个入口三种拉游戏责任，给 `/tool/*` 白名单加新任务时必须逐个确认。**
+- **解决方案**：runner.py 在 `task=='daemon'` 时先 `alas.run('start')`（LoginHandler.app_start+handle_app_login）再进 daemon 循环；游戏已在跑时该调用无害（置前台+收登录弹窗）；start 失败则不裸进盯屏循环（exit 1 留墓碑）。
+
 ## [2026-09-17] M3 按钮最小高度是两层：关 Local 只撤外层，内层 `defaultMinSize(40dp)` 照常在
 
 - **现象**：双模块行要把两按钮压到 ~31dp/个。外包 `CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides X)` 后：①`provides null` 直接编译失败（M3 1.4 该 local 是非空 `Dp`）；②改 `provides 0.dp` 后按钮仍实测 39.7dp 高，行高仍被右列 84dp 驱动，左卡短一截底边对不齐。

@@ -12,6 +12,8 @@
      无头跑单个工具任务（daemon=半自动点击常驻无限循环，event_story=活动剧情
      一次性约 3 分钟自退）；与挂机共用同一块虚拟屏，互斥由 wrapper 侧保证
      （/tool/start 先停 runner），本文件只负责按 argv 执行。
+     例外：daemon 前先跑一次官方 start 任务拉起游戏+过登录——daemon 本身只盯屏
+     不拉游戏（上游设计），直接进循环会对着黑帧空转。
    - task 其他值：打印用法并以非零码退出。
 3. 顶层异常落 ./log/wrapper_runner_error.txt 并以非零码退出，供 wrapper 判死。
 
@@ -52,6 +54,13 @@ def main():
     if task is None:
         alas.loop()  # 阻塞；内部 set_file_logger(config_name)，正常退出/崩溃均有 exit(1) 分支
     else:
+        # daemon（半自动点击）上游设计上不拉游戏——官方前提是游戏已在跑，它只盯当前屏。
+        # 本机一体场景用户按一下就期望全包：先复用官方 start 任务拉起游戏+过登录
+        # （LoginHandler.app_start；游戏已在跑时无害=置前台+收登录弹窗），失败则不裸进盯屏循环。
+        # event_story 不需要——它 run() 内部自带 app_start（eventstory.py:214）。
+        if task == 'daemon' and not alas.run('start', skip_first_screenshot=True):
+            logger.error('MaaAL runner: daemon pre-start (app_start) failed, abort tool')
+            return 1
         alas.run(task, skip_first_screenshot=True)  # 工具任务：一次性/常驻，由 wrapper 保证与挂机互斥
     return 0
 

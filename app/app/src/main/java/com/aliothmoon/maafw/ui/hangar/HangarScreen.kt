@@ -250,9 +250,12 @@ private fun ConfigToolRow(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight(),
+            // 卡被行高拉伸后内容靠顶：上 padding 多给一档，标签下移、上下留白趋均
             contentPadding = PaddingValues(
-                horizontal = MaaDesignTokens.Card.innerPadding,
-                vertical = MaaDesignTokens.Spacing.xs,
+                start = MaaDesignTokens.Card.innerPadding,
+                top = MaaDesignTokens.Spacing.sm,
+                end = MaaDesignTokens.Card.innerPadding,
+                bottom = MaaDesignTokens.Spacing.xs,
             ),
         ) {
             Text(
