@@ -32,6 +32,7 @@ import com.aliothmoon.maafw.theme.MaaDesignTokens
  * 悬浮窗（OverlayPanel）与挂机页（HangarScreen）共用同一份。
  * 调度器控制面只此一处（wrapper 薄 HTTP）；WebUI 里的启停按钮已被锁定补丁封死，
  * 双头同用会抢设备——别用（见 AlasRunController 头注）
+ * [showTools]：悬浮窗要工具区；挂机页的工具按钮已并进运行配置行（ConfigToolRow），传 false
  */
 @Composable
 fun AlasControlPanel(
@@ -42,6 +43,7 @@ fun AlasControlPanel(
     onToolStart: (String) -> Unit,
     onToolStop: () -> Unit,
     modifier: Modifier = Modifier,
+    showTools: Boolean = true,
 ) {
     Column(
         modifier = modifier,
@@ -107,11 +109,13 @@ fun AlasControlPanel(
                 )
             )
         }
-        AlasToolSection(
-            alas = alas,
-            onToolStart = onToolStart,
-            onToolStop = onToolStop,
-        )
+        if (showTools) {
+            AlasToolSection(
+                alas = alas,
+                onToolStart = onToolStart,
+                onToolStop = onToolStop,
+            )
+        }
         Text(
             text = stringResource(R.string.overlay_alas_hint),
             style = MaterialTheme.typography.bodySmall,
