@@ -2,7 +2,19 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
-## 未发版
+## v0.1.0（2026-09-17 发布）
+
+### 2026-09-17 · 发布 ✅：v0.1.0 首个公开发布（release 打包 + 真机全新安装冒烟 + 发仓）
+
+- **决策落定（用户指令）**：候选 1「崩溃自动恢复」正式放弃——用户质疑成立：分辨不了主动退出时，后台自拉 proot 环境就是隐形性能消耗；现语义（点开 App=明确意图才恢复）即为正确。阶段五 -1 多 ROM / -2 长稳 / -5 shizuku-m 产品化用户另有安排跳过；本次只做 -6 Release。
+- **打包配置**：release ABI 收窄为仅 arm64-v8a（内置 rootfs 是 ARM64 Ubuntu，proot 不模拟指令集，x86_64 装上也是坏的；`AndroidApplicationConventionPlugin.kt` SHIPPED_ABIS + INTEGRATION.md 同步）。版本号走既有 git 派生：tag `v0.1.0` → versionName `0.1.0`、versionCode=commit 数（45）。
+- **签名**：生成正式发布 keystore（RSA 4096 / 30 年，`keystore/maaazurlane-release.jks`，gitignored），凭据走 `app/local.properties`（gitignored，KEYSTORE_* 四键）。**坑**：JDK 默认 PKCS12 不支持 store/key 异密码（keytool -list 验不出，签名才炸 `Given final block not properly padded`）→ 重建为同密码。
+- **构建坑 2（semi-icons AAPT）**：`:semi-icons:verifyReleaseResources`（release 独有的库模块独立资源链接）报 `attr/colorControlNormal not found`——compileOnly appcompat 进了 classpath 也不吃（该任务不走编译 classpath 符号表）；终案=模块内 `values/attrs.xml` 按 appcompat 同 format 本地声明（app 打包同 format 合并无冲突，运行时仍由 app 主题解析）。上游 MaaFwApp 同文件同坑（未发 release 所以没踩过）。
+- **真机全新安装冒烟（=阶段五「一键安装」DoD 实测）全过**：卸载 debug（配置已先备份 `.tmp/alas-config-backup-v010.tgz`）→ 装 307MB release（28s 流式）→ 冷启弹 Shizuku 授权（显示名 MaaAzurLane ✓）→ 首启解压 315MB 进度条 → 热更新 → wrapper/gui 在岗（/status + WebUI 200）→ 挂机页全 UI（配置下拉/工具按钮/状态行/日志板）→ 点「开始挂机」：调度器拉起游戏（健康游戏忠告画面上预览卡）、登录链 APP RESTART→APP LOGIN ✓ → 「停止挂机」runner 归零环境保留 ✓。
+- **发仓**：`MaaAzurLane-v0.1.0-android-arm64.apk`（307MB，V2 签名 CN=MaaAzurLane）传 GitHub Release v0.1.0（notes 见 `.tmp/release-notes-v0.1.0.md`）；main + tag 已 push。
+- **交付说明**：用户 ALAS 个性化配置随卸载清空（release 非 debuggable 无 run-as 恢复通道），备份在 PC `.tmp/`，需在 WebUI 重配；keystore 务必离线备份（丢失=永远无法同签名升级）。
+
+## v0.1.0 之前（开发期）
 
 ### 2026-09-17 · 用户终验 ✅：工具独立开启 + 触摸转发全案收官
 
