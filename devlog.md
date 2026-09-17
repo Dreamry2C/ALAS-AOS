@@ -4,6 +4,21 @@
 
 ## 未发版（v0.1.0 之后）
 
+### 2026-09-18 · 定性 ✅：「活动图只刷一遍就进队列」非 bug——心情控制延迟 + 任务到点抢占
+
+- **用户报告**：活动图（Event D3）只刷一遍就被算作完成、放回队列，油量充足理应能连刷。
+- **取证**（wrapper `/logs`，2026-09-17 21:59~22:07 窗口）：一轮完整 D3（BATTLE_1~7）于 22:01:45 `<<< CAMPAIGN END >>>` 正常收官，油 10527、Count: 0（不限次），**无任何停止条件触发**。
+- **根因 1·抢占**：`Guild` 到预定时间 22:00:00 → `Switch task Event → Guild`（ALAS 标准任务抢占，Event 即刻回队列；Guild 15 秒跑完后 Event 于 22:02:00 自动恢复）。
+- **根因 2·心情保护（关键）**：Event 恢复后进 D3 战前检查，1 队心情 43、预计单战 -12 → `Delay current task to prevent emotion control in the future` → `Event.Scheduler.NextRun=22:30:00` → `SCRIPT END: Emotion control`。**这是上游 ALAS 心情控制（Emotion Control）的标准保护行为**：再刷会跌破红脸线（掉好感），主动延迟 ~28 分钟等心情自然恢复，到点自动继续刷。
+- **结论**：环境链路完全正常，无需任何代码改动。想无视心情连刷可在 WebUI 的 Event 任务里把心情控制模式改为「无视」（不推荐）；后宅可加速心情恢复。
+- **顺带目击**（另案，不入本次）：GemsFarming 选旗舰崩溃 `ValueError: invalid literal for int() with base 10: 'MRT'`（dock 找旗舰时 OCR 把等级读成 'MRT'）——与既有「紧急委托选关报错」悬案同源方向（通用 PP-OCR 读不准 AL 字体），证据已留 `.tmp/q-once/alas_full.txt`。
+
+### 2026-09-18 · 文档 ✅：README 全面重写（用户点单）
+
+- **用户要求**：针对本项目写一份完整详细、重点讲使用的 README；简单易懂、可用表情符号；Shizuku 部分引导到官方仓库、不提 shizuku-m；末尾致谢借用的仓库。
+- **落地**：全文重写 `README.md`——特性/一图流/安装/使用/机型/FAQ/构建/致谢/许可 九段式；使用章扩为「三个界面分工 + 第一次使用 + 日常操作（全屏触摸/小工具/热更新）+ 两个重要提醒（WebUI 启停锁定、重启恢复链）」；Shizuku 引导改指 [RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku) 及官方激活指南（无线调试/adb/root 三方式），shizuku-m 及「官方版冲突」FAQ、顶部 TODO 注、「仓库」段全部移除；致谢段新增 ALAS / MaaFwApp / Shizuku / proot / PaddleOCR / MaaFramework / Ubuntu 七家。
+- **注意**：rom-matrix.md 与 roadmap 等内部文档仍含 shizuku-m 记述（开发者向账本，未动）；本次仅改用户向 README。
+
 ### 2026-09-18 · 修复 ✅：D3 崩溃循环真根因双破案（TITLE 模板失配 + D1 徽标名 OCR '01' 毒害）——终验 BATTLE_1~6+boss 零错误
 
 - **推翻旧定论**：此前"活动图崩溃=上游缺陷×未 3 星手动模式，环境层无解"的结论被用户一句"桌面端可以刷 D3"推翻。桌面与手机同版本 ALAS、同一张图，差异只能出在**识别层**——顺此查出两个互相独立的断点，全部有像素/模型级实证，均已修复并端到端验证。
