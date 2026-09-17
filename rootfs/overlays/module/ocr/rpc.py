@@ -1,4 +1,12 @@
-"""MaaAL v3：in-proc onnxruntime PP-OCR，替换 m0 的 TCP 桥版 rpc.py（原 zerorpc 实现的第二任替身）。
+"""MaaAL v3：in-proc OCR，替换 m0 的 TCP 桥版 rpc.py（原 zerorpc 实现的第二任替身）。
+
+双引擎按 lang 路由：
+- `azur_lane`：上游 cnocr densenet-lite-gru 权重的纯 numpy 移植（module/ocr/al_numpy.py +
+  models/ocr/azur_lane/weights.npz），与桌面 mxnet 推理逐位一致（max|Δ|≈1e-5）。
+  整页 ocr() = PP-OCR det 出框 + numpy 字体模型 rec；单行接口全走 numpy 模型。
+  模型缺失时自动回落 PP-OCR。
+- 其余 lang（cnocr/jp/tw/azur_lane_jp）：通用 PP-OCR（det.onnx + rec.onnx + keys.txt，
+  复用 m0 资产）。
 
 对外接口与 m0 版（m0-archive/termux/patches/module/ocr/rpc.py）逐字一致，
 ocr.py / al_ocr.py / resource.py / webui/app.py 零改动：
@@ -9,13 +17,11 @@ ocr.py / al_ocr.py / resource.py / webui/app.py 零改动：
 - `ModelProxyFactory`：五个语言名的惰性 __getattribute__ + close
 
 与 m0 版的差异：
-- "TCP 调用"换成"本进程 onnxruntime 推理"。模型 = PP-OCR（det.onnx + rec.onnx + keys.txt，
-  复用 m0 资产）。alive() 语义从"桥已连接"改为"模型已加载"。
+- "TCP 调用"换成"本进程推理"。alive() 语义从"桥已连接"改为"PP-OCR 模型已加载"。
 - 模型路径：默认 ./models/ocr/（相对 ALAS 根；module/logger.py import 期已 chdir 到仓库根），
   环境变量 MAAAL_OCR_MODEL_DIR 可覆盖（本机/CI 测试用）。
-- cand_alphabet（cnocr 的 CTC 字符集约束）PP-OCR 无对应物，不接：
-  ALAS 的 Digit/DigitCounter/Duration.after_process 自己清洗（I/D/S/B 映射 + int() 解析 +
-  正则抽取，见 module/ocr/ocr.py:150-202），m0 桥版同样不接。
+- cand_alphabet：azur_lane 引擎实现了上游同款候选掩码；PP-OCR 路径无对应物不接，
+  ALAS 的 Digit/DigitCounter/Duration.after_process 自己清洗（module/ocr/ocr.py:150-202）。
 - onnxruntime/numpy/cv2 import 失败时：alive() 返回 False，OCR 调用 raise RequestHumanTakeover。
 
 并发：调用方有 early_ocr_import 线程与 worker 线程池并发（m0 教训），
@@ -42,6 +48,11 @@ try:
     import cv2
 except ImportError:
     cv2 = None
+
+try:
+    from module.ocr.al_numpy import AlNumpyOcr
+except Exception:  # al_numpy 自身依赖缺失/文件未铺时回落 PP-OCR，不拖死 rpc
+    AlNumpyOcr = None
 
 process = None  # 兼容原模块级变量（zerorpc 时代的服务进程句柄）
 
@@ -148,6 +159,28 @@ class _PpOcrEngine:
         """整图 → [每框识别串]。标准 PP-OCR 流程，后处理对应 PaddleOCR DBPostProcess。"""
         return [text for _, text in self.det_rec_debug(image)]
 
+    def det_boxes_crops(self, image):
+        """整图 → [(box, crop)]：det_rec_debug 的 det 半边，供 azur_lane numpy 引擎
+        复用 PP-OCR 的检测、用自己的字体模型做识别（对应上游 cnocr ocr() 的
+        line_split + ocr_for_single_lines 角色）。"""
+        image = self._to_3ch_uint8(image)
+        h, w = image.shape[:2]
+        # det 输入：最长边限 960，高宽 32 对齐（对应 DetResizeForTest limit_type=max）
+        ratio = min(1.0, _DET_LIMIT_SIDE / float(max(h, w)))
+        rs_h = max(32, int(round(h * ratio / 32.0)) * 32)
+        rs_w = max(32, int(round(w * ratio / 32.0)) * 32)
+        x = cv2.resize(image, (rs_w, rs_h), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255.0
+        x = (x - 0.5) / 0.5
+        x = x.transpose((2, 0, 1))[np.newaxis, ...]
+        pred = self.det.run([self.det_out_name], {self.det_in_name: x})[0][0, 0]  # [rs_h, rs_w]
+
+        pairs = []
+        for box in self._boxes_from_bitmap(pred, rs_h, rs_w, h, w):
+            crop = self._get_rotate_crop_image(image, box)
+            if crop is not None:
+                pairs.append((box, crop))
+        return pairs
+
     def det_rec_debug(self, image):
         """整图 → [(box[4x2], text)]。诊断/门禁脚本（spike-f-ocr-gate.py）用，生产走 det_rec。"""
         image = self._to_3ch_uint8(image)
@@ -239,6 +272,8 @@ class _PpOcrEngine:
 class ModelProxy:
     _engine = None
     _load_failed = False
+    _al_engine = None
+    _al_load_failed = False
     _lock = threading.RLock()  # 模型加载与 session.run 全局串行（m0 并发教训）
     online = True
 
@@ -272,6 +307,10 @@ class ModelProxy:
                 cls._engine.close()
             cls._engine = None
             cls._load_failed = False
+            if cls._al_engine is not None:
+                logger.info('MaaAL OCR: release azur_lane numpy model')
+            cls._al_engine = None
+            cls._al_load_failed = False
 
     @classmethod
     def _get_engine(cls):
@@ -283,45 +322,93 @@ class ModelProxy:
         return cls._engine
 
     @classmethod
-    def _best_text(cls, image) -> str:
-        """单行文本块：rec 直识（m0 的 only_rec 路径）。"""
-        engine = cls._get_engine()
+    def _get_al_engine(cls):
+        """azur_lane 字体模型（上游 cnocr 权重的纯 numpy 移植）惰性加载。
+
+        模型文件缺失/加载失败时返回 None 并回落 PP-OCR（与 m0 桥版同语义：
+        宁可用弱模型也不让任务死）。"""
+        if AlNumpyOcr is None:
+            return None
         with cls._lock:
+            if cls._al_engine is not None or cls._al_load_failed:
+                return cls._al_engine
+            model_dir = os.path.join(os.environ.get('MAAAL_OCR_MODEL_DIR', './models/ocr'), 'azur_lane')
+            logger.info(f'MaaAL OCR: loading azur_lane numpy model from {model_dir}')
+            try:
+                cls._al_engine = AlNumpyOcr(model_dir)
+                logger.info('MaaAL OCR: azur_lane numpy model loaded (39 classes)')
+            except Exception as e:
+                cls._al_engine = None
+                cls._al_load_failed = True
+                logger.warning(f'MaaAL OCR: azur_lane numpy model load failed: {e}, fallback to PP-OCR')
+            return cls._al_engine
+
+    def _best_text(self, image, cand=None) -> str:
+        """单行文本块：azur_lane 走 numpy 字体模型，其余走 PP-OCR rec（m0 only_rec 路径）。"""
+        if self._al is not None:
+            with self._lock:
+                return ''.join(self._al.ocr_for_single_line(image, cand))
+        engine = self._get_engine()
+        with self._lock:
             return engine.rec_line(image)
 
-    @classmethod
-    def _all_texts(cls, image) -> list:
-        """整图检测+识别：返回每行文本列表。"""
-        engine = cls._get_engine()
-        with cls._lock:
+    def _best_texts(self, images, cand=None) -> list:
+        """成批单行：azur_lane 引擎必须整批走（批内宽补齐+截尾语义）。"""
+        if self._al is not None:
+            with self._lock:
+                return [''.join(r) for r in self._al.ocr_for_single_lines(images, cand)]
+        engine = self._get_engine()
+        with self._lock:
+            return [engine.rec_line(img) for img in images]
+
+    def _all_texts(self, image, cand=None) -> list:
+        """整图检测+识别：返回每行文本列表。azur_lane = PP-OCR det + numpy 字体模型 rec。"""
+        engine = self._get_engine()
+        if self._al is not None:
+            with self._lock:
+                pairs = engine.det_boxes_crops(image)
+                if not pairs:
+                    return []
+                return [''.join(r) for r in self._al.ocr_for_single_lines(
+                    [crop for _, crop in pairs], cand)]
+        with self._lock:
             return engine.det_rec(image)
 
     def __init__(self, lang) -> None:
-        self.lang = lang  # 语言由模型决定（单一 PP-OCR 模型全覆盖），仅保留签名
+        self.lang = lang
+        self._cand = None
+        # azur_lane 用字体模型（上游桌面同款权重）；其余语言仍由 PP-OCR 全覆盖
+        self._al = self._get_al_engine() if lang == 'azur_lane' else None
 
     # ---------------------------------------------------------------- 原 zerorpc 方法面（签名与 m0 版逐字一致）
 
     def ocr(self, img_fp):
-        return [list(line) for line in self._all_texts(img_fp)]
+        return [list(line) for line in self._all_texts(img_fp, self._cand)]
 
     def ocr_for_single_line(self, img_fp):
-        return list(self._best_text(img_fp))
+        return list(self._best_text(img_fp, self._cand))
 
     def ocr_for_single_lines(self, img_list):
-        return [list(self._best_text(img)) for img in img_list]
+        return [list(s) for s in self._best_texts(img_list, self._cand)]
 
     def set_cand_alphabet(self, cand_alphabet: str):
-        # PP-OCR 无字符集约束能力；atomic_* 调用会自带 alphabet 但同样不接。
+        # 与上游 CnOcr.set_cand_alphabet 同语义：设置后影响后续调用（状态保留在实例上）。
+        # azur_lane numpy 引擎实现候选掩码；PP-OCR 路径无字符集约束能力，不接：
         # ALAS 的 Digit/after_process 会自行清洗非预期字符（module/ocr/ocr.py:150-202）。
+        self._cand = cand_alphabet
         return None
 
     def atomic_ocr(self, img_fp, cand_alphabet=None):
+        # 与上游 AlOcr.atomic_* 同语义：先 set_cand_alphabet（状态留置）再调用
+        self._cand = cand_alphabet
         return self.ocr(img_fp)
 
     def atomic_ocr_for_single_line(self, img_fp, cand_alphabet=None):
+        self._cand = cand_alphabet
         return self.ocr_for_single_line(img_fp)
 
     def atomic_ocr_for_single_lines(self, img_list, cand_alphabet=None):
+        self._cand = cand_alphabet
         return self.ocr_for_single_lines(img_list)
 
     def debug(self, img_list):
