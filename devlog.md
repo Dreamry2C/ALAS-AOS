@@ -4,6 +4,16 @@
 
 ## 未发版（v0.1.0 之后）
 
+### 2026-09-18 · 修复 ✅：D3 崩溃循环真根因双破案（TITLE 模板失配 + D1 徽标名 OCR '01' 毒害）——终验 BATTLE_1~6+boss 零错误
+
+- **推翻旧定论**：此前"活动图崩溃=上游缺陷×未 3 星手动模式，环境层无解"的结论被用户一句"桌面端可以刷 D3"推翻。桌面与手机同版本 ALAS、同一张图，差异只能出在**识别层**——顺此查出两个互相独立的断点，全部有像素/模型级实证，均已修复并端到端验证。
+- **断点 1（已修）·周回/自律开关 TITLE 模板手机渲染失配**：手机 D3 面板 visibly 有「周回模式 ON」「自律寻敌」开关，但上游模板（为 MuMu 锐化滤镜调校）在手机渲染下 TM_CCOEFF_NORMED 仅 **0.829/0.783 < 0.85 阈值** → `SwitchClearMode.get` 返回 'unknown' → clear_mode 丢失 → MAP_HAS_AMBUSH 保持 True → 手动模式踩潜艇伏击 → MAP INIT 死等 → MapDetectionError 崩溃循环。桌面能刷正是因为桌面认出了开关（伏击被周回模式关闭）。**修复**：用手机实拍帧（整帧 1280x720，与上游同约定）自制 `CLEAR_MODE_TITLE.png`/`AUTO_SEARCH_TITLE.png`，走 MaaAL 既有 assets 补丁机制双源部署（`rootfs/patches/assets/cn/handler/` + `app/app/src/main/assets/alas/patches/assets/cn/handler/`，cmp 验证一致），重打包 release APK 装机——overlay 每次启动幂等铺到 /opt/alas，ALAS 代码零改动（合规）。离线验证：新模板对新帧 sim=1.0 位置正中，旧模板复测 0.829/0.783（确定性失败非噪声）。
+- **断点 2（已绕）·D1 未通关徽标名字图 OCR 出 '01' 毒害章节识别**：断点 1 修好后 runner 仍死在更前面——`ScriptEnd: Campaign name error`（campaign_ui.py:418），根本没进图。机制：ensure_campaign_ui 的 `_get_stage_name` OCR 读到 `['01','D3','B2']`，'01' 经处理变 '0-1' → chapter='0' → Counter 平票取首见 → `campaign_chapter=='0'` raise CampaignNameError。'01' 来源=D1 徽标（0% 未通关红签小字）名字图里 **D 字形二值化后糊成实心团**（`.tmp/d3cap/nameimg_HALF_0.png` 铁证；D3/B2 的 Clear! 大签名字图字母内孔清晰）。**决定性对质**：桌面 ALAS 的 azur_lane cnocr 模型（AL 字体微调，charset 39 字符）对**同一手机帧同三个名字区**读出 `['D1','D3-','B2']`——像素无罪，是手机端 MaaAL 换用的通用 PP-OCR 读不了 AL 字体的糊 D。候选通用模型 A/B 全灭：v5_ch_mobile 'ս'、v4_ch_mobile 'սս'、v4_en_mobile 空串、v5_en_mobile 字典不匹配。**绕法（本次执行）**：手动把 D1 打通（桥点击作战：5 杀出 boss、boss S 胜、威胁排除 100%），徽标变 Clear! 大签样式 → 名字 OCR 不再糊 → 毒害本活动内消除。通用修法（azur_lane 模型上机）留作后续项。
+- **终验（runner 端到端，日志+图像双证）**：重启 runner → 登录链 → `[Stage] d3, ai, b2`（d3 正确读出并选中，无 '01' 无 CampaignNameError）→ `[Map_info] 99%, star_1, star_2, 100_percent_clear, clear_mode`（**clear_mode 出现=断点 1 补丁生效的在线证据**）→ `Clear_Mode on` / `Auto_Search on` / `[Auto_Search_Setting] fleet1_mob_fleet2_boss, sub_standby` → BATTLE_1~6 连续 `Auto search moving → Combat end` → boss 战（Lv.105 幽影迷城-驱逐，截图 `final_proof.png` 自律战斗中）→ 最近 200 行日志 **0 ERROR / 0 MapDetectionError / 0 CampaignNameError**。
+- **悬案入账**：App 本体死亡 2 次（均伴随 runner 崩溃循环后发生，死时游戏被杀、VD 重建换号 16→18；monkey 拉起后 proot ~15s 自愈），原因未查明，需下轮查 logcat/墓碑。
+- **局限与后续项**：①手动清 D1 的绕法只治本活动——下次新活动 0% 徽标复发风险在，通用修法=azur_lane 字体模型上机（MXNet→ONNX 转换或纯 numpy 手写 densenet-lite-gru 前向，集成进 rpc.py 按 lang 路由）；②紧急委托选关报错（三件套 #2 另一半）流程不同、证据未收集，用户复现再查；③桌面 ALAS 全程只读未改（其 toolkit python 跑 OCR 对质属合规用法）。
+- **git 未提交改动**：断点 1 模板双源 4 文件（rootfs/patches 2 + app assets 2）。
+
 ### 2026-09-17 · 修复 ✅：adb 转发占用 22267 撞车桌面版 ALAS WebUI（桌面打开显示手机内容）
 
 - **用户报告**：打开桌面版 ALAS 时，WebUI 显示的是项目（手机）里 ALAS 的内容；并质疑桌面 ALAS 是否被我改动。

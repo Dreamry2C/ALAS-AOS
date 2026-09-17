@@ -4,6 +4,18 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-18] 上游模板是为模拟器锐化滤镜调的手机渲染相似度跌破阈值：开关识别静默 'unknown' 引发连锁崩溃
+
+- **现象**：手机刷活动图 D3 崩溃循环（MapDetectionError×伏击战），桌面端同版本 ALAS 同图却能正常刷——排除 ALAS 代码与图机制差异。
+- **根本原因**：ALAS 的 `CLEAR_MODE_TITLE`/`AUTO_SEARCH_TITLE` 模板是为 MuMu 等桌面模拟器的锐化渲染调校的；同画面在手机 GPU 渲染下抗锯齿/字体描边不同，TM_CCOEFF_NORMED 仅 0.829/0.783，**恰好跌破 0.85 阈值**。模板匹配失败不会报错，而是 `SwitchClearMode.get` 静默返回 'unknown' → 周回模式状态丢失 → MAP_HAS_AMBUSH=True → 手动模式踩进图潜艇伏击 → map_init 死等 → MapDetectionError。连锁极深：表象（伏击战崩溃）离根因（模板相似度）隔了 4 层因果，且"未 3 星"的表象会误导归因（旧结论就误判成"上游缺陷×图状态，环境层无解"）。**教训：桌面能用手机不能用时，优先怀疑识别层（模板/OCR/颜色阈值）的渲染差异，不要怀疑游戏逻辑；"静默 unknown"类失败要在链路每一环打印实际识别值。**
+- **解决方案**：用**本机实拍帧**自制模板（整帧 1280x720 与上游同约定），走 assets 补丁机制铺到 `assets/cn/handler/`（不改 ALAS 代码）。验证法：离线对新帧求 sim（应 ≈1.0）+ 对旧模板复测（应稳定 <0.85，确认确定性失败而非噪声）；在线证据=日志 `Map_info` 行出现 `clear_mode` 字样 + `Clear_Mode on`。
+
+## [2026-09-18] 通用 PP-OCR 读不了游戏字体：名字区糊字 OCR 出 '01' 毒害章节识别（chapter '0' → CampaignNameError）
+
+- **现象**：runner 进活动图前死于 `ScriptEnd: Campaign name error`，连图都进不去；ensure_campaign_ui 循环 20 次全挂。
+- **根本原因**：选关徽章名字区 OCR 读出 `['01','D3','B2']`——D1 未通关时是 0% 红签小字样式，其名字图的 **D 字形经 extract_letters 二值化后糊成实心团**（内孔消失），MaaAL 手机端换用的通用 PP-OCR 模型把它读成 '01' → 后处理变 '0-1' → chapter='0' → Counter 平票取首见 → `campaign_chapter=='0'` 触发 raise。**桌面 ALAS 不犯此错是因为它用 azur_lane 专用 cnocr 模型（AL 字体微调，charset 仅 39 字符）**——对同一手机帧同一名字区实测读出 `['D1','D3-','B2']`，像素无罪，纯模型差距。通用候选全灭：v5_ch_mobile 读 'ս'、v4_ch_mobile 'սս'、v4_en_mobile 空串、v5_en_mobile 字典维度不匹配。**教训：游戏专用字体（尤其小字号+描边+二值化后糊掉的字形）不要指望通用 OCR；上游用什么模型就用什么模型。排查 OCR 错误先拿上游模型对同一输入对质，立刻区分"像素问题"还是"模型问题"。**
+- **解决方案**：本次走"消除输入"绕法——把 D1 手动通关，徽标变 Clear! 大签样式（大字号白字，字母内孔清晰），名字 OCR 恢复正常。通用修法（后续项）：azur_lane cnocr 模型（MXNet）转 ONNX 上机，或纯 numpy 手写 densenet-lite-gru 前向，集成进 rpc.py 按 lang='azur_lane' 路由+39 字符 keys。注意 OCR 后处理的平票逻辑会放大单次误读（Counter 取首见），一个糊字足以全盘皆输。
+
 ## [2026-09-17] adb forward 直接占 127.0.0.1:22267 与桌面版 ALAS WebUI 撞车：桌面打开显示的是手机内容
 
 - **现象**：用户打开桌面版 ALAS，浏览器里显示的却是项目（手机/MaaAL）的 ALAS WebUI 内容。
