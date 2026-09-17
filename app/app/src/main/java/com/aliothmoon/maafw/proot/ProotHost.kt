@@ -111,7 +111,8 @@ class ProotHost(
         // proot 下 pip 比原生慢一个量级（首次降级实测 >60s），给独立长超时
         runGuest(listOf("/bin/bash", "seeds/env_fix.sh"), ENV_FIX_TIMEOUT_MS)?.let { r ->
             r.output.lineSequence().filter { it.isNotBlank() }.forEach { Timber.i("env_fix| %s", it) }
-            if (r.exit != 0) Timber.w("env_fix exit=%s", r.exit)
+            // 失败时输出必须落盘：FileLogTree 只收 W+，i 级逐行在 release 包不可见
+            if (r.exit != 0) Timber.w("env_fix exit=%s out=%s", r.exit, r.output.takeLast(500))
         }
 
         setState(ProotPhase.PREPARING, "播种实例配置")
