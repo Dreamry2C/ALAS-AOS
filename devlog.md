@@ -2,6 +2,23 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
+## 未发版（v0.1.0 之后）
+
+### 2026-09-17 · 修复 ✅：三项真机问题（T1 保屏 / T2 选关崩溃 / T3 半自动点击）——T2 走"环境钉版"路线
+
+- **用户三条修复要求**：①挂机/半自动点击/活动剧情运行时保持屏幕唤醒；②刷紧急委托（GemsFarming）选关卡步骤崩溃退出挂机；③半自动点击只把游戏拉回主界面、不触发盯屏功能。**用户拍板约束：不许改 ALAS 代码——"本软件要做的就是为 alas 构筑好环境可以跑通功能，不要越俎代庖"。**
+- **T1 保屏 ✅**：`MainActivity.kt` 注入 `AlasRunController`，`runnerAlive || toolAlive` 时 `window.addFlags(FLAG_KEEP_SCREEN_ON)`，停止即清。真机验证：runner 存活 `dumpsys window` 见 `fl=KEEP_SCREEN_ON`，停后消失。
+- **T2 选关崩溃 ✅（根因=环境未钉版，非 ALAS 代码）**：`cv2.error: (depth == CV_8U || depth == CV_32F) && type == _templ.type()` 崩在 `campaign_ocr.py:266 matchTemplate`——rootfs 烘焙时 `build-rootfs.sh` 装了不钉版 imageio 2.37.x，2.35+ 把 P 模式 GIF 模板（`TEMPLATE_STAGE_CLEAR_20240725.gif` 等）解码成 RGB 3 通道，而上游 `requirements.txt` 钉的 2.27.0 首帧给 2D 调色板索引；灰度图 match 3 通道模板即触发断言。**路线转变**：先做了一版 template.py 通道归一补丁（未提交），用户拍板"不动 alas 代码"后**补丁双源删除无痕**，改走环境钉版：
+  - `build-rootfs.sh` 钉 `imageio==2.27.0`（对齐上游，含注释）；
+  - 新增 `rootfs/seeds/env_fix.sh`（双源同步 app assets）：每次启动自检 imageio≠2.27.0 则 pip 钉回（aliyun 镜像，断网/失败不阻塞）；随后**白名单单文件** `git checkout -- module/base/template.py` 还原旧补丁遗留（只此一路径，绝不整树 checkout——overlay 合法补丁每启动重铺）；mark 写 stdout+`log/env_fix.txt`；永远 exit 0。
+  - `ProotHost.kt` 启动链在 overlay 之后插入 env_fix 调用，专用 `ENV_FIX_TIMEOUT_MS=300_000`（**坑：proot 下 pip 比原生慢一个量级，首次 60s 超时被杀**）。
+- **T3 半自动点击 ✅（黑帧孤儿补判）**：此前修复（daemon 先 `alas.run('start')`）在"游戏进程活着但 VD 画面全黑"（孤儿窗，App 重装/VD 重建后）场景失效——游戏在跑就不 start，对着黑帧空转。runner.py daemon 分支加判：游戏在跑**且** VD 画面非黑帧（`float(image.mean())*3 >= 1.0`，对齐 ALAS check_screen_black）才跳过 pre-start；黑帧则照常 app_start 救回。ALAS 代码零改动。
+- **验证（全部真机/PC 实证）**：PC 对照实验——imageio 2.37 组复现设备同款 cv2 断言，2.27 组模板解码 (20,30) 2D、上游形态 matchTemplate 命中 3 个 Clear! 徽章；真机 E2E——GemsFarming 选关 OCR `Click @ d3` 两次点中（原崩溃点通过）→ MAP_PREPARATION → 进图开战，全程无 cv2 error；T3 热路径（skip pre-start 零 GOTO_MAIN）与冷孤儿路径（黑帧警告→app_start→Login success）双分支验证。
+- **未直接验证项**：env_fix 的 template.py 还原行设备侧输出不可读（release 版 Timber 只落 W+；/logs 只服务 mtime 最新 txt，gui.txt 永远压过 env_fix.txt）——但 .git 必在、checkout 纯本地、脚本无 WARN 即完成，收敛性由设计保证。
+- **失误认领**：用户说"先暂停"时回复了"已发 /stop"但**实际没发**，GemsFarming 崩溃重试循环又跑十几分钟（wrapper respawn 到 #27）才发现真停——回复前必须核实动作已执行。另：T2 第一轮 E2E 的 Unknown ui page 风暴/B1 自律连锁源于 T3 验证把游戏留在 B1 遭遇提示处（非用户现场 bug）。
+- **现场交还**：GemsFarming 已关回（`GemsFarming.Scheduler.Enable=False` 实证）、游戏已 force-stop（停在 D3 半途，重进会出"继续作战"提示，推进奖励归用户）、油 13775、**用户船坞已满需自行整理**（否则刷图必卡）。
+- **git 未提交改动**：runner.py×2（双源）、MainActivity.kt、ProotHost.kt、build-rootfs.sh、env_fix.sh×2（新增）。
+
 ## v0.1.0（2026-09-17 发布）
 
 ### 2026-09-17 · 发布 ✅：v0.1.0 首个公开发布（release 打包 + 真机全新安装冒烟 + 发仓）

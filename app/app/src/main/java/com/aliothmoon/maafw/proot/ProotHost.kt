@@ -105,6 +105,15 @@ class ProotHost(
             return@withLock
         }
 
+        setState(ProotPhase.PREPARING, "环境自检修复")
+        // 幂等：imageio 钉回上游 2.27.0（T2 崩溃根因=环境未钉版）+ git 还原旧补丁遗留；
+        // 断网/git 不可用一律降级为日志警告，不阻塞启动（对齐 seed_config 哲学）。
+        // proot 下 pip 比原生慢一个量级（首次降级实测 >60s），给独立长超时
+        runGuest(listOf("/bin/bash", "seeds/env_fix.sh"), ENV_FIX_TIMEOUT_MS)?.let { r ->
+            r.output.lineSequence().filter { it.isNotBlank() }.forEach { Timber.i("env_fix| %s", it) }
+            if (r.exit != 0) Timber.w("env_fix exit=%s", r.exit)
+        }
+
         setState(ProotPhase.PREPARING, "播种实例配置")
         // 幂等（config/alas.json 已存在即跳过）；失败不阻塞——WebUI 也能救
         runGuest(
@@ -397,6 +406,7 @@ class ProotHost(
         private const val GUEST_ALAS_ROOT = "/opt/alas"
         private const val SERVICES_UP_MS = 90_000L
         private const val SHORT_EXEC_MS = 60_000L
+        private const val ENV_FIX_TIMEOUT_MS = 300_000L
         private const val REGEN_ARGS_TIMEOUT_MS = 360_000L
         private const val STOP_GRACE_MS = 8_000L
         private const val RESTART_BACKOFF_INIT_MS = 3_000L

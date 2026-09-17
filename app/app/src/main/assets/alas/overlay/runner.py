@@ -55,12 +55,29 @@ def main():
         alas.loop()  # 阻塞；内部 set_file_logger(config_name)，正常退出/崩溃均有 exit(1) 分支
     else:
         # daemon（半自动点击）上游设计上不拉游戏——官方前提是游戏已在跑，它只盯当前屏。
-        # 本机一体场景用户按一下就期望全包：先复用官方 start 任务拉起游戏+过登录
-        # （LoginHandler.app_start；游戏已在跑时无害=置前台+收登录弹窗），失败则不裸进盯屏循环。
-        # event_story 不需要——它 run() 内部自带 app_start（eventstory.py:214）。
-        if task == 'daemon' and not alas.run('start', skip_first_screenshot=True):
-            logger.error('MaaAL runner: daemon pre-start (app_start) failed, abort tool')
-            return 1
+        # 本机一体场景用户按一下就期望全包：游戏没在跑时先复用官方 start 任务拉起+过登录
+        # （LoginHandler.app_start），失败则不裸进盯屏循环。
+        # 但游戏**已在跑时绝不跑 start**：start 的语义是"拉到主界面"（handle_app_login 末尾
+        # ui_goto(page_main)），会把已停在活动图/关卡页等准备好位置的用户硬拽回主界面；
+        # 此时直接进 daemon 盯屏循环，当前屏在哪就在哪工作（上游设计本意）。
+        # 注意"进程活着≠画面活着"：App 重装/VD 重建后游戏可能是无窗孤儿进程
+        # （pidof 判活但 VD 黑帧），此时仍要走 start 把活动重新拉起到 VD 上。
+        # 黑帧判定对齐 ALAS check_screen_black：全屏通道均值和 <1（screenshot.py:247）。
+        # event_story 不需要这层——它 run() 内部自带 app_start（eventstory.py:214）。
+        if task == 'daemon':
+            need_start = True
+            if alas.device.app_is_running():
+                alas.device.screenshot()
+                image = alas.device.image
+                if image is not None and float(image.mean()) * 3 >= 1.0:
+                    need_start = False
+                    logger.info('MaaAL runner: game already on screen, skip daemon pre-start')
+                else:
+                    logger.warning('MaaAL runner: game process alive but frames black, '
+                                   'treat as not running')
+            if need_start and not alas.run('start', skip_first_screenshot=True):
+                logger.error('MaaAL runner: daemon pre-start (app_start) failed, abort tool')
+                return 1
         alas.run(task, skip_first_screenshot=True)  # 工具任务：一次性/常驻，由 wrapper 保证与挂机互斥
     return 0
 
