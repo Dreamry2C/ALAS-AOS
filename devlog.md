@@ -4,6 +4,18 @@
 
 ## 未发版（v0.1.0 之后）
 
+### 2026-09-18 · 修复 ✅：azur_lane 字体 OCR 权重搬家上机——mxnet→纯 numpy 移植，与桌面逐位一致，真机双酸试通过
+
+- **背景**：手机端通用 PP-OCR 读不了 AL 字体（D1 徽标 '01' 毒害、dock 等级 'MRT' 崩溃、`[campaign] [D3, ai, B2]` 误读）；桌面用上游 cnocr densenet-lite-gru（39 字符 AL 字体微调）但依赖 mxnet（无 ARM64 wheel、已退役）。决策（用户拍板）：搬权重不搬环境——PC 端转储 mxnet 权重，手机端纯 numpy 重写前向。
+- **转储**：`.tmp/ocr-azurlane/dump_weights.py`（桌面 toolkit python 跑，mxnet 只存在于 PC 侧）→ `weights.npz`（76 数组，3.3MB）+ `label_cn.txt`（39 类含 blank）；`dump_refs.py` 产出 13 组参考批（真徽章/名字图/噪声×单图/混批）的分层激活（emb/rnn/logits/prob）+ golden 字符串。
+- **numpy 移植**：`rootfs/overlays/module/ocr/al_numpy.py`（新建，零 module.* 依赖）——densenet-lite（BN eps=1e-5、valid 池化、k(2,3) depthwise + **k(2,1)** 末段池化（符号 json 实证，非文档所载 (2,2)））→ BiGRU（cuDNN 变体：gate 序 r/z/n，n=tanh(i2h_n+r·h2h_n)，h=(1-z)n+z·h_prev，mxnet rnn_cell.py 源码实证）→ FC(39)；预处理/补齐/置信门 0.5/width//4 截尾/CTC 解码/cand_alphabet 乘法掩码全部逐字复刻上游。性能：einsum→im2col+sgemm 后 PC 单行 329ms→**18ms**。
+- **对拍**：`.tmp/ocr-azurlane/{np_forward.py,test_al_numpy.py}`——13/13 批 prob max|Δ|≈2e-6~5e-6，字符串全同，OVERALL PASS。
+- **rpc.py 双引擎路由**：`azur_lane` → numpy 字体模型（单行/成批/atomic 全走它，整页 ocr()=PP det+AL rec）；其余 lang → PP-OCR 不变；set_cand_alphabet 恢复上游状态语义；模型缺失自动回落 PP-OCR。路由集成测试（stub module.* 真模型）PASS。
+- **双源落位**：`al_numpy.py`/`rpc.py` 进 rootfs/overlays + app assets overlay；`weights.npz`/`label_cn.txt` 进 rootfs/overlays/models/ocr/azur_lane/ + app assets 对应路径（overlay 机制每次启动幂等铺到 /opt/alas，免重烘 rootfs）。
+- **真机验证（2026-09-18 晨，0.1.1-alpha.7 (52) 装机）**：①ALAS 日志 `MaaAL OCR: loading azur_lane numpy model from ./models/ocr/azur_lane` → `azur_lane numpy model loaded (39 classes)`（16ms 加载，无 fallback 警告，proot numpy import 兼容）；②酸试 1 活动图——`[campaign 0.013s] ['D3', 'D1', 'B2']`（**D1 读准**，PP-OCR 时代误读 'ai' 消失），顺利进图，D3 连刷两轮（BATTLE_0~7 × 2），油读数 8930→8653→8618 连续合理递减（「只刷一遍就停」的油量误读同步消除），全程 0 ERROR；③耗时 `[campaign 0.013s]`/`[OCR_OIL 0.02~0.07s]`，ARM 端与 PC（18ms/行）同量级；④酸试 2 GemsFarming（'MRT' 崩溃源）未到 NextRun（昨日崩溃后 failure 延迟，当日日志窗口无调度记录）——OCR 栈同源已证，留待自然调度复验。
+- **插曲·「App 自体死亡」第三次疑似复发后澄清**：装机后 monkey 拉起 App 一度 wrapper 不应答、ps 查无 alioth 进程；本次实为启动链静默 PREPARING 段（overlay 同步→env_fix→热更新 ls-remote，release 版 Timber 只落 W+，logcat/文件日志全静默）+ 系统侧杀进程叠加，**无 crash 文件、无新 tombstone**（排除 App 崩溃）；第二次拉起后 ~4 分钟自愈，wrapper/gui/runner 全部上线。悬案收窄：死因非代码崩溃，方向=系统后台管理/装机 force-stop 余波。
+- **现场交还**：runner 运行中（Event D3 连刷，用户挂机意图），油 ~8600。
+
 ### 2026-09-18 · 定性 ✅：「活动图只刷一遍就进队列」非 bug——心情控制延迟 + 任务到点抢占
 
 - **用户报告**：活动图（Event D3）只刷一遍就被算作完成、放回队列，油量充足理应能连刷。

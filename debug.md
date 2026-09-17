@@ -4,6 +4,18 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-18] 「App 死了」先三分支再立案：release 启动链有数分钟全静默 PREPARING，ps 查无进程≠代码崩溃
+
+- **现象**：装机重启后 wrapper 长时间不应答、`ps -A | grep alioth` 一度全空，像 App 自体死亡复发；但数分钟后 wrapper/gui/runner 全部自愈上线。
+- **根本原因**：App 启动链 PREPARING 段（overlay 同步 → env_fix pip → 热更新 ls-remote）在 **release 版完全静默**——Timber FileLogTree 只落 W+、logcat 无 plant，进程活着却无任何日志痕迹；叠加 install force-stop 余波/系统后台管理杀进程，呈现"死了又活"。本次实证排除代码崩溃：`log/crash/` 无文件、`/data/tombstones/` 无新件（最新是旧日期）、app.log 两条 Startup 横幅间零 W+ 行。
+- **解决方案**：判「App 自体死亡」立案前固定三分支——①`log/crash/` 有没有新 crash 文件（CrashHandler 必留）；②`/data/tombstones/` 有没有新日期件（native 崩溃必留）；③`ps -A | grep libproot` + session.log 尾部（proot 有没有在起/在跑）。三者皆空且进程在=静默 PREPARING，等 5 分钟再下结论；进程真无且有墓碑才按崩溃立案。
+
+## [2026-09-18] mxnet GRU 是 cuDNN 变体不是教科书公式：手写前向必须逐字复刻 gate 序与耦合方式
+
+- **现象**：纯 numpy 重写 densenet-lite-gru 前向时，按教科书 GRU 公式（h=z·h_prev+(1-z)·n，n=tanh(i2h_n + r·h2h_n)）实现对拍全错。
+- **根本原因**：mxnet `rnn_cell.py` 的 GRU 实现是 cuDNN 变体——gate 序为 r/z/n，且耦合方式是 **h=(1-z)·n+z·h_prev**（z 的语义与部分教科书相反）；BN eps=1e-5（gluon 默认，非 PyTorch 1e-3/1e-5 之混）；densenet-lite 末段 stage3 池化是 **k(2,1) s(2,1)**（seq_len=floor(W/4)），以符号 json 实证为准而非论文/文档所载 (2,2)。**教训：移植模型前向时，论文和文档都不可信，唯一事实来源是推理框架的源码与符号定义；对拍要分层（emb/rnn/logits/prob）定位第一处分叉，不要只看最终字符串。**
+- **解决方案**：`module/ocr/al_numpy.py` 按 mxnet 源码逐字复刻（cuDNN gate 序/耦合、BN eps=1e-5、k(2,1) 末段池化、CTC blank=0 + 0.5 置信门 + width//4 截尾 + cand_alphabet 乘法掩码）；13 组参考批（含真徽章/名字图/噪声、单图/混批）分层对拍 prob max|Δ|≈2e-6、字符串全同才算过。性能：einsum 逐样本卷积 329ms/行 → im2col+sgemm 18ms/行（ARM 真机 13~70ms 实测同量级）。
+
 ## [2026-09-18] 上游模板是为模拟器锐化滤镜调的手机渲染相似度跌破阈值：开关识别静默 'unknown' 引发连锁崩溃
 
 - **现象**：手机刷活动图 D3 崩溃循环（MapDetectionError×伏击战），桌面端同版本 ALAS 同图却能正常刷——排除 ALAS 代码与图机制差异。
