@@ -4,6 +4,18 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-17] 进图伏击战 × map_init 死等：未 3 星活动图手动模式必崩 MapDetectionError（上游缺陷）
+
+- **现象**：活动图（event_20260908_cn D3）每进一张新图必崩一次——loading 9% 时 `WARNING | Entered map with is_combat_loading appeared`，随后 `Image to detect is not in_map` 刷 11~28 条，~18s 后 `MapDetectionError` 穿透顶层 `Saving error`；调度器显示"运行中"但在报错循环，连崩后进程退出、wrapper 重拉时 `CRITICAL | Game page unknown`。
+- **根本原因**：**图机制 × 上游缺陷 × 用户图状态三重叠加**。①D3 进图必发潜艇伏击战（spawn_data battle 0 双 siren + `MOVABLE_ENEMY_TURN=(2,)`，伏击在 loading 未完即排队）；②上游 `campaign_base.run()` 在 enter_map 的 is_combat_loading 出口后**直接 map_init，无伏击战处理**，而 map_init 容错仅 ~18s（`error_confirm=Timer(5,count=10)`）< 伏击战时长 40-90s；③用户图**未 3 星**（日志 `Map_info 99%, star_1, star_2, 100_percent_clear`，无 star_3/clear_mode → MAP_PREPARATION `No auto search option.`）→ 只能手动模式 → 必踩伏击窗口。有自律寻敌（3 星图）时进图直接索敌不触发伏击遭遇战，故 3 星图不崩。上游 issue #5969/#5970（2026-09-11，同活动 B3，**桌面雷电模拟器同款**——可排除 proot 环境）；修复 commit 46fe341 只加 AUTO_SEARCH_TITLE2（自律开关 JP 模板），**不覆盖手动模式进图伏击**。
+- **解决方案**：环境层无解（红线：不改 ALAS）。用户侧：换已 3 星的图挂（B3/C3 等）或先手动把图打到 3 星再挂。MaaAL 层可缓解（未做，候选）：检测 `MapDetectionError+is_combat_loading` 崩溃签名 → 延长退避 + UI 明示"该图未 3 星，手动模式与进图伏击冲突"。治本需上游在 map_init 前等伏击战结束。**加重坑：崩溃重拉时 `Already in map, retreating` 会撤退重进，对"进图必发伏击"的图=再踩一次伏击，重拉≠安全，构成死循环**——看到 MapDetectionError + retreating 组合要想到这层。
+
+## [2026-09-17] 验证修复前先核对设备实际装机版本：HEAD ≠ 装机版（env_fix 60s/300s 事故）
+
+- **现象**：T2 修复验证后设备仍连环崩——app.log `env_fix exit=null`（61s 超时被杀），session.log runner 14-37s 启动即崩 respawn #1-#27，像 300s 超时没生效。
+- **根本原因**：设备上跑的是 T2 验证时装的 0.1.1-alpha.1 (46)，其 `ENV_FIX_TIMEOUT_MS` 实为 60s——300s 版是后来改的源码，**从没装进机**。proot 下 pip 慢一个量级，60s 永远跑不完 → pip 中途被杀 → imageio 半装 → 后续 runner 全崩。
+- **解决方案**：装机/重启后先 `dumpsys package <pkg> | grep versionCode` 或 app.log Startup 行确认设备版本与预期一致，再谈"修复没生效"的排查。排查 release 包日志时记住 FileLogTree 只落 W+——关键失败输出必须走 Timber.w（本轮 ProotHost.kt 已把 env_fix 失败输出改 W 级落盘）。另：adb forward 跨装机/重启会断，curl 空响应先重建 forward 再下结论。
+
 ## [2026-09-17] imageio 2.35+ 把 P 模式 GIF 解码成 RGB：ALAS 选关 OCR 全盘崩溃，根因是 rootfs 没按上游钉版
 
 - **现象**：GemsFarming/活动图到选关步骤即崩——`cv2.error: OpenCV(4.x) ... (depth == CV_8U || depth == CV_32F) && type == _templ.type()`，崩点在 `campaign_ocr.py:266 cv2.matchTemplate`，任务退出挂机状态。桌面端同版本 ALAS 却正常。
