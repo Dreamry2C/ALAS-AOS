@@ -4,6 +4,17 @@
 
 ## 未发版（v0.1.0 之后）
 
+### 2026-09-17 · 调查 ✅：活动图崩溃循环=上游缺陷×D3 未 3 星（环境层无解，方案交用户决策）；另修 env_fix 60s 装机事故
+
+- **用户报告**：刷活动图（幽影迷城 D3）自动退出挂机，日志刷 `WARNING | Image to detect is not in_map`；截图=游戏停在「敌方潜艇出现中」伏击战画面，调度器仍"运行中"。
+- **事故链插曲（已修，失误认领）**：设备实际在跑 T2 验证时装的 0.1.1-alpha.1 (46)——`ENV_FIX_TIMEOUT_MS` 实为 60s（300s 版改了源码没装机）→ proot 下 pip 永远跑不完被杀 → imageio 半装 → runner 14-37s 连环崩（respawn #1-#27）。修复：`ProotHost.kt` env_fix 失败输出改 W 级落盘（FileLogTree 只收 W+，i 级逐行 release 不可见），构建装机 **0.1.1-alpha.2 (47)** 后实证 runner 零进程级崩溃、env_fix exit=0。**教训入账 debug.md：HEAD≠装机版，验证修复前先核 versionCode。**
+- **崩溃循环根因（100% 复现，证据链闭合）**：Event(d3) → 选关 → 进图 loading 9% `Entered map with is_combat_loading appeared`（enter_map 设计内出口）→ 直接 `MAP INIT`（上游 campaign_base 对伏击战零处理）→ 潜艇伏击战（40-90s）画面无地图元素 → `not in_map` ×11~28 → ~18s 容错耗尽 `MapDetectionError` 穿透 run.py 顶层（只捕 ScriptEnd）→ `Saving error` → 进程连崩退出 → wrapper 重拉 → `Already in map, retreating` 撤退重进 → 再踩伏击 → **死循环**。
+- **触发条件=D3 未 3 星**：日志 `Map_info 99%, star_1, star_2, 100_percent_clear`（无 star_3/clear_mode）→ MAP_PREPARATION `No auto search option.` → 只能手动模式 → 必踩进图伏击；D3 spawn_data 实锤 battle 0 双 siren + `MOVABLE_ENEMY_TURN=(2,)`。
+- **上游实锤**：issue [#5969](https://github.com/LmeSzinc/AzurLaneAutoScript/issues/5969)/[#5970](https://github.com/LmeSzinc/AzurLaneAutoScript/issues/5970)（2026-09-11，同活动 B3，**桌面雷电模拟器同款崩溃**——排除 proot 环境）；修复 commit 46fe341 只加 AUTO_SEARCH_TITLE2（自律寻敌开关 JP 模板），**不覆盖手动模式进图伏击**；设备 ALAS 经热更新 ≥46fe341 仍崩=佐证。
+- **观察到的实质**：崩溃循环≠完全卡死——游戏自律在 ALAS 崩溃间隙实际有推进（柴郡 boss S 胜、掉落富特/伦敦、油 13237→12884），但每张新图必崩一次、ERROR 刷屏，体验不可接受。
+- **方案（交用户决策，环境层无解，红线不改 ALAS）**：A 换已 3 星图挂 / 先手动把 D3 打到 3 星；B MaaAL 层崩溃签名检测+退避+UI 明示；C 报上游 issue 等治本。
+- **现场交还**：runner 已停（/stop 实证 runner_wanted=false）、游戏 force-stop、油 ~12884。另补录次要异常：14:22:42 `GameTooManyClickError: SWITCH_20241219_COMBAT`（图内切模式按钮连点 12 次无效）。
+
 ### 2026-09-17 · 修复 ✅：三项真机问题（T1 保屏 / T2 选关崩溃 / T3 半自动点击）——T2 走"环境钉版"路线
 
 - **用户三条修复要求**：①挂机/半自动点击/活动剧情运行时保持屏幕唤醒；②刷紧急委托（GemsFarming）选关卡步骤崩溃退出挂机；③半自动点击只把游戏拉回主界面、不触发盯屏功能。**用户拍板约束：不许改 ALAS 代码——"本软件要做的就是为 alas 构筑好环境可以跑通功能，不要越俎代庖"。**
