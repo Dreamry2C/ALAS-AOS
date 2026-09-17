@@ -4,6 +4,12 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-17] adb forward 直接占 127.0.0.1:22267 与桌面版 ALAS WebUI 撞车：桌面打开显示的是手机内容
+
+- **现象**：用户打开桌面版 ALAS，浏览器里显示的却是项目（手机/MaaAL）的 ALAS WebUI 内容。
+- **根本原因**：调试时 `adb forward tcp:22267 tcp:22267` 把手机 WebUI 绑到 PC 的 127.0.0.1:22267 且**调完没拆**；桌面版 ALAS WebUI 默认也用 22267（其 deploy.yaml 未自定义 WebuiPort）。后果：①桌面 webui 启动 bind 失败（端口被 adb.exe 占，netstat 实锤 PID 3828）；②浏览器访问 127.0.0.1:22267 实际连到 adb 转发 → 手机内容。撞车窗口期在该页面改的配置**全部写进了手机端**（桌面 `config/alas.json` mtime 停在 9-12，未被写入——可用 mtime 自证）。
+- **解决方案**：**PC 侧转发端口永远不与设备服务端口同号**——手机 WebUI 固定转发 `adb forward tcp:32267 tcp:22267`，PC 浏览器用 127.0.0.1:32267；调试结束顺手 `adb forward --remove tcp:32267`。排查"显示内容不对"先 `adb forward --list` + `netstat -ano | grep <port>` 看端口在谁手里（adb.exe=转发，python=本地服务）。
+
 ## [2026-09-17] 进图伏击战 × map_init 死等：未 3 星活动图手动模式必崩 MapDetectionError（上游缺陷）
 
 - **现象**：活动图（event_20260908_cn D3）每进一张新图必崩一次——loading 9% 时 `WARNING | Entered map with is_combat_loading appeared`，随后 `Image to detect is not in_map` 刷 11~28 条，~18s 后 `MapDetectionError` 穿透顶层 `Saving error`；调度器显示"运行中"但在报错循环，连崩后进程退出、wrapper 重拉时 `CRITICAL | Game page unknown`。

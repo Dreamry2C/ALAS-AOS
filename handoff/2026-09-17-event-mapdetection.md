@@ -39,6 +39,7 @@
 
 ## 工具速查（本轮新增实证）
 
+- **手机 WebUI 的 PC 侧转发固定 `adb forward tcp:32267 tcp:22267`**，浏览器访问 127.0.0.1:**32267**——绝不直接用 22267（与桌面版 ALAS WebUI 默认端口撞车，2026-09-17 用户桌面被劫持事故，详见 debug.md 撞车条目）。
 - wrapper API：`POST /stop` 幂等（返回 `was_alive`）；`/status` 的 `runner_respawns` 是 wrapper 生命周期累计值，不随 /stop 清零。
 - 设备日志时间 = guest UTC = 设备 CST-8h（崩溃时间戳换算注意）。
 - 崩溃现场取证：`/logs?tail=N` 拿 runner 日志；error 目录 `./log/error/<ts>` 在 proot 私有目录，shell 不可达——靠桥截图 `.tmp/bridge_cli.py cap` 补画面证据。
