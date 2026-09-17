@@ -4,6 +4,23 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-17] imageio 2.35+ 把 P 模式 GIF 解码成 RGB：ALAS 选关 OCR 全盘崩溃，根因是 rootfs 没按上游钉版
+
+- **现象**：GemsFarming/活动图到选关步骤即崩——`cv2.error: OpenCV(4.x) ... (depth == CV_8U || depth == CV_32F) && type == _templ.type()`，崩点在 `campaign_ocr.py:266 cv2.matchTemplate`，任务退出挂机状态。桌面端同版本 ALAS 却正常。
+- **根本原因**：rootfs 烘焙时 `build-rootfs.sh` 装的是**不钉版** imageio（当时 2.37.x），而 ALAS 上游 `requirements.txt` 钉死 `imageio==2.27.0`。imageio 2.35 起改了 GIF 解码：P 模式（调色板）GIF 首帧从 2D 调色板索引变成 RGB 3 通道。ALAS 的 `assets/cn/template/TEMPLATE_STAGE_CLEAR_20240725.gif` 等模板被读成 3 通道，与灰度截图 matchTemplate 时通道数不一致即断言。**桌面端正常是因为桌面部署走了上游钉版。教训：为 ALAS 筑环境，pip 依赖必须与上游 requirements.txt 逐条对齐钉版，"装最新"就是埋雷。**
+- **解决方案**：①`build-rootfs.sh` 钉 `imageio==2.27.0`（新烘焙根治）；②存量设备靠 `seeds/env_fix.sh` 每次启动自检钉回（pip + aliyun 镜像，断网不阻塞）。验证法：PC 建两 venv（2.37 / 2.27）对照解码 `template.shape`（3 通道 vs (20,30) 2D）+ matchTemplate 实测——不必上机即可定性。另：同类问题优先查"环境与上游钉版差异"，不要先改 ALAS 代码（用户红线）。
+
+## [2026-09-17] proot 里跑 pip 比原生慢一个量级：一次性执行的超时预算按 300s 起
+
+- **现象**：`ProotHost` 调 env_fix.sh（内含 pip install），60s 超时稳定被杀，但同命令在 proot 交互 shell 里手动跑能完成。
+- **根本原因**：proot 的 ptrace 拦截让 pip 这种 fork/syscall 密集型 workload 慢 5~10 倍；首次跑还要解依赖、下载 wheel。
+- **解决方案**：proot 一次性执行含 pip/编译类任务时，超时常量单独定义（`ENV_FIX_TIMEOUT_MS=300_000L`），别复用普通 shell 的 30~60s 档位。脚本本身要幂等+永远 exit 0，超时杀掉下次启动重跑即可收敛。
+
+## [2026-09-17] release 包排障双盲区：Timber 只落 W+ 且无 logcat plant；wrapper /logs 只服务 mtime 最新的一个 txt
+
+- **现象**：想读 seeds 脚本（env_fix.sh）的 stdout 验证行为——app.log 没有（release 版 Timber FileLogTree 只落 WARN+，且无 logcat plant）；curl `/logs` 也拿不到（env_fix.txt 写完后 gui.txt 立即变 mtime 最新，/logs 只服务最新那一个文件）。
+- **解决方案**：绕开 stdout 验证，改用**行为级证据**——imageio 钉版是否生效，直接跑 GemsFarming 看选关 OCR 是否还崩（2.37 下第一次模板匹配必崩，点中 d3 即证明 2.27 在岗）；文件还原是否发生，查 `git -C <alas> diff --stat` 或文件 hash。要让某 txt 可被 /logs 读到：短启 runner 4 秒再 /stop 让 alas.txt 变最新（只对 runner 系有效）。长期改进候选：wrapper /logs 支持 `?file=` 参数。
+
 ## [2026-09-17] ALAS 工具任务不都自己拉游戏：daemon 只盯屏，event_story 才自带 app_start
 
 - **现象**：半自动点击（daemon）起来后对纯黑帧空转（每 0.3s 一条 WARNING 刷屏），游戏不被拉起；活动剧情（event_story）却能正常拉起游戏。

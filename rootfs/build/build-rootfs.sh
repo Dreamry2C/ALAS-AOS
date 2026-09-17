@@ -165,9 +165,12 @@ pip_install() {
 # native 包宽松不钉死（numpy 写 >=2 表意图）；pydantic 钉 <2 对齐 ALAS v1 API
 # cached-property：ALAS config_updater.py / alas.py 顶层 import；老 uiautomator2 2.x 的
 # 传递依赖，现代 3.x 不再传递，必须显式装（M1-d 真机 WebUI 实锤，静态全扫唯一缺口）
+# imageio 钉 2.27.0 对齐上游 requirements.txt:38（纯 Python 无死链）：2.35+ 把 P 模式 GIF
+# 统一解码成 RGB 3 通道，campaign 选关模板匹配时 cv2 通道断言直接崩（T2 真机崩溃根因）；
+# 已实证 2.27.0 与 numpy 2.5 共存且 GIF 解码回 2D 调色板索引（.tmp/verify_t2_envfix.py）
 pip_install \
   'numpy>=2' scipy pillow lxml opencv-python-headless onnxruntime \
-  pywebio uvicorn fastapi aiofiles inflection pyyaml requests tqdm rich imageio \
+  pywebio uvicorn fastapi aiofiles inflection pyyaml requests tqdm rich 'imageio==2.27.0' \
   'pydantic<2' adbutils uiautomator2 uiautomator2cache websockets pypresence onepush \
   cached-property
 
@@ -203,6 +206,10 @@ install -D -m 0755 "$ASSETS/seeds/maaal_update.sh" "$ROOTFS_DIR/opt/alas/seeds/m
 # args 现场再生器：args.json/argument.yaml 不补丁化，每次启动重跑 ALAS 生成链
 # 并补回 maaal 桥选项（活动列表永不冻结）；App 侧 ProotHost 经 proot 拉起
 install -D -m 0755 "$ASSETS/seeds/regen_args.py" "$ROOTFS_DIR/opt/alas/seeds/regen_args.py"
+
+# 环境自检修复：每次启动幂等跑（App 侧 ProotHost 经 proot 拉起）——把已部署 rootfs 的
+# imageio 钉回上游 2.27.0，并 git 还原被旧构建补丁盖过的上游跟踪文件；协议见脚本头注释
+install -D -m 0755 "$ASSETS/seeds/env_fix.sh" "$ROOTFS_DIR/opt/alas/seeds/env_fix.sh"
 
 # PP-OCR 模型三件套 → /opt/alas/models/ocr/
 # 注意：这是 v3 自定义路径（非 ALAS 上游约定）——in-proc 版 module/ocr/rpc.py 默认按
