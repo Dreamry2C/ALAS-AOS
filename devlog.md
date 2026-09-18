@@ -4,6 +4,13 @@
 
 ## v0.1.1（2026-09-18 发布）
 
+### 2026-09-18 · 发布 ✅：v0.1.1 首个功能迭代（启动提速 + 活动图修复 + OCR 升级）
+
+- **产物**：`MaaAzurLane-v0.1.1-android-arm64.apk`（311MB），GitHub Release `v0.1.1`（notes `.tmp/release-notes-v0.1.1.md`）；tag 钉在 `976da2e`（versionName 0.1.1 / versionCode 56）。
+- **内容**：CDN 热更新双通道、启动静默期治理、azur_lane 字体 OCR 上机、D3 双根因修复、保屏唤醒 + env_fix 日志修复（6e08c23/9e1a6b3）、README 重写；**CHANGELOG.md 新建**（用户向，AGENTS.md 第四节首次落地，含 v0.1.0 追溯段）。
+- **验证**：apksigner 签名 CN=MaaAzurLane 与 v0.1.0 一致；aapt badging = versionName 0.1.1 / versionCode 56 / arm64-v8a / label MaaAzurLane；真机覆盖安装（0.1.1-alpha.9 → 0.1.1）冒烟：开机链 20:15:33→20:15:37 **全程 4 秒**（CDN UPTODATE 路径），wrapper/gui 在岗、status API 正常（runner 待用户手动开启）。
+- **流程改进**：本次把 CHANGELOG + devlog 分段**先入 tag 再构建**（v0.1.0 时收官 docs 在 tag 之后），tag 内含完整用户向账册。
+
 ### 2026-09-18 · 优化 ✅：热更新双通道——CDN pack 优先（复刻上游 git_over_cdn）+ git:// 兜底 + 失败当日退避，开机链 4m04s→5s
 
 - **背景（用户追问定性）**：内置 fullcn 包却走 git:// 慢通道的原因=CDN 代码在 ALAS 内置更新器里（`deploy/git_over_cdn/client.py`，GitOverCdn 由 `Repository==lyoko && Branch==master` 自动派生），而 MaaAL 为保护钉版+补丁重放顺序用 `AutoUpdate:false` 锁死了它，自写的 `maaal_update.sh` 当年只有 git:// 一条路。git.lyoko.io 无 443 服务（实测 HTTPS 握手失败），9418 裸 TCP 在运营商网络下 fetch 连续 5 次烧满 240s 超时。
