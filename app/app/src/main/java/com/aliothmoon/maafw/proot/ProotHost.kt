@@ -388,13 +388,36 @@ class ProotHost(
 
     // ------------------------------------------------------------------ 状态
 
+    private val sessionLogLock = Any()
+    private val phaseTs = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
+
     private fun setState(phase: ProotPhase, detail: String = "") {
         _state.update { it.copy(phase = phase, detail = detail) }
+        logPhase(phase.name, detail)
+    }
+
+    /**
+     * 阶段迁移落盘 session.log：release 版 Timber 只落 W+，准备链 2~5 分钟全程静默
+     * 曾致「App 假死」误判——session.log 本就是生命周期时间线，[host] 行与 [proot-out] 交错即全貌
+     */
+    private fun logPhase(tag: String, detail: String) {
+        runCatching {
+            sessionLog.parentFile?.mkdirs()
+            val line = buildString {
+                append("[host] ")
+                synchronized(sessionLogLock) { append(phaseTs.format(java.util.Date())) }
+                append(' ').append(tag)
+                if (detail.isNotEmpty()) append(' ').append(detail)
+                append('\n')
+            }
+            java.io.FileOutputStream(sessionLog, true).use { it.write(line.toByteArray()) }
+        }
     }
 
     private fun fail(reason: String) {
         Timber.e("ProotHost failed: %s", reason)
         _state.update { it.copy(phase = ProotPhase.FAILED, detail = reason) }
+        logPhase("FAILED", reason)
     }
 
     companion object {

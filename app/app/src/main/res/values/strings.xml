@@ -154,6 +154,9 @@
     <string name="overlay_alas_running">运行中 · pid %1$d</string>
     <string name="overlay_alas_stopped">已停止</string>
     <string name="overlay_alas_unreachable">环境未就绪</string>
+    <string name="overlay_alas_preparing">环境准备中 · %1$s</string>
+    <string name="overlay_alas_preparing_generic">环境准备中…</string>
+    <string name="overlay_alas_start_failed">启动失败：%1$s</string>
     <string name="overlay_alas_start">开始挂机</string>
     <string name="overlay_alas_stop">停止挂机</string>
     <string name="overlay_alas_log_empty">暂无日志</string>

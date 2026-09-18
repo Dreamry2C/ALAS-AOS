@@ -4,6 +4,16 @@
 
 ## 未发版（v0.1.0 之后）
 
+### 2026-09-18 · 优化 ✅：启动静默期治理——阶段迁移落盘 session.log + 挂机页实时显示准备明细（顺带定位「开机慢」真凶=热更新）
+
+- **用户点单**：①release 版 PREPARING 阶段日志强制落盘；②挂机页加「环境准备中」状态提示。顺带回答「为什么现在每次开 App 都要加载很久」。
+- **落地 1（落盘）**：`ProotHost.setState/fail` 每步阶段迁移写 `[host] MM-dd HH:mm:ss PHASE detail` 进 `proot/session.log`（与 `[proot-out]` 交错成完整生命周期时间线；release 版 Timber 只落 W+ 的盲区由文件直写兜底）。
+- **落地 2（UI）**：`AlasControlPanel` 注入 ProotHost 状态——wrapper 不可达时按 proot 阶段区分显示：`环境准备中 · {阶段明细}`（PREPARING/UPDATING/STARTING）/ `启动失败：{原因}`（FAILED）/ `环境未就绪`（其余）；中英字符串各三条；悬浮窗与挂机页共用此组件，同享改进。
+- **真机验证（alpha.8 装机）**：session.log 实证 `[host] 12:43:22 PREPARING 清理残留 → … → 12:47:26 RUNNING` 逐阶段留痕；截图实证挂机页状态行显示「ALAS 调度器：环境准备中 · 检查 ALAS 热更新」，按钮正确置灰。
+- **「开机慢」定量（本次实测，亦回答用户疑问）**：准备链全程 4 分 04 秒，其中**热更新检查独占约 4 分钟**（12:43:23→12:47:2x，ls-remote/fetch 在本机网络下慢至超时边界）——其余步骤（overlay 同步/env_fix/播种/regen_args/proot 拉起）合计仅数秒级。「以前没这么慢」的对应关系：这条链是逐次加上去的（overlay 补丁机制、env_fix 钉版自检、regen_args、热更新），且 proot 下 syscall 密集型操作慢 5~10 倍。**后续候选（未做，交用户决策）：热更新改为异步——wrapper 先上线、更新后台跑，或给 ls-remote 加短超时档。**
+- **虚拟屏 +1 疑云澄清（回答用户疑问）**：旧屏**不残留**——App 进程一死，特权进程经 linkToDeath（主）+ 5s 心跳看门狗 `/proc/<pid>`（兜底）自杀，`cleanup()` 释放 VD 后 exitProcess；即便 SIGKILL，VD 经 binder 注册在系统 DMS，进程死亡即被系统移除。+1 只是 Android 全局 display id 计数器单调递增不复用；实证：手机重启后计数清零，本次新屏为 #9（此前 #29）。
+- **git 未提交改动**：ProotHost.kt、AlasControlPanel.kt、strings.xml×2、AGENTS.md（新增「ALAS 上游代码红线」）、账册。
+
 ### 2026-09-18 · 修复 ✅：azur_lane 字体 OCR 权重搬家上机——mxnet→纯 numpy 移植，与桌面逐位一致，真机双酸试通过
 
 - **背景**：手机端通用 PP-OCR 读不了 AL 字体（D1 徽标 '01' 毒害、dock 等级 'MRT' 崩溃、`[campaign] [D3, ai, B2]` 误读）；桌面用上游 cnocr densenet-lite-gru（39 字符 AL 字体微调）但依赖 mxnet（无 ARM64 wheel、已退役）。决策（用户拍板）：搬权重不搬环境——PC 端转储 mxnet 权重，手机端纯 numpy 重写前向。
