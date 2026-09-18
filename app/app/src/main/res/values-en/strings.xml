@@ -158,6 +158,9 @@
     <string name="overlay_alas_running">Running · pid %1$d</string>
     <string name="overlay_alas_stopped">Stopped</string>
     <string name="overlay_alas_unreachable">Environment not ready</string>
+    <string name="overlay_alas_preparing">Preparing environment · %1$s</string>
+    <string name="overlay_alas_preparing_generic">Preparing environment…</string>
+    <string name="overlay_alas_start_failed">Start failed: %1$s</string>
     <string name="overlay_alas_start">Start ALAS</string>
     <string name="overlay_alas_stop">Stop ALAS</string>
     <string name="overlay_alas_log_empty">No logs yet</string>

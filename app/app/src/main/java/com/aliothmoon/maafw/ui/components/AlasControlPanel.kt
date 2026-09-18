@@ -14,6 +14,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -24,8 +25,12 @@ import androidx.compose.ui.unit.sp
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.constant.DefaultDisplayConfig
 import com.aliothmoon.maafw.proot.AlasRunState
+import com.aliothmoon.maafw.proot.ProotHost
+import com.aliothmoon.maafw.proot.ProotPhase
 import com.aliothmoon.maafw.service.HostSnapshot
 import com.aliothmoon.maafw.theme.MaaDesignTokens
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.koinInject
 
 /**
  * ALAS 控制面板（共享组合件）：环境/调度器状态行 + 日志板 + 调度器启停
@@ -46,6 +51,10 @@ fun AlasControlPanel(
     modifier: Modifier = Modifier,
     showTools: Boolean = true,
 ) {
+    // wrapper 不可达时区分「环境准备中（带阶段明细）」与真正的「未就绪」——
+    // 准备链全程 2~5 分钟且 release 日志静默，状态行是唯一可见的进度面
+    val prootHost: ProotHost = koinInject()
+    val proot by prootHost.state.collectAsStateWithLifecycle()
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
@@ -82,6 +91,12 @@ fun AlasControlPanel(
             AlasStatusRow(
                 labelRes = R.string.overlay_alas_status,
                 value = when {
+                    !alas.reachable && proot.phase == ProotPhase.FAILED ->
+                        stringResource(R.string.overlay_alas_start_failed, proot.detail)
+                    !alas.reachable && proot.sessionActive && proot.detail.isNotEmpty() ->
+                        stringResource(R.string.overlay_alas_preparing, proot.detail)
+                    !alas.reachable && proot.sessionActive ->
+                        stringResource(R.string.overlay_alas_preparing_generic)
                     !alas.reachable -> stringResource(R.string.overlay_alas_unreachable)
                     alas.runnerAlive -> stringResource(R.string.overlay_alas_running, alas.pid ?: 0)
                     else -> stringResource(R.string.overlay_alas_stopped)
