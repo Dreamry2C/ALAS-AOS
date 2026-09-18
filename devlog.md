@@ -4,6 +4,14 @@
 
 ## 未发版（v0.1.0 之后）
 
+### 2026-09-18 · 优化 ✅：热更新双通道——CDN pack 优先（复刻上游 git_over_cdn）+ git:// 兜底 + 失败当日退避，开机链 4m04s→5s
+
+- **背景（用户追问定性）**：内置 fullcn 包却走 git:// 慢通道的原因=CDN 代码在 ALAS 内置更新器里（`deploy/git_over_cdn/client.py`，GitOverCdn 由 `Repository==lyoko && Branch==master` 自动派生），而 MaaAL 为保护钉版+补丁重放顺序用 `AutoUpdate:false` 锁死了它，自写的 `maaal_update.sh` 当年只有 git:// 一条路。git.lyoko.io 无 443 服务（实测 HTTPS 握手失败），9418 裸 TCP 在运营商网络下 fetch 连续 5 次烧满 240s 超时。
+- **落地**：新增 `rootfs/seeds/cdn_update.py`（零依赖 stdlib 复刻上游协议：`latest.json`(3s) → `{latest}/{current}.zip` 增量 pack(20s 读超时) → 落 `.git/objects/pack/` + 写 refs；四态输出 UPTODATE/PACK_READY/NO_PACK/UNAVAILABLE 供 bash 分流）；`maaal_update.sh` 改双通道——CDN 优先、NO_PACK/UNAVAILABLE 回落 git:// 原有路径、两通道皆败记当天日期当日不再试（次日自愈）、UPDATED 后补丁重放链路不变。`MAAAL_UPDATE_NO_CDN` 环境变量可关 CDN 排障。双源同步（rootfs/seeds + app assets overlay/seeds，cmp 一致）。
+- **PC 端到端测试（真 CDN）**：UPTODATE（0.86s）/ PACK_READY（旧 commit 46fe341 真下载增量 pack **仅 399KB**+6KB idx，对比 git 浅树几十 MB）/ 假 sha 403→NO_PACK / 退避秒跳 / 关 CDN 回落 git 正常——全过。PC 侧唯一意外是 MSYS 路径幻觉（`/d/...` 被 Windows python 落出影子树 `D:\d\`，已清理；设备上无此问题）。
+- **真机验证（alpha.9 装机）**：启动链 `[host]` 时间戳实证 **19:47:59 清理残留 → 19:48:00 UPDATING → 19:48:01 检查完 → 19:48:04 RUNNING，全程 5 秒**（今早同一链路 4 分 04 秒）；设备本已是最新 commit，CDN 检查 1 秒 UPTODATE，无重放（符合预期）。下次上游推新 commit 时 CDN UPDATED 路径将自然触发（观察点：session.log 出现「重放本地补丁」阶段行）。
+- **git 未提交改动**：cdn_update.py×2（新增）、maaal_update.sh×2、账册。
+
 ### 2026-09-18 · 优化 ✅：启动静默期治理——阶段迁移落盘 session.log + 挂机页实时显示准备明细（顺带定位「开机慢」真凶=热更新）
 
 - **用户点单**：①release 版 PREPARING 阶段日志强制落盘；②挂机页加「环境准备中」状态提示。顺带回答「为什么现在每次开 App 都要加载很久」。

@@ -12,7 +12,7 @@
 
 - 准备链总时长 4m04s：`UPDATING 检查 ALAS 热更新` 一步从 12:43:23 卡到 ~12:47:2x（本机网络下 ls-remote/fetch 慢至超时边界）；其余全部步骤合计秒级。
 - 「以前没这么慢」：启动链是逐次加上去的（overlay 补丁、env_fix 钉版自检、regen_args、热更新），且 proot 下 syscall 密集操作慢 5~10 倍（debug.md 有账）。
-- **候选改进（未做，交用户决策）**：热更新异步化（wrapper 先上线、更新后台跑）或 ls-remote 短超时档。脚本侧现状：`maaal_update.sh` ls-remote timeout 60s、fetch timeout 240s、Kotlin 兜底 300s。
+- **候选改进（已实施，alpha.9）**：热更新双通道——新增 `seeds/cdn_update.py`（零依赖复刻上游 git_over_cdn 协议：latest.json(3s)→增量 pack zip(20s)→落 .git/objects/pack+refs），`maaal_update.sh` 改 CDN 优先 + git:// 兜底 + 两通道皆败当日退避。真机实证：**开机链 4m04s→5s**（19:47:59→19:48:04），CDN 检查 1s UPTODATE。PC 端三态端到端测试全过（真 CDN 下载增量 pack 仅 399KB）。PC 测试注意：MSYS 下 `python3` 是 WindowsApps 占位_stub_（静默 rc=49）需 shim 成 `python`；`MSYS_NO_PATHCONV=1` + POSIX 路径传 Windows python 会落影子树 `D:\d\`（已清理）。
 
 ## 定论 2：VD +1 不是残留，旧屏必被回收
 
