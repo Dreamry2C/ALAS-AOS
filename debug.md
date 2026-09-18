@@ -4,6 +4,12 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-18] git:// 9418 裸 TCP 在运营商网络下不可靠：ping 通≠端口快，大陆正解是 CDN pack（443）
+
+- **现象**：手机热更新连续 5 次 `FAILED fetch`，每次白烧 240s 超时（开机链 4 分钟）；但 ping git.lyoko.io 正常（24~48ms），ls-remote（小包）也能成。
+- **根本原因**：git.lyoko.io 只有 git:// 协议（9418 端口裸 TCP，实测无 443/HTTPS 服务）；运营商对非常用端口的 QoS/限速让大传输（depth-50 浅树几十 MB）永远跑不完，小包（ls-remote、ICMP）却不受影响——**「ping 通」「小包通」都不能推断「大传输通」**。PC 侧同网络复现同款（git clone 被 reset/超时），且 GitHub 也是小包通大包断。
+- **解决方案**：更新通道改走上游自带的 CDN pack（`deploy/git_over_cdn`：443 HTTPS，`latest.json`(3s) → `{latest}/{current}.zip` 增量 pack 仅 ~400KB，超时都是秒级），git:// 仅作兜底；两通道皆败记日期当日退避。**教训：给 ALAS 类大陆分发场景设计网络链路，优先复用上游已验证的 CDN 通道，别假设 git 协议端口在任何网络下都可用。**
+
 ## [2026-09-18] 「App 死了」先三分支再立案：release 启动链有数分钟全静默 PREPARING，ps 查无进程≠代码崩溃
 
 - **现象**：装机重启后 wrapper 长时间不应答、`ps -A | grep alioth` 一度全空，像 App 自体死亡复发；但数分钟后 wrapper/gui/runner 全部自愈上线。
