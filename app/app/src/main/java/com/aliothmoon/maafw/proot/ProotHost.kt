@@ -216,6 +216,9 @@ class ProotHost(
         "HOME" to app.filesDir.absolutePath,
         "PATH" to "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "LANG" to "C.UTF-8",
+        // rootfs 未装 tzdata：用 POSIX 形式 CST-8（UTC+8 无 DST），不依赖 zoneinfo 文件；
+        // 不设则全环境 UTC，ALAS 日志/调度时间比设备慢 8 小时
+        "TZ" to "CST-8",
         "MAAAL_ALAS_ROOT" to GUEST_ALAS_ROOT,
         "MAAAL_WEBUI" to "1",
     )
