@@ -4,6 +4,15 @@
 
 ## v0.1.2（2026-09-19 发布）
 
+### 2026-09-19 · 发布 ✅：v0.1.2 热修复迭代（科研卡仓库 + 时区 + 孤儿治理）+ 上游 issue #6000 提交
+
+- **产物**：`MaaAzurLane-v0.1.2-android-arm64.apk`（312MB），GitHub Release [`v0.1.2`](https://github.com/Shinarin/MaaAL/releases/tag/v0.1.2)（notes `.tmp/release-notes-v0.1.2.md`）；tag 钉在 `4c4f50e`（versionName 0.1.2 / versionCode 61）。
+- **内容**（v0.1.1 之后共 4 提交）：MATERIAL_CHECK 重校准（`902a6a4`）、proot TZ=CST-8（`e77a66c`）、runner 黑帧孤儿治理（`41a1cbd`）、发版 docs（`4c4f50e`）；本日午后 CDN 全量同源复验 + E 触发面考证随 docs 提交入账。
+- **验证**：apksigner CN=MaaAzurLane 与历版一致；aapt badging 0.1.2/61/arm64-v8a/label MaaAzurLane；真机覆盖安装（0.1.2-alpha.1→0.1.2，13s）冒烟：dumpsys 实证版本，wrapper/gui 在岗，`gui_started_at` 21:31:07 与设备时钟一致（TZ 修复在 release 链路复证）；runner 待用户手动开启（冒烟顶掉了 alpha.1 在岗 runner）。
+- **上游 issue**：[LmeSzinc/AzurLaneAutoScript#6000](https://github.com/LmeSzinc/AzurLaneAutoScript/issues/6000) 已提交（CN MATERIAL_CHECK 失效全案：ccoeff 0.04 实测 / E 科研+仓库开箱影响面 / 04-26→09-17 时间线 / 临时修复 / 愿提 PR——若提则做黑底+稳定锚点版而非整屏实帧版）；release notes 与 CHANGELOG 互相引用。
+- **push**：main `5566b83..4c4f50e` + tag v0.1.2 已推（代理 7897）。
+- **git 未提交改动**：无（收官 docs 即本条目与 handoff，随后即提交推送）。
+
 ### 2026-09-19 · 修复 ✅：科研卡仓库死循环（游戏 UI 改版打废 MATERIAL_CHECK 模板）+ proot 时区 UTC→CST + 孤儿游戏开局死循环
 
 - **用户报障**：①挂机科研任务「自己识别到进入仓库」后卡住；②ALAS 日志时间与现实对不上。
