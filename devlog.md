@@ -2,6 +2,27 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
+## v0.1.2（2026-09-19 发布）
+
+### 2026-09-19 · 修复 ✅：科研卡仓库死循环（游戏 UI 改版打废 MATERIAL_CHECK 模板）+ proot 时区 UTC→CST + 孤儿游戏开局死循环
+
+- **用户报障**：①挂机科研任务「自己识别到进入仓库」后卡住；②ALAS 日志时间与现实对不上。
+- **根因 1（科研卡仓库）**：E 系科研项目（用户预设 series_9_blueprint_ta152）启动后走 `storage_disassemble_equipment`（research.py:270）→ `_storage_enter_material` 循环确认材料页。游戏仓库页 UI 改版（旧版左下独立「素材」标签 → 新版左下「请选择要操作的素材」提示），上游 `assets/cn/storage/MATERIAL_CHECK.png` 模板匹配 ccoeff 实测 **0.04**（阈值 0.85）→ 永不确认 → 每 3s 空点 MATERIAL_ENTER（已在材料页，点激活页签=无操作）→ GameTooManyClickError → runner exit(1) → wrapper 重拉 → 再卡——**session.log 累计 87 次 runner exited/respawn**。模板年龄考证（回应「上游早该修了」质疑）：GitHub API 实证该文件 **2022-08-21 创建后从未改动**，桌面仓库与 GitHub master **逐字节一致**（桌面 git log 里的「2026-03-27」是 lyoko CDN 镜像仓库历史重写的假象，非真实编辑日期）——上游确实四年没碰过它，因为仓库页那个角落四年没变，直到最近游戏改版。同类事故史：#4276（2024 JP 同位置同症状「卡在 _storage_enter_material 出不去」，已修 JP 资产）、#4815（2025-05 CN 开箱数量选择卡死，**至今 open**）、#4934（2025-07 CN 拆 15 件卡死）。同服同版本游戏 = 同一 UI 布局（提示条是内容数据非渲染差异），桌面端跑到此步同样必卡。「桌面为何没触发」实证：桌面 alas.json 同为 ta152 预设，但日志考古显示拆解流程**上次实际触发是 2026-04-26**（当日 2022 旧模板秒过：enter material→USE BOX 9ms、0/15→15/15 八秒完成，证明 4 月时游戏还是旧 UI）；近五个月桌面未再跑过此路径（今日 20:11 桌面 Research 槽位 waiting、3 秒结束未进仓库）——不是不会卡，是游戏改版后桌面还没轮到卡。排查手段：release 无 run-as，改走 wrapper HTTP（`adb forward 22400`，POST /start 解锁 runner 日志为 latest.txt 后 /logs 拉取）+ 桥 22300 行 JSON 协议手驱动截屏/点击（`.tmp/vd_probe.py`），对 14 个 storage 资产逐一离线算 ccoeff+色差（`.tmp/asset_score.py`）。
+- **修复 1（不动上游源码，走既有 patches/assets 校准通道）**：真机材料页实帧重制 `MATERIAL_CHECK.png`（新帧 ccoeff=1.0，对装备/设计/拆解页 ≤0.27，色差 6.4<30 免改 assets.py），双源落 `rootfs/patches/assets/cn/storage/` + `app/assets/alas/patches/assets/cn/storage/`（cmp 一致，第 8 个真机校准资产）。连带验证全拆解链资产：MATERIAL_STABLE_CHECK 模板陈旧但 wait_until_stable 只吃实时帧无害；METERIAL_SCROLL 模板分低但 Scroll 类只吃构造色 (247,211,66)、实采滚动条金像素 401 个在位；DISASSEMBLE(_CANCEL/_CONFIRM)/EQUIPMENT_ENTER/STORAGE_CHECK/TEMPLATE_BOX_T1/BOX_USE/BOX_AMOUNT_OCR 全部在位。
+- **根因 2（时间差 8h）**：rootfs 未装 tzdata 且环境无 TZ → proot 全环境 UTC（wrapper `gui_started_at` 10:47 vs 设备 18:47 实证）。修复：`ProotHost.baseEnv` 加 `TZ=CST-8`（POSIX 形式，UTC+8 无 DST，不依赖 zoneinfo 文件）——一行覆盖 proot 全部进程（wrapper/runner/gui/pip/env_fix）。副作用可自愈：config 里 UTC 时代写入的 NextRun 首次全部到期 → 任务集中补跑一轮后重排正常。
+- **根因 3（顺带实锤的开局死循环）**：App 重装/重启拆 VD 后游戏成**无窗孤儿**（pid 活、窗口随旧 VD 销毁、新 VD 纯黑帧）→ ALAS 只按 pid 判活 → ui_ensure 拿黑帧 → GamePageUnknownError → `checker` 确认服务器在线 → exit(1) → wrapper 重拉孤儿依旧 → 无限 respawn（本次实测 respawns 连涨 3 次不回血）。为何以前能自愈：孤儿被系统隔夜回收后走 GameNotRunningError→Restart 链路；本次孤儿新鲜所以锁死。修复：`runner.py` 进 `alas.loop()` 前加 daemon 同款黑帧判定（全屏通道均值和 <1）→ 孤儿即 `app_stop` → 调度器走 GameNotRunningError → `task_call('Restart')` 官方任务重新拉起到 VD（画面健在则绝不动，同 daemon 语义）。双源同步 runner.py。
+- **真机验证（0.1.1+三修复装机，19:32 会话）**：①TZ——wrapper `gui_started_at` = 19:22:46 与设备时钟一致（修复前 10:47）；②孤儿链——runner 启动 → 判黑清孤儿 → Commission → GameNotRunningError → `Task call: Restart` → 35s 后 `[UI] page_main`，respawns=0 稳定在岗；③科研拆解——`DISASSEMBLE EQUIPMENT → Goto page_storage → storage enter material` **41ms 一次通过**（修复前 30s 空点死亡），`USE BOX → TEMPLATE_BOX_T1 → BOX_USE → BOX_AMOUNT_OCR 1→15` 全链在位，`[Total_Disassemble] 0/15 → 15/15` 9 秒完成，调度器随后正常推进 Commission/Dorm/Guild。
+- **git 未提交改动**：patches/assets/cn/storage/MATERIAL_CHECK.png×2（新增）、ProotHost.kt（TZ）、runner.py×2（孤儿清理）、账册。
+
+### 2026-09-19 · 复验 ✅：E 科研触发面 + CDN 全量三渠道同源（回应「上游不可能不修」）
+
+- **用户追问**：E 科研是否碰到必炸？这么多人用，上游（含 fullcn 的 CDN 渠道）会不会早已修好、只是我们没拉到？→ 拉全量实证。
+- **三渠道同源（无任何隐藏修复）**：123clouddisk `latest.json` = `git ls-remote git://git.lyoko.io` = GitHub master = `74e8231`（2026-09-18，PR #5997 只动 island/shop/i18n）；`git clone` 全量 9437 文件落 `.tmp/cdn_check/repo`，与桌面端对整个 `assets/cn/`、`module/` `diff -r` **全空**（仅 `__pycache__`）；`MATERIAL_CHECK.png` 三处 sha256 全同（`1e87852a…`，即 2022 版）。GitHub API 文件史：仅 `faf5a74e` **2022-08-17** 一个提交（订正前文 08-21）。
+- **E 触发链代码实证**（research.py:265-271）：8 种 genre（B/C/D/E/G/H/Q/T）中**唯一** `genre=='E' and equipment_amount>0` 分支调 `storage_disassemble_equipment` → 必经 `_storage_enter_material` → 必过 MATERIAL_CHECK——模板失效则 E 科研**碰到必炸**，其余 7 种不碰仓库。
+- **「这么多人用为什么没人修」四因**：①触发面窄——ta152 预设里 E 排第 13 位之后、默认自定义过滤器 E2 也在尾部（均「含 E」但垫底）；实证桌面 5 个月 50 天 Research、**0 次 E 选中**（"Going to start an E series" 仅 04-10/04-26 两条日志）；②bug 年轻——04-26 桌面同链跑通（`Used 15 box(es)` 干净收尾），UI 改版是 4 月底之后某版本的 silent 改动（9-8 幽影迷城大更、9-17 公告正文均无仓库 UI 条目）；③selector.py:246 有「仓库无箱忽略 E」保护（萌新不踩、箱多的老玩家才踩）；④ALAS 卡死自愈重试把症状粉饰成「科研偶尔犯病」，带日志上报者寥寥——同链 #4815 开 16 个月未修，此链本就低维护区。
+- **结论**：桌面/CDN/上游三方同款过期资产+同款代码，跑 E 必卡；我们的补丁是当前唯一真机验证过的修复。上游 issue/PR 是否提交待用户决策（若提，建议把模板改成旧版风格的黑底+稳定锚点，而非整屏实帧，避免格子内容差异拖垮整屏相关度）。
+- **git 未提交改动**：账册。
+
 ## v0.1.1（2026-09-18 发布）
 
 ### 2026-09-18 · 发布 ✅：v0.1.1 首个功能迭代（启动提速 + 活动图修复 + OCR 升级）
