@@ -52,6 +52,20 @@ def main():
     from alas import AzurLaneAutoScript
     alas = AzurLaneAutoScript(config_name=config_name)
     if task is None:
+        # 进调度前先清无窗孤儿：App 重装/VD 重建后游戏进程可能仍被 pidof 判活，
+        # 但窗口已随旧 VD 销毁、新 VD 上只出纯黑帧。ALAS 只按 pid 判活
+        # （ui.py GameNotRunningError 不会触发），ui_ensure 拿黑帧直接
+        # GamePageUnknownError → exit(1)，wrapper 重拉后孤儿依旧 → 死循环。
+        # 此处先按 daemon 同款黑帧判定（check_screen_black：全屏通道均值和 <1）
+        # 把孤儿 app_stop，让调度器走 GameNotRunningError → task_call('Restart')
+        # 由官方 Restart 任务把游戏重新拉起到 VD 上。画面健在则不动。
+        if alas.device.app_is_running():
+            alas.device.screenshot()
+            image = alas.device.image
+            if image is None or float(image.mean()) * 3 < 1.0:
+                logger.warning('MaaAL runner: orphan game (pid alive, black frames), '
+                               'app_stop before loop')
+                alas.device.app_stop()
         alas.loop()  # 阻塞；内部 set_file_logger(config_name)，正常退出/崩溃均有 exit(1) 分支
     else:
         # daemon（半自动点击）上游设计上不拉游戏——官方前提是游戏已在跑，它只盯当前屏。
