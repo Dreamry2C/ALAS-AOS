@@ -2,6 +2,10 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
+### 2026-09-20 · 收尾 ✅：旧版 MaaAzurLane 已由用户卸载
+
+- 用户确认卸载，`pm list` 复核设备仅余 `io.github.shinarin.alasaos`；新包冷启动 2s 到 RUNNING（22:25:56），双装端口占位隐患彻底关闭。v0.1.3 发版链全部收尾。
+
 ### 2026-09-20 · 发版 🚀：v0.1.3「ALAS-AOS 断代」（用户授权 commit/push/release）
 
 - **提交**：`fc807ab feat(rebrand): ALAS-AOS 全量断代更名 + 启动链双加固 + v0.1.3 发版准备`（121 文件，+770/-8147）；tag `v0.1.3` 打在发版 commit 上（versionName 由 git describe 导出，确保 APK=0.1.3 精确版）。
