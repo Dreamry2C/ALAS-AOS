@@ -84,9 +84,9 @@ private const val SCOPE_HEIGHT_FIX_JS =
 private const val IDLE_SPINNER_FIX_JS =
     """
     (() => {
-      if (document.getElementById('maaal-idle-spinner-fix')) return;
+      if (document.getElementById('alasaos-idle-spinner-fix')) return;
       const s = document.createElement('style');
-      s.id = 'maaal-idle-spinner-fix';
+      s.id = 'alasaos-idle-spinner-fix';
       s.textContent = '.spinner-border.text-secondary{animation:none !important;border-right-color:currentColor !important;}'
         + 'div[style*="--loading-border-fill--"]{border:none !important;width:auto !important;height:auto !important;}';
       document.head.appendChild(s);

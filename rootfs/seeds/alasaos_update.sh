@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# MaaAL · ALAS 热更新（rootfs 内由 App 侧 AlasUpdater 经 proot 拉起）
+# AlasAos · ALAS 热更新（rootfs 内由 App 侧 AlasUpdater 经 proot 拉起）
 #
 # 只拉 ALAS 源码，不动依赖（InstallDependencies:false 已锁死 pip）。
 # deploy.yaml 里 ALAS 内置更新器已被 AutoUpdate:false 锁死，
@@ -25,22 +25,22 @@
 # FAILED（断网/超时/镜像不可达）由 App 降级为"跳过更新"，不阻塞启动。
 #
 # 环境变量（均可 export 覆盖，冒号后为默认值）：
-#   MAAAL_ALAS_ROOT      /opt/alas
-#   MAAAL_UPDATE_REPO    git://git.lyoko.io/AzurLaneAutoScript
-#   MAAAL_UPDATE_BRANCH  master
-#   MAAAL_UPDATE_DEPTH   50
-#   MAAAL_UPDATE_TIMEOUT 240（秒；首次 fetch 需整棵浅树，弱网可调大）
-#   MAAAL_UPDATE_NO_CDN  置非空则跳过 CDN 通道（排障用）
+#   ALASAOS_ALAS_ROOT      /opt/alas
+#   ALASAOS_UPDATE_REPO    git://git.lyoko.io/AzurLaneAutoScript
+#   ALASAOS_UPDATE_BRANCH  master
+#   ALASAOS_UPDATE_DEPTH   50
+#   ALASAOS_UPDATE_TIMEOUT 240（秒；首次 fetch 需整棵浅树，弱网可调大）
+#   ALASAOS_UPDATE_NO_CDN  置非空则跳过 CDN 通道（排障用）
 # =============================================================================
 set -uo pipefail
 
-ALAS_DIR="${MAAAL_ALAS_ROOT:-/opt/alas}"
-REPO="${MAAAL_UPDATE_REPO:-git://git.lyoko.io/AzurLaneAutoScript}"
-BRANCH="${MAAAL_UPDATE_BRANCH:-master}"
-DEPTH="${MAAAL_UPDATE_DEPTH:-50}"
-TIMEOUT="${MAAAL_UPDATE_TIMEOUT:-240}"
-STATE_FILE="$ALAS_DIR/.maaal_alas_commit"
-FAIL_FILE="$ALAS_DIR/.maaal_update_fail_date"
+ALAS_DIR="${ALASAOS_ALAS_ROOT:-/opt/alas}"
+REPO="${ALASAOS_UPDATE_REPO:-git://git.lyoko.io/AzurLaneAutoScript}"
+BRANCH="${ALASAOS_UPDATE_BRANCH:-master}"
+DEPTH="${ALASAOS_UPDATE_DEPTH:-50}"
+TIMEOUT="${ALASAOS_UPDATE_TIMEOUT:-240}"
+STATE_FILE="$ALAS_DIR/.alasaos_alas_commit"
+FAIL_FILE="$ALAS_DIR/.alasaos_update_fail_date"
 
 # 终态失败才记退避：通道内回落不算失败
 fail() { date +%F > "$FAIL_FILE" 2>/dev/null; echo "FAILED $1"; exit 1; }
@@ -71,7 +71,7 @@ fi
 find .git -name '*.lock' -delete 2>/dev/null
 
 # ---------- 通道 1：CDN pack ----------
-if [[ -z "${MAAAL_UPDATE_NO_CDN:-}" ]]; then
+if [[ -z "${ALASAOS_UPDATE_NO_CDN:-}" ]]; then
   cdn_out="$(python3 seeds/cdn_update.py "$ALAS_DIR" "$current" 2>&1)"; cdn_rc=$?
   echo "$cdn_out" | sed 's/^/  /'
   cdn_last="$(echo "$cdn_out" | tail -1)"

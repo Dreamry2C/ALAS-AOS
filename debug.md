@@ -31,12 +31,12 @@
 ## [2026-09-18] 通用 PP-OCR 读不了游戏字体：名字区糊字 OCR 出 '01' 毒害章节识别（chapter '0' → CampaignNameError）
 
 - **现象**：runner 进活动图前死于 `ScriptEnd: Campaign name error`，连图都进不去；ensure_campaign_ui 循环 20 次全挂。
-- **根本原因**：选关徽章名字区 OCR 读出 `['01','D3','B2']`——D1 未通关时是 0% 红签小字样式，其名字图的 **D 字形经 extract_letters 二值化后糊成实心团**（内孔消失），MaaAL 手机端换用的通用 PP-OCR 模型把它读成 '01' → 后处理变 '0-1' → chapter='0' → Counter 平票取首见 → `campaign_chapter=='0'` 触发 raise。**桌面 ALAS 不犯此错是因为它用 azur_lane 专用 cnocr 模型（AL 字体微调，charset 仅 39 字符）**——对同一手机帧同一名字区实测读出 `['D1','D3-','B2']`，像素无罪，纯模型差距。通用候选全灭：v5_ch_mobile 读 'ս'、v4_ch_mobile 'սս'、v4_en_mobile 空串、v5_en_mobile 字典维度不匹配。**教训：游戏专用字体（尤其小字号+描边+二值化后糊掉的字形）不要指望通用 OCR；上游用什么模型就用什么模型。排查 OCR 错误先拿上游模型对同一输入对质，立刻区分"像素问题"还是"模型问题"。**
+- **根本原因**：选关徽章名字区 OCR 读出 `['01','D3','B2']`——D1 未通关时是 0% 红签小字样式，其名字图的 **D 字形经 extract_letters 二值化后糊成实心团**（内孔消失），ALAS-AOS 手机端换用的通用 PP-OCR 模型把它读成 '01' → 后处理变 '0-1' → chapter='0' → Counter 平票取首见 → `campaign_chapter=='0'` 触发 raise。**桌面 ALAS 不犯此错是因为它用 azur_lane 专用 cnocr 模型（AL 字体微调，charset 仅 39 字符）**——对同一手机帧同一名字区实测读出 `['D1','D3-','B2']`，像素无罪，纯模型差距。通用候选全灭：v5_ch_mobile 读 'ս'、v4_ch_mobile 'սս'、v4_en_mobile 空串、v5_en_mobile 字典维度不匹配。**教训：游戏专用字体（尤其小字号+描边+二值化后糊掉的字形）不要指望通用 OCR；上游用什么模型就用什么模型。排查 OCR 错误先拿上游模型对同一输入对质，立刻区分"像素问题"还是"模型问题"。**
 - **解决方案**：本次走"消除输入"绕法——把 D1 手动通关，徽标变 Clear! 大签样式（大字号白字，字母内孔清晰），名字 OCR 恢复正常。通用修法（后续项）：azur_lane cnocr 模型（MXNet）转 ONNX 上机，或纯 numpy 手写 densenet-lite-gru 前向，集成进 rpc.py 按 lang='azur_lane' 路由+39 字符 keys。注意 OCR 后处理的平票逻辑会放大单次误读（Counter 取首见），一个糊字足以全盘皆输。
 
 ## [2026-09-17] adb forward 直接占 127.0.0.1:22267 与桌面版 ALAS WebUI 撞车：桌面打开显示的是手机内容
 
-- **现象**：用户打开桌面版 ALAS，浏览器里显示的却是项目（手机/MaaAL）的 ALAS WebUI 内容。
+- **现象**：用户打开桌面版 ALAS，浏览器里显示的却是项目（手机/ALAS-AOS）的 ALAS WebUI 内容。
 - **根本原因**：调试时 `adb forward tcp:22267 tcp:22267` 把手机 WebUI 绑到 PC 的 127.0.0.1:22267 且**调完没拆**；桌面版 ALAS WebUI 默认也用 22267（其 deploy.yaml 未自定义 WebuiPort）。后果：①桌面 webui 启动 bind 失败（端口被 adb.exe 占，netstat 实锤 PID 3828）；②浏览器访问 127.0.0.1:22267 实际连到 adb 转发 → 手机内容。撞车窗口期在该页面改的配置**全部写进了手机端**（桌面 `config/alas.json` mtime 停在 9-12，未被写入——可用 mtime 自证）。
 - **解决方案**：**PC 侧转发端口永远不与设备服务端口同号**——手机 WebUI 固定转发 `adb forward tcp:32267 tcp:22267`，PC 浏览器用 127.0.0.1:32267；调试结束顺手 `adb forward --remove tcp:32267`。排查"显示内容不对"先 `adb forward --list` + `netstat -ano | grep <port>` 看端口在谁手里（adb.exe=转发，python=本地服务）。
 
@@ -44,7 +44,7 @@
 
 - **现象**：活动图（event_20260908_cn D3）每进一张新图必崩一次——loading 9% 时 `WARNING | Entered map with is_combat_loading appeared`，随后 `Image to detect is not in_map` 刷 11~28 条，~18s 后 `MapDetectionError` 穿透顶层 `Saving error`；调度器显示"运行中"但在报错循环，连崩后进程退出、wrapper 重拉时 `CRITICAL | Game page unknown`。
 - **根本原因**：**图机制 × 上游缺陷 × 用户图状态三重叠加**。①D3 进图必发潜艇伏击战（spawn_data battle 0 双 siren + `MOVABLE_ENEMY_TURN=(2,)`，伏击在 loading 未完即排队）；②上游 `campaign_base.run()` 在 enter_map 的 is_combat_loading 出口后**直接 map_init，无伏击战处理**，而 map_init 容错仅 ~18s（`error_confirm=Timer(5,count=10)`）< 伏击战时长 40-90s；③用户图**未 3 星**（日志 `Map_info 99%, star_1, star_2, 100_percent_clear`，无 star_3/clear_mode → MAP_PREPARATION `No auto search option.`）→ 只能手动模式 → 必踩伏击窗口。有自律寻敌（3 星图）时进图直接索敌不触发伏击遭遇战，故 3 星图不崩。上游 issue #5969/#5970（2026-09-11，同活动 B3，**桌面雷电模拟器同款**——可排除 proot 环境）；修复 commit 46fe341 只加 AUTO_SEARCH_TITLE2（自律开关 JP 模板），**不覆盖手动模式进图伏击**。
-- **解决方案**：环境层无解（红线：不改 ALAS）。用户侧：换已 3 星的图挂（B3/C3 等）或先手动把图打到 3 星再挂。MaaAL 层可缓解（未做，候选）：检测 `MapDetectionError+is_combat_loading` 崩溃签名 → 延长退避 + UI 明示"该图未 3 星，手动模式与进图伏击冲突"。治本需上游在 map_init 前等伏击战结束。**加重坑：崩溃重拉时 `Already in map, retreating` 会撤退重进，对"进图必发伏击"的图=再踩一次伏击，重拉≠安全，构成死循环**——看到 MapDetectionError + retreating 组合要想到这层。
+- **解决方案**：环境层无解（红线：不改 ALAS）。用户侧：换已 3 星的图挂（B3/C3 等）或先手动把图打到 3 星再挂。ALAS-AOS 层可缓解（未做，候选）：检测 `MapDetectionError+is_combat_loading` 崩溃签名 → 延长退避 + UI 明示"该图未 3 星，手动模式与进图伏击冲突"。治本需上游在 map_init 前等伏击战结束。**加重坑：崩溃重拉时 `Already in map, retreating` 会撤退重进，对"进图必发伏击"的图=再踩一次伏击，重拉≠安全，构成死循环**——看到 MapDetectionError + retreating 组合要想到这层。
 
 ## [2026-09-17] 验证修复前先核对设备实际装机版本：HEAD ≠ 装机版（env_fix 60s/300s 事故）
 
@@ -97,7 +97,7 @@
 
 - **现象**：真机验证热更新恢复路径，`app.log` 里只有 FAILED（W 级）行，UNCHANGED 会话一条 AlasUpdater 记录都没有，一度怀疑启动链没走到更新步。
 - **根本原因**：`FileLogTree`（`log/LogTrees.kt`）过滤级别 WARN+，Timber.i/d 只进 logcat（tag=类名，如 `AlasUpdater`）；且 HONOR 系统日志极吵，logcat 缓冲几分钟就被冲掉。
-- **解决方案**：判 INFO 级事件的旁证——热更新看 `.maaal_alas_commit` 的 mtime（UNCHANGED 也会重写）与 `.git/FETCH_HEAD` 是否变化；会话级判定看 ps 进程树。长期可考虑给 FileLogTree 开 INFO（评估噪音后定）。
+- **解决方案**：判 INFO 级事件的旁证——热更新看 `.alasaos_alas_commit` 的 mtime（UNCHANGED 也会重写）与 `.git/FETCH_HEAD` 是否变化；会话级判定看 ps 进程树。长期可考虑给 FileLogTree 开 INFO（评估噪音后定）。
 
 ## [2026-09-16] 真机测桥回环延迟：toybox `nc` 可用，stat 轮询地板 ~28ms
 
@@ -282,13 +282,13 @@
 ## [2026-09-17] ALAS 全量补丁冻结漂移：cp 整文件覆盖会把文件冻在补丁年代
 
 - **现象**：挂机中 ALAS 重启游戏后登录流程炸 `TypeError: ModuleBase.image_color_button() got an unexpected keyword argument 'threshold'`，runner 死、任务断连。
-- **根本原因**：补丁施加机制是 `cp -rf patches/module/. → /opt/alas/module/`（build-rootfs.sh:175）**整文件覆盖**。`patches/module/base/base.py` 是 m0 时代全量拷贝（自有改动仅 early_ocr_import 的 MaaAL 预热块 9 行），热更新把 ALAS 推到上游 master 后，base.py 被补丁冻回旧版（`color_threshold`），而同树 login.py 已是新版（`threshold`），API 撞车。排查锚点：设备 login.py 与上游 master 逐字节 diff 为空 → 设备跟踪 master → 补丁按 master 重打即收敛。
-- **解决方案**：全量补丁**重打** = 上游 master 原样 + MaaAL 块（脚本锚点替换，diff 应只剩自有改动）；直写设备活文件 + diff 校验。长期教训：① 补丁文件里的自有改动必须压缩到最小并 BEGIN/END 标记（本次正是靠标记确认只有 9 行）；② ALAS 热更新后任意 API 型 TypeError，先怀疑补丁漂移，diff 设备文件与上游 master 即现形；③ 理想终态是差分补丁（git apply）替代整文件覆盖。
+- **根本原因**：补丁施加机制是 `cp -rf patches/module/. → /opt/alas/module/`（build-rootfs.sh:175）**整文件覆盖**。`patches/module/base/base.py` 是 m0 时代全量拷贝（自有改动仅 early_ocr_import 的 ALAS-AOS 预热块 9 行），热更新把 ALAS 推到上游 master 后，base.py 被补丁冻回旧版（`color_threshold`），而同树 login.py 已是新版（`threshold`），API 撞车。排查锚点：设备 login.py 与上游 master 逐字节 diff 为空 → 设备跟踪 master → 补丁按 master 重打即收敛。
+- **解决方案**：全量补丁**重打** = 上游 master 原样 + ALAS-AOS 块（脚本锚点替换，diff 应只剩自有改动）；直写设备活文件 + diff 校验。长期教训：① 补丁文件里的自有改动必须压缩到最小并 BEGIN/END 标记（本次正是靠标记确认只有 9 行）；② ALAS 热更新后任意 API 型 TypeError，先怀疑补丁漂移，diff 设备文件与上游 master 即现形；③ 理想终态是差分补丁（git apply）替代整文件覆盖。
 
 ## [2026-09-17] 补丁冻结第二案：args.json 整文件补丁把活动列表冻在补丁年代（幽影迷城不可见）
 
 - **现象**：桌面版 ALAS 已是「幽影迷城」（event_20260908_cn），手机端 WebUI 活动下拉仍停在「沉溺于星光之城」（event_20260813_cn）；但设备 ALAS commit 与上游 master HEAD 逐字一致（92c07aa），`campaign/event_20260908_cn/` 地图资源、i18n 译名全部到位——只有活动**选项列表**旧。
-- **根本原因**：与 base.py 案同源——`patches/module/config/argument/{args.json,argument.yaml}` 是整文件覆盖补丁，每次启动 AlasOverlay 重放把 args.json 冻回补丁年代。args.json 是 WebUI 活动选项的唯一来源（`campaign/Readme.md` → config_updater.py 生成链 → args.json），上游 git 跟踪它、热更新本可带新，补丁重放又打回。全量 diff（补丁版 vs 上游 92c07aa 版）：16 项差异里 MaaAL 真定制只有 2 行（ScreenshotMethod/ControlMethod 各追加 `maaal` 选项），其余全是冻结漂移。
+- **根本原因**：与 base.py 案同源——`patches/module/config/argument/{args.json,argument.yaml}` 是整文件覆盖补丁，每次启动 AlasOverlay 重放把 args.json 冻回补丁年代。args.json 是 WebUI 活动选项的唯一来源（`campaign/Readme.md` → config_updater.py 生成链 → args.json），上游 git 跟踪它、热更新本可带新，补丁重放又打回。全量 diff（补丁版 vs 上游 92c07aa 版）：16 项差异里 ALAS-AOS 真定制只有 2 行（ScreenshotMethod/ControlMethod 各追加 `maaal` 选项），其余全是冻结漂移。
 - **解决方案**：**生成产物不补丁化，现场再生**——① 删双源 args.json/argument.yaml 补丁（共 4 文件）；② 新增 `seeds/regen_args.py`：跑 ALAS 完整生成链（活动列表随 `campaign/Readme.md` 走），再后处理补 `maaal` 选项与 zh-CN 显示名（全幂等）；③ ProotHost 启动链热更新后无条件跑（失败降级警告不阻塞）。**坑中坑**：生成器必须用 `python -m module.config.config_updater` 模块方式跑——直传脚本路径时 `sys.path[0]=module/config/`，`from deploy.utils import` 直接 ModuleNotFoundError；且 ProotHost 对 runGuest 失败只 Timber.w（logcat 被 HONOR 噪音分钟级冲掉），首装静默失败一轮，靠「args.json mtime 停在装机前 + 内容与补丁版逐字节等大」才现形。验证锚点：args.json mtime 刷新 + `Event.Campaign.Event.option` 含 `event_20260908_cn` + `maaal` 选项仍在。
 
 ## [2026-09-17] WebUI「闲置」状态环转圈 + 神秘方框——pywebio `.style()` 打在 wrapper 上，fill 定制全程没碰到 spinner

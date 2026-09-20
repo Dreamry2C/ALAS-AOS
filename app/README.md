@@ -16,7 +16,7 @@ MaaFwApp 是基于 [MaaFramework](https://github.com/MaaXYZ/MaaFramework) 的 An
 
 MaaFramework 跑在 [Shizuku](https://shizuku.rikka.app/) 或 root 拉起的特权进程里，截屏和点击走本机 native controller，不经过 adb。
 
-MaaFwApp 本身不包含具体业务资源。Android 上要把资源在**构建期**打进 APK。接入步骤见 [资源接入](INTEGRATION.md)。
+MaaFwApp 本身不包含具体业务资源。Android 上要把资源在**构建期**打进 APK。~~接入步骤见资源接入（INTEGRATION.md）~~（pi-profile 配方机制及其文档已随本 fork 减法移除）。
 
 ## 主要功能
 
@@ -65,7 +65,7 @@ MaaFwApp 本身不包含具体业务资源。Android 上要把资源在**构建�
 1. 先按 [Project Interface V2 协议](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/zh_cn/3.3-ProjectInterfaceV2%E5%8D%8F%E8%AE%AE.md) 写好 `interface.json` 和资源。开发和排查 Pipeline 请用 MaaFramework 提供的调试工具，不要把本应用当调试器。
 2. 拷贝 [`pi-profile.sample.yaml`](pi-profile.sample.yaml)，填资源路径和包名，放到本仓库之外。
 3. 在 `local.properties` 里写 `pi.profile=<配方的绝对路径>`（或设环境变量 `PI_PROFILE`）。
-4. 拉 MaaFramework 的 Android 产物并出包，详见 [资源接入](INTEGRATION.md)。
+4. ~~拉 MaaFramework 的 Android 产物并出包（详见资源接入 INTEGRATION.md）~~（配方机制及其文档已随本 fork 减法移除，此步骤失效）。
 
 换一份资源 = 换一份配方 + 重新出包，不必改本仓库的代码。
 

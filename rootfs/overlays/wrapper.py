@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MaaAL v3 · ALAS 进程管理 wrapper（rootfs 内，stdlib only）。
+"""AlasAos v3 · ALAS 进程管理 wrapper（rootfs 内，stdlib only）。
 
 薄 HTTP（127.0.0.1:22400）+ 进程组管理，供 App 悬浮窗 start/stop/日志 使用。
 端口选择：避开 m0 桥 22300 与 WebUI 22267。
@@ -35,7 +35,7 @@ GET  /configs       → {"configs": [str]}：config/*.json 去掉 template* 的�
   WebUI（gui.py）由 wrapper 作子进程监管（崩溃自动重拉，退避 5s→60s），
   悬浮窗 start/stop 与 WebUI 启停按钮并存的双头问题留阶段四决策
   （候选：wrapper 同进程 uvicorn 直调 ProcessManager.get_manager()）。
-  MAAAL_WEBUI=0 可关 WebUI（省内存/调试）。
+  ALASAOS_WEBUI=0 可关 WebUI（省内存/调试）。
 - 停止语义等同 m0 的 ProcessManager.stop（其本身就是 kill()，无 graceful）：
   ALAS 无 SIGTERM handler，SIGTERM 即默认终止；3s 不死补 SIGKILL。
 - 工具进程与挂机互斥（共用同一块虚拟屏）：锁序固定 _tool_lock → _runner_lock，
@@ -198,7 +198,7 @@ def _runner_supervisor():
         uptime = time.time() - (_runner_started_at or time.time())
         backoff = _RUNNER_BACKOFF_INIT if uptime > _RUNNER_HEALTHY_UPTIME \
             else min(backoff * 2, _RUNNER_BACKOFF_MAX)
-        print(f'MaaAL wrapper: runner exited code={proc.returncode} '
+        print(f'AlasAos wrapper: runner exited code={proc.returncode} '
               f'uptime={uptime:.0f}s, respawn in {backoff:.0f}s', flush=True)
         if _closing.wait(backoff):
             break
@@ -211,10 +211,10 @@ def _runner_supervisor():
             try:
                 proc2 = _spawn_runner(cfg)
                 _runner_respawns += 1
-                print(f'MaaAL wrapper: runner respawned pid={proc2.pid} '
+                print(f'AlasAos wrapper: runner respawned pid={proc2.pid} '
                       f'config={cfg} (#{_runner_respawns})', flush=True)
             except OSError as e:
-                print(f'MaaAL wrapper: runner respawn failed: {e}', file=sys.stderr, flush=True)
+                print(f'AlasAos wrapper: runner respawn failed: {e}', file=sys.stderr, flush=True)
 
 
 # ---------------------------------------------------------------- 工具进程管理（ALAS 工具任务）
@@ -367,9 +367,9 @@ def _gui_supervisor():
             try:
                 _start_gui_once()
                 proc = _gui
-                print(f'MaaAL wrapper: gui.py started pid={proc.pid}', flush=True)
+                print(f'AlasAos wrapper: gui.py started pid={proc.pid}', flush=True)
             except OSError as e:
-                print(f'MaaAL wrapper: gui spawn failed: {e}', file=sys.stderr, flush=True)
+                print(f'AlasAos wrapper: gui spawn failed: {e}', file=sys.stderr, flush=True)
                 proc = None
         if proc is None:
             if _closing.wait(backoff):
@@ -382,7 +382,7 @@ def _gui_supervisor():
         uptime = time.time() - (_gui_started_at or time.time())
         backoff = _GUI_BACKOFF_INIT if uptime > _GUI_HEALTHY_UPTIME \
             else min(backoff * 2, _GUI_BACKOFF_MAX)
-        print(f'MaaAL wrapper: gui.py exited code={proc.returncode} '
+        print(f'AlasAos wrapper: gui.py exited code={proc.returncode} '
               f'uptime={uptime:.0f}s, respawn in {backoff:.0f}s', flush=True)
         if _closing.wait(backoff):
             break
@@ -434,7 +434,7 @@ def _acquire_instance_lock():
     try:
         fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        print(f'MaaAL wrapper: another instance holds {LOCK_PATH}', file=sys.stderr)
+        print(f'AlasAos wrapper: another instance holds {LOCK_PATH}', file=sys.stderr)
         sys.exit(2)
     fd.write(str(os.getpid()))
     fd.flush()
@@ -503,7 +503,7 @@ def _count_lines(path):
 # ---------------------------------------------------------------- HTTP 面
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = 'MaaALWrapper/3.0'
+    server_version = 'AlasAosWrapper/3.0'
 
     def log_message(self, fmt, *args):  # 静音访问日志
         pass
@@ -606,10 +606,10 @@ def main():
     _arm_stdin_watchdog()
     threading.Thread(target=_runner_supervisor, daemon=True).start()
     threading.Thread(target=_tool_supervisor, daemon=True).start()
-    if os.environ.get('MAAAL_WEBUI', '1') != '0':
+    if os.environ.get('ALASAOS_WEBUI', '1') != '0':
         threading.Thread(target=_gui_supervisor, daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), _Handler)
-    print(f'MaaAL wrapper: listening on http://{HOST}:{PORT}', flush=True)
+    print(f'AlasAos wrapper: listening on http://{HOST}:{PORT}', flush=True)
     server.serve_forever()
 
 

@@ -10,11 +10,11 @@ import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.register
 
-/** ABIs that ship; a debug build can narrow to one via build.debugAbi to save build time. MaaAL: arm64 only — the bundled rootfs is ARM64 Ubuntu and proot does not emulate, so x86_64 could never run ALAS */
+/** ABIs that ship; a debug build can narrow to one via build.debugAbi to save build time. ALAS-AOS: arm64 only — the bundled rootfs is ARM64 Ubuntu and proot does not emulate, so x86_64 could never run ALAS */
 private val SHIPPED_ABIS = listOf("arm64-v8a")
 
 /** The package every build sits under; a profile only appends to it, it never replaces it */
-private const val BASE_APPLICATION_ID = "com.aliothmoon.maafw"
+private const val BASE_APPLICATION_ID = "io.github.shinarin.alasaos"
 
 /**
  * A profile's app.id becomes package segments, so it takes package rules rather than free text

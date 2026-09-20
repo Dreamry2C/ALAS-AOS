@@ -3,7 +3,7 @@ from module.base.decorator import cached_property
 from module.base.timer import Timer
 from module.base.utils import *
 from module.device.method.hermit import Hermit
-from module.device.method.maaal import MaaAL
+from module.device.method.alasaos import AlasAos
 from module.device.method.maatouch import MaaTouch
 from module.device.method.minitouch import Minitouch
 from module.device.method.nemu_ipc import NemuIpc
@@ -11,7 +11,7 @@ from module.device.method.scrcpy import Scrcpy
 from module.logger import logger
 
 
-class Control(MaaAL, Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
+class Control(AlasAos, Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
     def handle_control_check(self, button):
         # Will be overridden in Device
         pass
@@ -25,7 +25,7 @@ class Control(MaaAL, Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
             'Hermit': self.click_hermit,
             'MaaTouch': self.click_maatouch,
             'nemu_ipc': self.click_nemu_ipc,
-            'maaal': self.click_maaal,
+            'alasaos': self.click_alasaos,
         }
 
     def click(self, button, control_check=True):
@@ -84,8 +84,8 @@ class Control(MaaAL, Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
             self.long_click_maatouch(x, y, duration)
         elif method == 'nemu_ipc':
             self.long_click_nemu_ipc(x, y, duration)
-        elif method == 'maaal':
-            self.long_click_maaal(x, y, duration)
+        elif method == 'alasaos':
+            self.long_click_alasaos(x, y, duration)
         else:
             self.swipe_adb((x, y), (x, y), duration)
 
@@ -96,7 +96,7 @@ class Control(MaaAL, Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
         method = self.config.Emulator_ControlMethod
         if method == 'uiautomator2':
             logger.info('Swipe %s -> %s, %s' % (point2str(*p1), point2str(*p2), duration))
-        elif method in ['minitouch', 'MaaTouch', 'scrcpy', 'nemu_ipc', 'maaal']:
+        elif method in ['minitouch', 'MaaTouch', 'scrcpy', 'nemu_ipc', 'alasaos']:
             logger.info('Swipe %s -> %s' % (point2str(*p1), point2str(*p2)))
         else:
             # ADB needs to be slow, or swipe doesn't work
@@ -120,8 +120,8 @@ class Control(MaaAL, Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
             self.swipe_maatouch(p1, p2)
         elif method == 'nemu_ipc':
             self.swipe_nemu_ipc(p1, p2)
-        elif method == 'maaal':
-            self.swipe_maaal(p1, p2, duration=duration)
+        elif method == 'alasaos':
+            self.swipe_alasaos(p1, p2, duration=duration)
         else:
             self.swipe_adb(p1, p2, duration=duration)
 
@@ -174,9 +174,9 @@ class Control(MaaAL, Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
             self.drag_maatouch(p1, p2, point_random=point_random, hold_duration=hold_duration)
         elif method == 'nemu_ipc':
             self.drag_nemu_ipc(p1, p2, point_random=point_random, hold_duration=hold_duration)
-        elif method == 'maaal':
-            # MaaAL: 简化 drag = 直线滑动 + 末端停留 + 末端补点（不支持 shake 抖动）
-            self.swipe_maaal(p1, p2, duration=duration)
+        elif method == 'alasaos':
+            # AlasAos: 简化 drag = 直线滑动 + 末端停留 + 末端补点（不支持 shake 抖动）
+            self.swipe_alasaos(p1, p2, duration=duration)
             hold_duration = ensure_time(hold_duration)
             if hold_duration > 0:
                 self.sleep(hold_duration)

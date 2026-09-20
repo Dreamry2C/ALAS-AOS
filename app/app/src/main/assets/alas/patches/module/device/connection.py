@@ -114,10 +114,10 @@ class Connection(ConnectionAttr):
             config (AzurLaneConfig, str): Name of the user config under ./config
         """
         super().__init__(config)
-        # MaaAL BEGIN: 桥接模式（serial 以 maaal 开头）无本地 adb 设备，
+        # AlasAos BEGIN: 桥接模式（serial 以 alasaos 开头）无本地 adb 设备，
         # 跳过 detect_device/adb_connect/detect_package/check_mumu_app_keep_alive，
         # 包名直接取配置（auto 时落 CN 默认包名），set_server 保持资源服务器正确。
-        if str(self.serial).startswith('maaal'):
+        if str(self.serial).startswith('alasaos'):
             self.package = self.config.Emulator_PackageName
             if self.package == 'auto':
                 self.package = 'com.bilibili.azurlane'
@@ -125,7 +125,7 @@ class Connection(ConnectionAttr):
             logger.attr('PackageName', self.package)
             logger.attr('Server', self.config.SERVER)
             return
-        # MaaAL END
+        # AlasAos END
         if not self.is_over_http:
             self.detect_device()
 

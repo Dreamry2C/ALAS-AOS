@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# MaaAL · 环境自检修复（rootfs 内由 App 侧 ProotHost 经 proot 拉起，每次启动跑）
+# AlasAos · 环境自检修复（rootfs 内由 App 侧 ProotHost 经 proot 拉起，每次启动跑）
 #
 # 职责（全幂等，失败只告警不阻塞启动）：
 # 1) imageio 钉回上游 requirements.txt 的 2.27.0：imageio 2.35+ 把 P 模式 GIF 统一
@@ -17,11 +17,11 @@
 # =============================================================================
 set -u
 
-ALAS_DIR="${MAAAL_ALAS_ROOT:-/opt/alas}"
+ALAS_DIR="${ALASAOS_ALAS_ROOT:-/opt/alas}"
 cd "$ALAS_DIR" || { echo "env_fix: WARN cd $ALAS_DIR failed"; exit 0; }
 
 WANT="2.27.0"
-MIRROR="${MAAAL_PYPI_MIRROR:-https://mirrors.aliyun.com/pypi/simple}"
+MIRROR="${ALASAOS_PYPI_MIRROR:-https://mirrors.aliyun.com/pypi/simple}"
 
 # 进度留痕到文件：proot 管道 stdout 可能被块缓冲（进程被杀时丢失），
 # 设备侧排查以 log/env_fix.txt 为准（wrapper /logs 按 mtime 可取）

@@ -14,7 +14,7 @@ from module.device.method.adb import Adb
 from module.device.method.ascreencap import AScreenCap
 from module.device.method.droidcast import DroidCast
 from module.device.method.ldopengl import LDOpenGL
-from module.device.method.maaal import MaaAL
+from module.device.method.alasaos import AlasAos
 from module.device.method.nemu_ipc import NemuIpc
 from module.device.method.scrcpy import Scrcpy
 from module.device.method.wsa import WSA
@@ -22,7 +22,7 @@ from module.exception import RequestHumanTakeover, ScriptError
 from module.logger import logger
 
 
-class Screenshot(MaaAL, Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
+class Screenshot(AlasAos, Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
     _screen_size_checked = False
     _screen_black_checked = False
     _minicap_uninstalled = False
@@ -43,7 +43,7 @@ class Screenshot(MaaAL, Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpen
             'scrcpy': self.screenshot_scrcpy,
             'nemu_ipc': self.screenshot_nemu_ipc,
             'ldopengl': self.screenshot_ldopengl,
-            'maaal': self.screenshot_maaal,
+            'alasaos': self.screenshot_alasaos,
         }
 
     @cached_property

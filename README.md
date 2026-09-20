@@ -1,9 +1,11 @@
-# MaaAL 📱⚓
+# ALAS-AOS 📱⚓
 
 > 免 root，把《碧蓝航线》自动化脚本 [ALAS](https://github.com/LmeSzinc/AzurLaneAutoScript) 装进你的 Android 手机——游戏跑在**后台虚拟屏**里挂机，前台刷视频、回消息、打游戏，互不干扰。🎉
+>
+> **名字由来**：`AOS` = **ALAS on Android OS**——ALAS 的 Android 系统版。
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
-[![Release](https://img.shields.io/github/v/release/Shinarin/MaaAL)](https://github.com/Shinarin/MaaAL/releases)
+[![Release](https://img.shields.io/github/v/release/Shinarin/ALAS-AOS)](https://github.com/Shinarin/ALAS-AOS/releases)
 
 ## ✨ 特性
 
@@ -51,9 +53,11 @@ Shizuku 是开源的特权桥接工具，让普通 App 也能使用系统级能�
    - 💻 **Android 10 及以下**：连接电脑执行一条 adb 命令激活；
    - 🔓 **已 root 设备**：打开 Shizuku 直接点「启动」即可。
 
-### 第 2 步：安装 MaaAL
+> 💡 **嫌每次启动 Shizuku 都要连 WiFi 走无线调试？** 可以试试社区 fork 👉 [Shinarin/shizuku-m](https://github.com/Shinarin/shizuku-m)：在官方版基础上加了端口重新挂载，重启 Shizuku 不必再走无线调试，**没连 WLAN 也能启动**（手机重启后的第一次激活仍需按官方方式完成一次）。
 
-1. 到 [Release 页](https://github.com/Shinarin/MaaAL/releases) 下载 `MaaAzurLane-v<版本号>-android-arm64.apk`（约 300MB，运行环境已内置，所以这么大）。
+### 第 2 步：安装 ALAS-AOS
+
+1. 到 [Release 页](https://github.com/Shinarin/ALAS-AOS/releases) 下载 `ALAS-AOS-v<版本号>-android-arm64.apk`（约 300MB，运行环境已内置，所以这么大）。
 2. 安装并打开，按引导完成 **Shizuku 授权**。
 3. 耐心等待首启部署（解压运行环境 + 热更新检查），完成后自动进入挂机页。🎊
 
@@ -87,7 +91,7 @@ Shizuku 是开源的特权桥接工具，让普通 App 也能使用系统级能�
 ### 两个重要提醒
 
 - ⚠️ **控制台里的启动/停止按钮已被锁定**：为防止 WebUI 与挂机页双跑抢设备，ALAS 原生启停通道已关闭（点了只会在日志里留一条警告）。**启停请一律走挂机页或悬浮窗。**
-- 🔁 **手机重启之后**：需要按官方方式重新启动 Shizuku（已 root：App 内点「启动」；未 root：重新走一次无线调试或电脑激活），再打开 MaaAL 即可自动恢复环境。这是免 root 方案物理上不可省略的一步，请知悉。🙏
+- 🔁 **手机重启之后**：需要按官方方式重新启动 Shizuku（已 root：App 内点「启动」；未 root：重新走一次无线调试或电脑激活），再打开 ALAS-AOS 即可自动恢复环境。这是免 root 方案物理上不可省略的一步，请知悉。🙏
 
 ## 📱 支持机型
 
@@ -95,7 +99,7 @@ Shizuku 是开源的特权桥接工具，让普通 App 也能使用系统级能�
 |------|-----|---------|------|
 | HONOR PPG-AN00 | MagicOS | 16 (API 36) | ✅ 全链路实测（开发基线） |
 
-多 ROM 实测矩阵持续补充 👉 [docs/rom-matrix.md](docs/rom-matrix.md)。你的机型跑通了？欢迎到 [Issues](https://github.com/Shinarin/MaaAL/issues) 报喜！🎊
+多 ROM 实测矩阵持续补充 👉 [docs/rom-matrix.md](docs/rom-matrix.md)。你的机型跑通了？欢迎到 [Issues](https://github.com/Shinarin/ALAS-AOS/issues) 报喜！🎊
 
 ## ❓ 常见问题
 
@@ -126,14 +130,13 @@ A：App 私有目录里的运行环境和 ALAS 配置会一并清空，卸载前
 
 ## 🙏 致谢
 
-MaaAL 站在这些优秀开源项目的肩膀上，由衷感谢：💖
+ALAS-AOS 站在这些优秀开源项目的肩膀上，由衷感谢：💖
 
 - [LmeSzinc/AzurLaneAutoScript](https://github.com/LmeSzinc/AzurLaneAutoScript)（ALAS）——《碧蓝航线》自动化的核心大脑 🧠
 - [Aliothmoon/MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)——本 App 的上游基座（虚拟屏 + Shizuku 特权进程框架）📱
 - [RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku)——优雅强大的免 root 特权桥 🔓
 - [termux/proot](https://github.com/termux/proot)——免 root 运行 Linux 用户空间的魔法 🪄
 - [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)——手机端文字识别（PP-OCR 模型）👀
-- [MaaXYZ/MaaFramework](https://github.com/MaaXYZ/MaaFramework)——项目名中 "Maa" 的致敬对象 ⭐
 - [Ubuntu](https://ubuntu.com/)（Canonical）——挂机运行环境的 Linux 地基 🐧
 
 ## 📄 许可

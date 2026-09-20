@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# MaaAL 阶段一 M1 · build-rootfs.sh
+# AlasAos 阶段一 M1 · build-rootfs.sh
 # 烘焙 Ubuntu ARM64 rootfs：ubuntu-base 24.04 + ALAS（钉版）+ PP-OCR（in-proc onnxruntime）+ wrapper
 #
 # 运行环境：GitHub Actions `ubuntu-24.04-arm` runner（原生 aarch64，chroot 无需 qemu）。
@@ -64,7 +64,7 @@ require_file "$ASSETS/overlays/runner.py"
 require_file "$ASSETS/build/spike-f-ocr-gate.py"
 require_file "$ASSETS/patches/assets_fix.py"
 require_file "$ASSETS/seeds/deploy.yaml"
-require_file "$ASSETS/seeds/maaal_update.sh"
+require_file "$ASSETS/seeds/alasaos_update.sh"
 require_file "$ASSETS/seeds/regen_args.py"
 require_file "$ASSETS/shims/jellyfish.py"
 require_file "$ASSETS/models/ocr/det.onnx"
@@ -196,15 +196,15 @@ install -D -m 0644 "$ASSETS/shims/jellyfish.py" "$ROOTFS_DIR$PY_PURELIB/jellyfis
 install -D -m 0644 "$ASSETS/seeds/deploy.yaml" "$ROOTFS_DIR/opt/alas/config/deploy.yaml"
 
 # 实例配置生成器：运行时实例播种由阶段三调用（ALAS CWD=仓库根；脚本内 ALAS 根取
-# MAAAL_ALAS_ROOT 环境变量，调用方需 export MAAAL_ALAS_ROOT=/opt/alas）
+# ALASAOS_ALAS_ROOT 环境变量，调用方需 export ALASAOS_ALAS_ROOT=/opt/alas）
 install -D -m 0644 "$ASSETS/seeds/seed_config.py" "$ROOTFS_DIR/opt/alas/seeds/seed_config.py"
 
 # ALAS 热更新脚本：设备端唯一更新通道（内置更新器已被 AutoUpdate:false 锁死），
 # 阶段三 App 侧 AlasUpdater 经 proot 拉起；协议见脚本头注释
-install -D -m 0755 "$ASSETS/seeds/maaal_update.sh" "$ROOTFS_DIR/opt/alas/seeds/maaal_update.sh"
+install -D -m 0755 "$ASSETS/seeds/alasaos_update.sh" "$ROOTFS_DIR/opt/alas/seeds/alasaos_update.sh"
 
 # args 现场再生器：args.json/argument.yaml 不补丁化，每次启动重跑 ALAS 生成链
-# 并补回 maaal 桥选项（活动列表永不冻结）；App 侧 ProotHost 经 proot 拉起
+# 并补回 alasaos 桥选项（活动列表永不冻结）；App 侧 ProotHost 经 proot 拉起
 install -D -m 0755 "$ASSETS/seeds/regen_args.py" "$ROOTFS_DIR/opt/alas/seeds/regen_args.py"
 
 # 环境自检修复：每次启动幂等跑（App 侧 ProotHost 经 proot 拉起）——把已部署 rootfs 的
@@ -213,7 +213,7 @@ install -D -m 0755 "$ASSETS/seeds/env_fix.sh" "$ROOTFS_DIR/opt/alas/seeds/env_fi
 
 # PP-OCR 模型三件套 → /opt/alas/models/ocr/
 # 注意：这是 v3 自定义路径（非 ALAS 上游约定）——in-proc 版 module/ocr/rpc.py 默认按
-# ./models/ocr/（相对 ALAS 根）加载，MAAAL_OCR_MODEL_DIR 可覆盖；两边约定必须保持一致
+# ./models/ocr/（相对 ALAS 根）加载，ALASAOS_OCR_MODEL_DIR 可覆盖；两边约定必须保持一致
 install -D -m 0644 "$ASSETS/models/ocr/det.onnx"  "$ROOTFS_DIR/opt/alas/models/ocr/det.onnx"
 install -D -m 0644 "$ASSETS/models/ocr/rec.onnx"  "$ROOTFS_DIR/opt/alas/models/ocr/rec.onnx"
 install -D -m 0644 "$ASSETS/models/ocr/keys.txt"  "$ROOTFS_DIR/opt/alas/models/ocr/keys.txt"

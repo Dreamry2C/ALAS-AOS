@@ -11,7 +11,7 @@ from adbutils.errors import AdbError
 try:
     from uiautomator2 import _Service
 except ImportError:
-    # MaaAL: uiautomator2>=3 将 _Service 更名 _Device；桥接模式运行时不用 minitouch，仅需 import 兼容
+    # AlasAos: uiautomator2>=3 将 _Service 更名 _Device；桥接模式运行时不用 minitouch，仅需 import 兼容
     from uiautomator2 import _Device as _Service
 
 from module.base.decorator import Config, cached_property, del_cached_property, has_cached_property

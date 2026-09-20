@@ -60,7 +60,7 @@ fun uiTextPlural(@PluralsRes resId: Int, count: Int, vararg args: Any?): UiText 
 /** PI 作者写的文案：task / option 的 label 与 description */
 fun uiTextFromProject(label: String?): UiText = verbatimOrEmpty(label)
 
-/** MaaFramework 抛回的原文：错误信息、节点名  */
+/** 任务执行层抛回的原文：错误信息、节点名（函数名沿自 MaaFwApp 上游） */
 fun uiTextFromFramework(raw: String?): UiText = verbatimOrEmpty(raw)
 
 /** java.time 或数值格式化的产物，本身已随 locale 变化，不需要再查资源 */

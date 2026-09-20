@@ -27,7 +27,7 @@ import kotlin.math.roundToInt
  *
  * 监听 127.0.0.1:22300，协议为行分隔 JSON 请求/响应 + screencap 响应行后紧跟裸字节帧，
  * 端点 ping/screencap/click/swipe/shell。协议形状与 ALAS 侧冻结客户端
- * rootfs/patches/module/device/method/maaal.py 逐字节兼容：每回复（含错误帧）echo 请求 id。
+ * rootfs/patches/module/device/method/alasaos.py 逐字节兼容：每回复（含错误帧）echo 请求 id。
  */
 object BridgeServer {
 
@@ -84,7 +84,7 @@ object BridgeServer {
         }
         serverSocket = socket
         startedAtMs = SystemClock.elapsedRealtime()
-        thread(isDaemon = true, name = "maaal-bridge-accept") { acceptLoop(socket) }
+        thread(isDaemon = true, name = "alasaos-bridge-accept") { acceptLoop(socket) }
         Ln.i("$TAG: listening on $LISTEN_HOST:$LISTEN_PORT")
     }
 
@@ -111,7 +111,7 @@ object BridgeServer {
                 continue
             }
             val no = clientCounter.incrementAndGet()
-            thread(isDaemon = true, name = "maaal-client-$no") { serveClient(client, no) }
+            thread(isDaemon = true, name = "alasaos-client-$no") { serveClient(client, no) }
         }
     }
 
@@ -308,9 +308,9 @@ object BridgeServer {
         val stderr = ByteArrayOutputStream()
         // stdout/stderr 分线程读全：单线程顺序读会在管道 buffer 撑满时与子进程互等死锁
         val outReader =
-            thread(isDaemon = true, name = "maaal-shell-out") { drain(process.inputStream, stdout) }
+            thread(isDaemon = true, name = "alasaos-shell-out") { drain(process.inputStream, stdout) }
         val errReader =
-            thread(isDaemon = true, name = "maaal-shell-err") { drain(process.errorStream, stderr) }
+            thread(isDaemon = true, name = "alasaos-shell-err") { drain(process.errorStream, stderr) }
         val timeoutMs = (timeoutSec * 1000).toLong().coerceAtLeast(1)
         if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
             process.destroyForcibly()

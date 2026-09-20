@@ -1,4 +1,4 @@
-# MaaAL rootfs 内置 deploy 配置：行结构按 ALAS config/deploy.template-linux-cn.yaml，
+# AlasAos rootfs 内置 deploy 配置：行结构按 ALAS config/deploy.template-linux-cn.yaml，
 # 更新器七键全锁定 + fullcn 同款镜像（git.lyoko.io / aliyun pypi）。
 # Repository 绝不能写 gitee URL 或 tuna pypi 镜像：ALAS config_redirect() 会按内置
 # 规则把非约定值静默改写（gitee→lyoko），写了也留不住，徒增排查成本。

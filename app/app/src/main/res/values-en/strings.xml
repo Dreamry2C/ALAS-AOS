@@ -1,5 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name">MaaAzurLane</string>
+    <string name="app_name">ALAS-AOS</string>
 
     <!-- Common -->
     <string name="common_close">Close</string>
@@ -409,7 +409,7 @@
     <string name="run_log_count">%1$d entries</string>
     <string name="run_log_export">Export</string>
     <string name="run_log_clear">Clear</string>
-    <string name="run_log_empty">No entries yet. MaaFramework output appears here once a run starts.</string>
+    <string name="run_log_empty">No entries yet. ALAS output appears here once a run starts.</string>
     <string name="tasks_log">Log</string>
     <string name="run_log_filter_essential">Key</string>
     <string name="run_log_filter_all">All</string>
@@ -463,7 +463,7 @@
     <string name="log_export_running">Packing…</string>
     <string name="log_export_failed">Export failed: nothing to export</string>
     <string name="log_export_saved">Saved as %1$s</string>
-    <string name="log_export_subject">MaaAzurLane logs</string>
+    <string name="log_export_subject">ALAS-AOS logs</string>
 
     <!-- Settings "Logs" group entries -->
     <string name="settings_section_log">Logs</string>
@@ -514,9 +514,9 @@
     <string name="diagnostic_boolean_conversion_failed">Option "%1$s" input "%2$s" cannot be converted to a boolean</string>
     <string name="schedule_default_name">Schedule %1$d</string>
     <string name="settings_debug_mode">Debug mode</string>
-    <string name="settings_debug_mode_desc">Records everything in the error log; detailed MaaFramework logs start on the next run</string>
+    <string name="settings_debug_mode_desc">Records everything in the error log; detailed privileged-process logs start on the next run</string>
     <string name="dialog_enable_debug_title">Enable debug mode</string>
-    <string name="dialog_enable_debug_message">Requires an app restart to take effect. Detailed MaaFramework logs plus app and privileged-process logcat will be recorded.</string>
+    <string name="dialog_enable_debug_message">Requires an app restart to take effect. Detailed diagnostics plus app and privileged-process logcat will be recorded.</string>
 
     <!-- PI unpacking -->
     <string name="pi_install_title">Preparing project resources</string>
@@ -565,7 +565,7 @@
     <string name="notification_include_log_details">Attach the run log to the message</string>
     <string name="notification_section_test">Test push</string>
     <string name="notification_test_title">Test notification</string>
-    <string name="notification_test_message">This is a test notification from MaaAzurLane</string>
+    <string name="notification_test_message">This is a test notification from ALAS-AOS</string>
 
     <!-- Push channel names -->
     <string name="notification_provider_server_chan">ServerChan</string>

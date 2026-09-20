@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-# MaaAL · ALAS CDN pack 更新通道（上游 deploy/git_over_cdn/client.py 的零依赖复刻）
+# AlasAos · ALAS CDN pack 更新通道（上游 deploy/git_over_cdn/client.py 的零依赖复刻）
 #
 # 协议（与上游逐条对齐）：
 #   1. GET {base}/latest.json（超时 3s，两个 base 轮试）→ {"commit": <sha>}
@@ -8,7 +8,7 @@
 #   3. GET {base}/{latest}/{current}.zip（读超时 20s）→ pack-{latest}.pack/.idx
 #   4. 解进 .git/objects/pack/（先 .tmp 后 os.replace）→ 写 refs/remotes/origin/master
 #
-# 不直接对 App：仅供 maaal_update.sh 调用，最后一行打印四态之一供 bash 分流：
+# 不直接对 App：仅供 alasaos_update.sh 调用，最后一行打印四态之一供 bash 分流：
 #   UPTODATE              本地已是最新（exit 0）
 #   PACK_READY <sha>      pack 与 refs 已就位，bash 侧 git reset --hard 即可（exit 0）
 #   NO_PACK <reason>      CDN 正常但没有此 current 的增量包（404 等），应回落 git://（exit 1）

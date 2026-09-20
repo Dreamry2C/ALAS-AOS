@@ -188,7 +188,7 @@ class AlasRunController(
         const val HTTP_TIMEOUT_MS = 1_500
         const val POST_READ_TIMEOUT_MS = 12_000
         const val LOG_TAIL = 80
-        const val PREFS_NAME = "maaal_alas"
+        const val PREFS_NAME = "alasaos_alas"
         const val KEY_SELECTED_CONFIG = "selected_config"
     }
 }

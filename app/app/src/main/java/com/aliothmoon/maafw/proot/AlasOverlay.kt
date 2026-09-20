@@ -8,12 +8,14 @@ import java.io.File
  * App 资产 `alas/` 对 rootfs `/opt/alas` 的运行时覆盖
  *
  * 两份职责：
- * - wrapper/runner/seed/maaal_update.sh 随 App 版本演进，改它们不必重烘焙 rootfs
+ * - wrapper/runner/seed/alasaos_update.sh 随 App 版本演进，改它们不必重烘焙 rootfs
  *   （rootfs.tar.xz 里那份只是兜底；每次启动都被这里盖成 App 当前版本）
  * - 热更新 `git reset --hard` 会把上游跟踪文件打回原版：patches（module/ 与 assets/）
  *   与 in-proc OCR rpc.py 必须在 UPDATED 后重放
  *
- * 覆盖方式是按字节比对的幂等拷贝；assets_fix.py 只铺到 seeds/（执行要 python，
+ * 覆盖方式是按字节比对的幂等拷贝；STALE_FILES 在拷贝后删除——断代更名
+ * （如 maaal→alasaos）留下的旧名文件只删不盖，防旧码被误加载。
+ * assets_fix.py 只铺到 seeds/（执行要 python，
  * 由 ProotHost 经 proot 另行触发——它幂等且带漂移自检，找不到 Button 会非零退出）
  */
 class AlasOverlay(private val context: Context) {
@@ -29,6 +31,12 @@ class AlasOverlay(private val context: Context) {
             val (c, s, f) = copyTree(assetRoot, File(alasDir, targetRoot))
             copied += c; skipped += s; failed += f
         }
+        var removed = 0
+        for (rel in STALE_FILES) {
+            val stale = File(alasDir, rel)
+            if (stale.isFile && stale.delete()) removed++
+        }
+        if (removed > 0) Timber.i("ALAS overlay stale removed: %d", removed)
         Timber.i("ALAS overlay applied: copied=%d skipped=%d failed=%d", copied, skipped, failed)
         return Result(copied, skipped, failed)
     }
@@ -70,6 +78,12 @@ class AlasOverlay(private val context: Context) {
             "alas/patches/module" to "module",
             "alas/patches/assets" to "assets",
             "alas/patches/assets_fix.py" to "seeds/assets_fix.py",
+        )
+
+        /** 断代遗留的旧名文件（烘焙 tar 仍带 maaal 时代命名）：覆盖后删除，幂等 */
+        val STALE_FILES = listOf(
+            "module/device/method/maaal.py",
+            "seeds/maaal_update.sh",
         )
     }
 }

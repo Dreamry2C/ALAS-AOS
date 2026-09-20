@@ -2,6 +2,82 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
+### 2026-09-20 · 文档 📝：README 增名字由来 + shizuku-m 提示（用户指令）
+
+- **名字由来**：开头引言区加 `AOS = ALAS on Android OS——ALAS 的 Android 系统版`。
+- **shizuku-m 提示**：第 1 步激活方式后加提示块——嫌每次启动 Shizuku 都要连 WiFi 走无线调试，可参考社区 fork [Shinarin/shizuku-m](https://github.com/Shinarin/shizuku-m)（端口重新挂载，重启免无线调试、无 WLAN 可启动；按实加 caveat：手机重启后首次激活仍需官方方式一次，与 devlog 2026-09-15 事实核查一致）。
+
+### 2026-09-20 · 扫尾 🔎：更名全仓再梳理（应用户要求复核"能改但没改"）
+
+- **本轮修正（活文档/活代码的事实性残留）**：① `debug.md:100` 故障排查 tip 的状态文件名 `.maaal_alas_commit`→`.alasaos_alas_commit`（运行时早已改名，tip 断链）；② `docs/roadmap-v3.md` 4 处 `maaal.py`→`alasaos.py`（决策表/架构图/数据面/附录A——开发宪法是活文档，**推翻此前"roadmap-v3 按 D 类历史文档不动"的处理**；`m0-archive/docs/maaal-consensus.md` 引用保留——归档文件真叫这个名）；③ `strings.xml:91` 注释 `MaaMeow`→"上游 MaaFwApp 系"（唯一用户可见 res 里的 maa 字样，纯注释）。架构图框线宽度复核与原文一致（原图本就 79/80 混排）。
+- **复核确认干净**：README/AGENTS/CHANGELOG/development.md、strings（zh+en）、通知渠道文案、仓库 description/badges、`.github/workflows/rootfs.yml`、rootfs 运行时状态文件名（`.alasaos_alas_commit`/`.alasaos_update_fail_date`）、in-app URL（仅 scrcpy 上游 issue 链接）、活跃区无 maa 命名文件。
+- **刻意保留（复核无误）**：Java 包名 `com.aliothmoon.maafw`（内部 namespace）；`keystore/maaazurlane-release.jks`（历史签名留档）；`m0-archive/`、`spike/`、devlog/handoff 历史条目、`debug.md` 历史条目（`com.maaal.spikea` 等是当时事实）；工作目录名 `D:\VSCodeCache\maa-alas`（local.properties keystore 绝对路径依赖）；`app/README.md` 上游存档。
+- **`.tmp/` 说明**：含旧 maaal 探索副本（alas-explore/m5-netresil/upd 等），gitignore 内 scratch 不碍事；**不可整目录清**——`.tmp/gradle-home` 是 GRADLE_USER_HOME，清了要重下整套 Gradle 分发与依赖。
+
+### 2026-09-20 · 断代 ⚡③：桥接标识符 maaal→alasaos 全量整改 + 真机复验（旧包端口占位事故，双修复）
+
+- **整改范围**：R1 `MAAAL_`→`ALASAOS_`（全 rootfs Python/shell + ProotHost.kt setter）、R2 `maaal`→`alasaos`（含文件改名 `method/alasaos.py`、`seeds/alasaos_update.sh`）、R3 `MaaAL`→`AlasAos`（22 文件，含 build/ 两脚本）；双源（rootfs/↔app assets）cmp 全一致；残留扫描零命中。本轮补抓 R1 漏网：`rootfs/build/` 两处——build-rootfs.sh 两行注释、spike-f-ocr-gate.py 四个环境变量引用；其中 gate 设 `MAAAL_OCR_MODEL_DIR` 而 rpc.py 读 `ALASAOS_OCR_MODEL_DIR` 是**功能性断链**（--model-dir 会被 rpc 无视），非仅命名残留。
+- **真机复验事故（21:14~21:43）**：新包首启后 wrapper 以 3s 一轮崩溃重拉 500+ 轮（session.log 311KB）。根因链：旧包 `com.aliothmoon.maafw`（MaaAzurLane v0.1.2）仍装机且其 proot 会话存活（20:14 起，u0_a270）→ 占死 22300/22267/22400 三端口 → 新包 wrapper bind(22400) EADDRINUSE 崩溃 → `awaitServices` 被旧包 wrapper 喂成**假 RUNNING** → 退避计数被重置 → 无限重拉。**期间一切"设备跑旧码"证据（'maaal' WARNING、旧配置值）均来自旧包 rootfs 的日志——新包栈实际健康**，此前"烘焙旧码未覆盖"的怀疑不成立。
+- **修复①**（AlasOverlay.kt）：新增 `STALE_FILES` 删除列表（`module/device/method/maaal.py`、`seeds/maaal_update.sh`），每次启动覆盖后删除——烘焙 tar 仍带旧名文件，而 apply() 只加不删，防旧码被误加载/误选。
+- **修复②**（ProotHost.kt）：supervise 加速死熔断——会话存活 <10s（QUICK_DEATH_MS）记一次 rapidDeath，连续 5 次（MAX_RAPID_DEATHS）→ `fail("会话连续 5 次秒退（端口被占用？），已停止重拉")`；长活后退出计数清零，正常崩溃退避行为不变。
+- **止血与验证**：force-stop 双包 → 端口全释放（旧会话 stdin 看门狗自尽正常）→ 重装新 APK → 21:43:28 干净 RUNNING（env_fix 幂等快路径仅 1s）；`/configs`=["alas"]；挂机冒烟：ALAS 日志桥值全 `alasaos`、零 `maaal`，黑帧 WARNING 为游戏冷启动瞬态（上游通用文案，值随配置走）；游戏重启→登录成功→scheduler pending tasks 正常排队→`/stop` 复位。assembleRelease 41s 全绿。
+- **配置兼容结论**：原"method 值 `maaal` 存在用户配置里故保留"的决策随 appId 断代自然消解——新包=全新安装=全新播种 `alasaos` 配置；旧包配置在其私有区，新包永不触碰，无需迁移代码。
+- **遗留**：旧包 MaaAzurLane 仍装机（已 force-stop），建议择期卸载（卸载即清其 ALAS 配置，操作在用户）；下版 release notes 卸载提示照旧。全部改动未 commit/push（等授权）。
+
+### 2026-09-20 · 跟进 ✅：上游 #6000 证据已上传回复（log+截图打包件 + 三张对比图）
+
+- **回复落地**：2026-09-20 12:04 UTC 以 Shinarin 账号在 [#6000](https://github.com/LmeSzinc/AzurLaneAutoScript/issues/6000) 提交证据评论（1958 字符，与填充内容逐字一致）。附件全部为 GitHub user-attachments 原生上传：`issue-6000-log-and-screenshots.zip`（2026-09-19 完整卡死会话日志 261KB + 三张截图）+ `material-enter-loop-log.txt`（分段节选）+ 新 UI 实拍/2022 旧模板/左下锚点放大三张图。正文要点：环境一句话披露（Android 上跑上游同源码）、空点循环事实（~3.3s/次、45 分钟 45+ 次、`[Total_Disassemble]` 始终 0/15）、日志后段 MaaAL proxy 报错免责一句、ccoeff 0.04 vs 0.85、重申愿提 PR（黑底+稳定锚点，验收材料页 ≥0.9 / 邻近页 ≤0.3）。
+- **上传渠道**：webbridge 驱动用户 Edge（GitHub 已登录），页内构造 `ClipboardEvent(paste)` 直传 user-attachments——绕开 gh 不支持附件 + 新版 composer 懒加载 file input 两个坑；期间撞一次 GitHub 上传限流（"You can't perform that action at this time."），冷却 60s 重试成功。评论框 React 受控，用 webbridge `fill`（触发原生 input 事件）写入。
+- **事实核查（按用户要求，上传前逐项过）**：①45 次空点 grep 计数实证、45 分钟跨度（09:57:50→10:42:19）实证；②上游 12 次点击保护阈值实读桌面 `module/device/device.py:299` 确认；③发现 09-19 会话日志中每段循环在第 ~9 次点击后 runner 即被重拉、**全文无 GameTooManyClickError traceback**（该词为 issue 正文基于桌面端代码的推断；回复正文照实只写「空点循环 + 任务反复失败重拉」，未把 GameTooManyClickError 说成日志实见）；④zip 装包后逐项核对文件清单与大小。
+- **真机 error 目录取证结论**：真实 `log/error/<ts>/` 在 App 私有区（release 无 run-as、shell uid 无权读私有目录、wrapper 只有 /logs 尾行端点、桥 22300 shell 同为 shell uid）——唯一通道是 `adb backup` 全量拉私有目录（估 0.5~1GB、10~40 分钟、新版 Android 有抽风风险）。与用户确认后采用等效重打包：完整主日志 ⊇ error 目录 log.txt 内容、实帧截图 ≈ error.png。若上游坚持要 error 目录，再跑 backup 补传。
+- **下一步**：盯上游回应。自修 → 删双源补丁资产发新版 + 删桌面端救场文件；要 PR → 按 handoff §7-B 做黑底+稳定锚点版（锚点取底部页签栏或左下提示区）；搁置 → 维持现状补丁 + 定期巡检（同类 #4815 open 16 个月先例）。
+- **git 未提交改动**：本条目 + handoff 状态更新。
+
+### 2026-09-20 · 决策 🛑：roadmap-v3 主线 goal 用户取消
+
+- 用户指令「goal 模式可以取消了」。roadmap-v3 主线 goal（阶段一→五连续开发）此前为 blocked 状态，现经用户明确取消，**本窗口不再 resume**；后续工作一律按用户当次指令驱动。历史账册（devlog/handoff/roadmap-v3）保留不删。
+
+### 2026-09-20 · 清理 🧹：.vscode 瘦身（留通用配置，删 m0 死配置）
+
+- **判定保留**：prettier/markdownlint 扩展推荐、prettier 格式化 + eol + formatOnSave 设置。
+- **判定删除**：`nekosu.maa-support`/`windsland52.maa-log-analyzer` 扩展推荐（MaaFramework m0 遗产）；`settings.json` 的 `json.schemas`（指向已不存在的 `tools/schema/`，fileMatch 是 MaaFramework 资源布局）；`tasks.json` 整文件（pnpm check/lint/format，根目录已无 pnpm 工程）。
+- **附带发现（未动）**：`.prettierignore` 里仍有 maa 时代条目（`.create-maa-project`、`MaaCommonAssets`、`resource/base/model/ocr/`、`tools/schema`），不影响功能，待顺手时清理。
+- **git 未提交改动**：.vscode 两文件 + tasks.json 删除（未授权 commit/push）。
+
+### 2026-09-20 · 断代 ⚡：App 整体换身份（appId `io.github.shinarin.alasaos` + 新签名 CN=ALAS-AOS），构建验证全绿
+
+- **用户指令**：app 整体改名，第一次更新提示无法覆盖更新可接受。
+- **appId**：`com.aliothmoon.maafw` → `io.github.shinarin.alasaos`（build-logic BASE_APPLICATION_ID 单点；manifest providers `${applicationId}` 占位自动跟随；运行时全走 context.packageName，无硬编码引用；Java 源码包名保留为内部 namespace）。
+- **签名**：新 keystore `keystore/alas-aos-release.jks`（CN=ALAS-AOS，RSA 4096/10000 天，SHA-256 f52207ec…），local.properties 已切换；旧 maaazurlane 证书退役留档不删。
+- **断代影响**：新旧包名+签名均不同 → 新版=全新应用，老版本须卸载重装（配置随卸载清除，需先导出）；首启重新授 Shizuku。下版 release notes 必须带此提示。
+- **验证**：assembleRelease 2m04s 全绿（R8 keeps 6 类过）；aapt badging package=io.github.shinarin.alasaos / label=ALAS-AOS / arm64-v8a / versionCode 62 / versionName 0.1.3-alpha.1；apksigner V2 CN=ALAS-AOS。
+- **git 未提交改动**：build-logic 插件、local.properties（gitignore 内，仅本机）、keystore（gitignore 内）、前述全部品牌改动（未授权 commit/push/发版）。
+
+### 2026-09-20 · 更名 🏷②：仓库 `Shinarin/ALAS-AOS` + App `ALAS-AOS` + maa 残留大扫除
+
+- **用户指令**：仓库名和 app 也改名；项目内残留 maa 部分（如 .kimi-code）删去。
+- **仓库**：`gh repo rename ALAS-AOS` 已执行（view 验证 `Shinarin/ALAS-AOS`），本地 origin 已 set-url；旧链接 GitHub 自动重定向。
+- **App**：strings.xml（zh+en）app_name/log_export_subject/notification_test_message 改 ALAS-AOS，XML 校验过；**签名 keystore（文件名/别名/CN=maaazurlane）与 appId `com.aliothmoon.maafw` 刻意不动**（改了老用户无法覆盖更新），local.properties 注释已注明；APK 文件名是发版手工改名步骤，下版用 `ALAS-AOS-v*-android-arm64.apk`，README 下载行已同步。
+- **.kimi-code 大扫除**：13 个 MaaFramework 通用技能全删；`maa-alas-phone-debug` 审阅确认内容为 m0 时代 pipeline 调试闭环（与 v3 架构不符）整体删除；mcp.json 删 maa-mcp/create-maa-project（留 playwright）。
+- **配方残留**：pi-profile.m0.yaml、app/pi-profile.sample.yaml、app/INTEGRATION.md 删除（BuildProfile.kt dormant 能力保留，无品牌暴露）；app/README.md（上游存档）两处死链划线标注。
+- **用户可见文案修正**：run_log_empty/settings_debug_mode_desc/dialog_enable_debug_message（zh+en 6 条）"MaaFramework 日志"→实际（ALAS 输出/特权进程详细日志）；provider_paths.xml/UiText.kt/AppSettings.kt 注释同步；regen_args.py 的 WebUI 桥接选项显示名 `MaaAL 桥`→`ALAS-AOS 桥`（双源 cmp 一致）。
+- **保留项**（详见 handoff/2026-09-20-rebrand-alas-aos.md）：appId/签名/maaal method 值与 Python 日志前缀/fork 内部类名/app README 存档/m0-archive/本地目录名。
+- **git 未提交改动**：上述全部（未授权 commit/push/发版）。
+
+### 2026-09-20 · 更名 🏷：项目 MaaAL → ALAS-AOS，README 去除 MaaFramework 致敬
+
+- **用户指令**：项目改名 ALAS-AOS；README 删除 maa 部分，只保留 MaaFwApp 架构参考。
+- **改动**：README.md 全篇更名 + 删 MaaXYZ/MaaFramework 致谢行（MaaFwApp 上游基座条目保留）；AGENTS.md（标题+红线条）、debug.md（6 处）、docs/rom-matrix.md、docs/stage2-maafwapp-inventory.md 同步更名。
+- **未动**（事实性/功能性标识，非品牌）：App 名称与 APK 文件名仍为 MaaAzurLane（签名 CN、appId `com.aliothmoon.maafw`、代码内 `maaal` 方法名均不动）；GitHub 仓库仍 `Shinarin/MaaAL`（远端改名为授权项，README 链接暂保留原名，改名后 GitHub 会自动重定向）；devlog/handoff 历史条目不改写。
+- **git 未提交改动**：README/AGENTS/debug/rom-matrix/stage2-inventory/本条目 + 前条 handoff 改动（未授权 push）。
+
+### 2026-09-20 · 动态 ⚠️ + 交接 📄：上游 #6000 已回复（要 log+截图），跟进手册落 handoff
+
+- **上游动态**：LmeSzinc 于 2026-09-20 02:53 UTC 回复 [#6000](https://github.com/LmeSzinc/AzurLaneAutoScript/issues/6000)：「上传log和截图」。下一步为整理证据（现成素材在 `.tmp/`：卡死日志 `alas-log-0919.txt`、新 UI 实拍/旧模板对比图等）上传并回复。
+- **交接文档**：`handoff/2026-09-20-issue-6000-followup.md`（应用户要求，供其他会话窗口接管跟进）——issue 档案 + 证据清单 + 真机补拍流程 + 修复现状 + 情景预案（上游自修/要 PR 则做黑底+稳定锚点版/搁置/质疑备答）+ 执行检查单。
+- **移交确认（09-20 晚）**：用户明确 #6000 移交其他会话窗口处理，**本窗口不再跟踪**；`handoff/2026-09-19-release-v012.md` 未决事项相应销项。
+- **git 未提交改动**：本条目 + handoff 新文档/销项（用户要求只写文档，未授权 push）。
+
 ## v0.1.2（2026-09-19 发布）
 
 ### 2026-09-19 · 发布 ✅：v0.1.2 热修复迭代（科研卡仓库 + 时区 + 孤儿治理）+ 上游 issue #6000 提交

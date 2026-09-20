@@ -3,7 +3,7 @@ package com.aliothmoon.maafw.proot
 import timber.log.Timber
 
 /**
- * ALAS 热更新（roadmap 阶段三第 3 条）：proot 内跑 `seeds/maaal_update.sh`，
+ * ALAS 热更新（roadmap 阶段三第 3 条）：proot 内跑 `seeds/alasaos_update.sh`，
  * 只拉 ALAS 源码不动依赖；断网/超时/镜像不可达一律降级为跳过，不阻塞启动
  *
  * 与脚本的协议：最后一行 `UPDATED <sha> | UNCHANGED <sha> | FAILED <reason>`。
@@ -26,7 +26,7 @@ class AlasUpdater(
      */
     suspend fun update(): Result {
         val result = runCatching {
-            exec(listOf("/bin/bash", "seeds/maaal_update.sh"), TIMEOUT_MS)
+            exec(listOf("/bin/bash", "seeds/alasaos_update.sh"), TIMEOUT_MS)
         }.getOrElse {
             Timber.w(it, "hot update exec failed")
             return Result(false, "SKIPPED exec: ${it.message}")
@@ -35,7 +35,7 @@ class AlasUpdater(
             Timber.w("hot update timed out after %dms", TIMEOUT_MS)
             return Result(false, "SKIPPED timeout")
         }
-        result.output.lineSequence().forEach { Timber.d("maaal_update| %s", it) }
+        result.output.lineSequence().forEach { Timber.d("alasaos_update| %s", it) }
         val verdict = result.output.lineSequence()
             .map { it.trim() }
             .lastOrNull { it.startsWith("UPDATED") || it.startsWith("UNCHANGED") || it.startsWith("FAILED") }

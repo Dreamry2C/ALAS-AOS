@@ -13,7 +13,7 @@
 | 4 | Shizuku | 用 shizuku-m（官方 v13.6.0 fork，3 commits，+214/−13，API 全兼容）。**不内置 APK**，README + 应用内图文引导自装；与官方版互斥（同包名自签名）需在引导写明 | 拷问 Q10；`shizuku-m/SHIZUKU-M.md` |
 | 5 | adb 自连 | 降级为 Spike E 的前置：经 shizuku-m 的 `tcpip:5555` 通道 connect + 一次性 RSA 授权；**砍掉** TLS 配对与 mDNS 发现（m0 唯二负面记录所在） | 拷问 Q9 |
 | 6 | OCR | rootfs 内 onnxruntime + PP-OCR（m0 备案"C 路线"转正）。模型复用 `m0-archive/spike/m0/resource/base/model/ocr/`（det 9.4MB / rec 20.2MB），m0 实测油数 100/100、单次 0.05s；`rpc.py` shim 接口保留 | 拷问 Q6/Q9 |
-| 7 | MaaCore | 剔除业务引擎（Pipeline/资源加载）与 OCR 桥端点；**保留**特权进程（虚拟屏、截屏/注入）、桥代理（TCP 22300，六端点减为五端点）、ALAS 侧 `maaal.py` 设备补丁 | 拷问 Q6 |
+| 7 | MaaCore | 剔除业务引擎（Pipeline/资源加载）与 OCR 桥端点；**保留**特权进程（虚拟屏、截屏/注入）、桥代理（TCP 22300，六端点减为五端点）、ALAS 侧 `alasaos.py` 设备补丁 | 拷问 Q6 |
 | 8 | 开发基线 | 复活 `m0-archive/vendor/MaaFwApp` @ b2b0f54 做减法；不从上游重 fork | 拷问 Q7 |
 | 9 | rootfs | GHA ARM64 runner 原生构建（公共仓免费）。ALAS = 官方 master（Gitee 镜像，钉 commit）+ fullcn 同款国内镜像 deploy 配置（fullcn 是官方 Release 的大陆变体，同架构，7z 为 Windows 整包不直接采用） | 拷问 Q8/Q13 |
 | 10 | 构建清单 | rootfs 内附 BUILD_MANIFEST：ALAS 上游 commit、补丁集版本、PP-OCR 模型版本、rootfs 版本号，App 可读 | 拷问 Q8（用户硬要求） |
@@ -31,12 +31,12 @@
 │  特权进程: MaaFwVirtualDisplay（1280×720）+ 截屏/注入 + 桥代理 TCP 22300    │
 │       （5 端点：ping/screencap/click/swipe/shell；10s 心跳；全局串行锁）     │
 │  前台服务: proot（libproot.so，jniLibs）──► Ubuntu ARM64 rootfs             │
-│       └─► ALAS（官方 master 钉 commit）+ maaal.py 设备补丁                  │
+│       └─► ALAS（官方 master 钉 commit）+ alasaos.py 设备补丁                │
 │       └─► wrapper.py ──► ALAS 调度器子进程                                  │
 │       └─► onnxruntime + PP-OCR（in-proc，经 rpc.py shim 对接 ALAS OCR 面）  │
 │       └─► 静态 aarch64 adb（备用，Spike E 成功则启用）                      │
 └─────────────────────────────────────────────────────────────────────────────┘
-数据面：ALAS 截图/点击 → maaal.py → TCP 22300 → 特权进程 → 虚拟屏（m0 实测 p50=0.109s，1800/1800 零失败）
+数据面：ALAS 截图/点击 → alasaos.py → TCP 22300 → 特权进程 → 虚拟屏（m0 实测 p50=0.109s，1800/1800 零失败）
 OCR 面：ALAS → rpc.py shim → in-proc PP-OCR（2D 单通道需堆叠 3ch；BGR↔RGB 翻转——m0 硬坑记录）
 ```
 
@@ -116,7 +116,7 @@ OCR 面：ALAS → rpc.py shim → in-proc PP-OCR（2D 单通道需堆叠 3ch；
 
 ## 附录 A：m0 平移清单（rootfs/外壳复用项）
 
-- **补丁**（`m0-archive/termux/patches/`）：`module/ocr/rpc.py`（OCR shim，改接 in-proc PP-OCR；2D 单通道堆叠 3ch）；`module/device/method/maaal.py`（设备方法全套：screenshot/click/swipe/shell/app 管理 + 虚拟屏 VID 探测）；`module/base/base.py`（early_ocr_import 改预热）；numpy2 vstack `list()` 补丁；jellyfish 纯 Python shim；pydantic 锁 v1。
+- **补丁**（`m0-archive/termux/patches/`）：`module/ocr/rpc.py`（OCR shim，改接 in-proc PP-OCR；2D 单通道堆叠 3ch）；`module/device/method/alasaos.py`（设备方法全套：screenshot/click/swipe/shell/app 管理 + 虚拟屏 VID 探测）；`module/base/base.py`（early_ocr_import 改预热）；numpy2 vstack `list()` 补丁；jellyfish 纯 Python shim；pydantic 锁 v1。
 - **资产**：PP-OCR det/rec/keys（`m0-archive/spike/m0/resource/base/model/ocr/`）；`seeds/deploy.yaml`（Gitee 镜像 + OCR 配置改为 in-proc）。
 - **协议**：TCP 22300 五端点（OCR 端点退役）；10s 心跳（30s 无流量判死教训）；反向调用全局串行锁（ZMQ 非线程安全教训）。
 - **经验**（`m0-archive/docs/devlog/`）：WebView `vh` 塌缩注入修复；RUN_COMMAND 权限只授清单声明方；MaaFW 截图 BGR↔ALAS RGB 翻转；主界面顶栏 OCR 不可靠（只在深色页面读数）；游戏设置清单（待机模式关/展示结算角色关/剧情自动播放开+特快）；资产修补用 assets_fix.py 按名改不整文件覆盖。
