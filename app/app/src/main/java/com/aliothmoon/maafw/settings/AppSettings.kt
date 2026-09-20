@@ -41,7 +41,7 @@ data class AppSettings(
     @PrefKey(default = "false")
     val screenSaverEnabled: String = "false",
 
-    /** 调试模式：开启后给特权进程传 isDebug，记录 MaaFramework 详细日志 */
+    /** 调试模式：开启后给特权进程传 isDebug，记录详细诊断日志 */
     @PrefKey(default = "false")
     val debugMode: String = "false",
 

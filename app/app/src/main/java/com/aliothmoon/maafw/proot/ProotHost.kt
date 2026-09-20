@@ -120,7 +120,7 @@ class ProotHost(
         runGuest(
             listOf("/usr/bin/python3", "seeds/seed_config.py"),
             SHORT_EXEC_MS,
-            mapOf("MAAAL_ALAS_ROOT" to GUEST_ALAS_ROOT),
+            mapOf("ALASAOS_ALAS_ROOT" to GUEST_ALAS_ROOT),
         )?.let { r ->
             if (r.exit != 0) Timber.w("seed_config exit=%s out=%s", r.exit, r.output.take(300))
         }
@@ -142,8 +142,8 @@ class ProotHost(
         }
 
         // args.json/argument.yaml 已不再是补丁（整文件覆盖曾把活动列表冻回烘焙日）：
-        // 每次启动现场再生 args（活动列表随 campaign/Readme.md 走）并补回 maaal 桥选项。
-        // 失败降级为警告——args.json 仍是上游 git 版，可启动，但 maaal 选项可能缺失。
+        // 每次启动现场再生 args（活动列表随 campaign/Readme.md 走）并补回 alasaos 桥选项。
+        // 失败降级为警告——args.json 仍是上游 git 版，可启动，但 alasaos 选项可能缺失。
         setState(ProotPhase.PREPARING, "再生 args 配置")
         runGuest(listOf("/usr/bin/python3", "seeds/regen_args.py"), REGEN_ARGS_TIMEOUT_MS)?.let { r ->
             if (r.exit != 0) Timber.w("regen_args exit=%s out=%s", r.exit, r.output.takeLast(500))
@@ -219,8 +219,8 @@ class ProotHost(
         // rootfs 未装 tzdata：用 POSIX 形式 CST-8（UTC+8 无 DST），不依赖 zoneinfo 文件；
         // 不设则全环境 UTC，ALAS 日志/调度时间比设备慢 8 小时
         "TZ" to "CST-8",
-        "MAAAL_ALAS_ROOT" to GUEST_ALAS_ROOT,
-        "MAAAL_WEBUI" to "1",
+        "ALASAOS_ALAS_ROOT" to GUEST_ALAS_ROOT,
+        "ALASAOS_WEBUI" to "1",
     )
 
     /** stdout/stderr 汇进 session 日志（带行级时间戳太贵，纯追加即可） */
@@ -240,17 +240,28 @@ class ProotHost(
         }.apply { isDaemon = true; name = "proot-drain-$tag" }.start()
     }
 
-    /** 崩溃/退出重拉：退避 3s 翻倍至 60s；wantRunning 撤了就不拉 */
+    /** 崩溃/退出重拉：退避 3s 翻倍至 60s；wantRunning 撤了就不拉。
+     *  熔断：会话连续秒退（<QUICK_DEATH_MS）MAX_RAPID_DEATHS 次即放弃——典型诱因是
+     *  端口被同机旧装 App 的残留会话占用，此时 awaitServices 会被占位者喂成假 RUNNING，
+     *  不退熔断就是 3s 一轮的无限崩溃循环（21:16 真机事故） */
     private fun supervise(first: Process) {
         supervisorJob?.cancel()
         supervisorJob = scope.launch(MaaDispatchers.IO) {
             var proc = first
             var backoff = RESTART_BACKOFF_INIT_MS
+            var rapidDeaths = 0
+            var spawnedAt = System.currentTimeMillis()
             while (true) {
                 val code = runCatching { runInterruptible { proc.waitFor() } }.getOrDefault(-1)
-                Timber.w("proot session exited code=%s", code)
+                val livedMs = System.currentTimeMillis() - spawnedAt
+                Timber.w("proot session exited code=%s lived=%dms", code, livedMs)
                 session = null
                 if (!wantRunning) break
+                rapidDeaths = if (livedMs < QUICK_DEATH_MS) rapidDeaths + 1 else 0
+                if (rapidDeaths >= MAX_RAPID_DEATHS) {
+                    fail("会话连续 $MAX_RAPID_DEATHS 次秒退（端口被占用？），已停止重拉")
+                    break
+                }
                 setState(ProotPhase.STARTING, "会话退出($code)，${backoff / 1000}s 后重拉")
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(RESTART_BACKOFF_MAX_MS)
@@ -261,6 +272,7 @@ class ProotHost(
                     .getOrNull() ?: continue
                 session = next
                 proc = next
+                spawnedAt = System.currentTimeMillis()
                 if (awaitServices(SERVICES_UP_MS)) {
                     backoff = RESTART_BACKOFF_INIT_MS
                     setState(ProotPhase.RUNNING)
@@ -438,5 +450,7 @@ class ProotHost(
         private const val STOP_GRACE_MS = 8_000L
         private const val RESTART_BACKOFF_INIT_MS = 3_000L
         private const val RESTART_BACKOFF_MAX_MS = 60_000L
+        private const val QUICK_DEATH_MS = 10_000L
+        private const val MAX_RAPID_DEATHS = 5
     }
 }

@@ -1,4 +1,4 @@
-# MaaAL 项目规则
+# ALAS-AOS 项目规则
 
 ## 当前阶段：v3 · 阶段三（管道穿透与生命周期）
 
@@ -99,7 +99,7 @@
 
 ## 工程约定
 
-- **ALAS 上游代码红线（2026-09-18 用户指令）**：没有用户明确指令，不得改动 ALAS 上游源代码（rootfs 内 `/opt/alas` 的上游跟踪文件，含「临时改一下再改回」）。MaaAL 的职责是为 ALAS 构筑可跑通的环境，修复一律走 MaaAL 自有机制（overlay / patches / seeds / 环境钉版），不越俎代庖改上游；桌面 ALAS（`C:\other\AzurLaneAutoScript`）只读。
+- **ALAS 上游代码红线（2026-09-18 用户指令）**：没有用户明确指令，不得改动 ALAS 上游源代码（rootfs 内 `/opt/alas` 的上游跟踪文件，含「临时改一下再改回」）。ALAS-AOS 的职责是为 ALAS 构筑可跑通的环境，修复一律走 ALAS-AOS 自有机制（overlay / patches / seeds / 环境钉版），不越俎代庖改上游；桌面 ALAS（`C:\other\AzurLaneAutoScript`）只读。
 - 临时文件一律放 `.tmp/`（已 gitignore），不入系统临时目录。
 - 不做 git 提交 / push / 发版（用户决策，红线见「通用 Agent 约束」第六节）。
 - MaaFwApp fork 基线：`m0-archive/vendor/MaaFwApp` @ b2b0f54（阶段二复活做减法；归档只读）。

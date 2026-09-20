@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MaaAL 资产热修补：按 Button 名重写 assets.py 里的 cn area/color/button。
+"""AlasAos 资产热修补：按 Button 名重写 assets.py 里的 cn area/color/button。
 
 为什么不整文件覆盖 assets.py：该文件由上游 dev_tools/button_extract 生成，
 每次上游资产更新都会整体重排。整文件覆盖会在 apply_patches 时把上游新资产

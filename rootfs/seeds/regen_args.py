@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # =============================================================================
-# MaaAL · args 现场再生（proot 内由 App 侧 ProotHost 每次启动拉起）
+# AlasAos · args 现场再生（proot 内由 App 侧 ProotHost 每次启动拉起）
 #
 # 为什么存在：module/config/argument/{args.json,argument.yaml} 曾是整文件补丁，
 # cp -rf 重放把活动列表冻回烘焙日（「星光之城」案，与 base.py 冻结同源同病）。
 # 现这两个文件不再补丁化——上游 git 跟踪它们，热更新自动带新；本脚本每次启动
-# 现场跑 ALAS 完整生成链（活动列表随 campaign/Readme.md 走），再补回 MaaAL 桥选项。
+# 现场跑 ALAS 完整生成链（活动列表随 campaign/Readme.md 走），再补回 AlasAos 桥选项。
 #
 # 步骤：
 #   1) python -m module.config.config_updater  → menu/args/config_generated/i18n/template
-#   2) args.json: Alas.Emulator.{ScreenshotMethod,ControlMethod}.option 补 'maaal'
-#   3) module/config/i18n/zh-CN.json: 同上两节点补 "maaal" 显示名
+#   2) args.json: Alas.Emulator.{ScreenshotMethod,ControlMethod}.option 补 'alasaos'
+#   3) module/config/i18n/zh-CN.json: 同上两节点补 "alasaos" 显示名
 #
 # 全部幂等。协议：成功 exit 0；生成链失败 exit 1（App 降级为警告，不阻塞启动）。
 # 注意：args.json / zh-CN.json 被本脚本改写后工作区是脏的，但热更新走
@@ -26,11 +26,11 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # seeds/ 的
 ARGS_JSON = os.path.join(BASE, 'module', 'config', 'argument', 'args.json')
 I18N_ZH = os.path.join(BASE, 'module', 'config', 'i18n', 'zh-CN.json')
 
-MAAAL_OPTION_ARGS = [
+ALASAOS_OPTION_ARGS = [
     ('Alas', 'Emulator', 'ScreenshotMethod'),
     ('Alas', 'Emulator', 'ControlMethod'),
 ]
-MAAAL_DISPLAY = 'MaaAL 桥'
+ALASAOS_DISPLAY = 'ALAS-AOS 桥'
 GENERATE_TIMEOUT_SEC = 600
 
 
@@ -65,31 +65,31 @@ def main():
     for line in out.strip().splitlines()[-3:]:
         print(f'regen_args| {line}', flush=True)
 
-    # 2) args.json 补 maaal 选项
+    # 2) args.json 补 alasaos 选项
     args = _load_json(ARGS_JSON)
     patched = []
-    for task, group, arg in MAAAL_OPTION_ARGS:
+    for task, group, arg in ALASAOS_OPTION_ARGS:
         node = args.get(task, {}).get(group, {}).get(arg)
         if not isinstance(node, dict):
             print(f'regen_args: WARN {task}.{group}.{arg} missing in args.json', flush=True)
             continue
         opts = node.get('option')
-        if isinstance(opts, list) and 'maaal' not in opts:
-            opts.append('maaal')
+        if isinstance(opts, list) and 'alasaos' not in opts:
+            opts.append('alasaos')
             patched.append(f'{task}.{group}.{arg}')
     if patched:
         _dump_json(ARGS_JSON, args)
 
     # 3) zh-CN.json 补显示名（生成链已重写过 i18n，补在其后；
-    #    generate_i18n 会为未知选项留下 `"maaal": "maaal"` 占位——不等于显示名时也升级）
-    #    注意 i18n 顶层是**组名**（无任务层）：zh['Emulator']['ScreenshotMethod']['maaal']
+    #    generate_i18n 会为未知选项留下 `"alasaos": "alasaos"` 占位——不等于显示名时也升级）
+    #    注意 i18n 顶层是**组名**（无任务层）：zh['Emulator']['ScreenshotMethod']['alasaos']
     i18n_patched = False
     try:
         zh = _load_json(I18N_ZH)
-        for task, group, arg in MAAAL_OPTION_ARGS:
+        for task, group, arg in ALASAOS_OPTION_ARGS:
             node = zh.get(group, {}).get(arg)
-            if isinstance(node, dict) and node.get('maaal') != MAAAL_DISPLAY:
-                node['maaal'] = MAAAL_DISPLAY
+            if isinstance(node, dict) and node.get('alasaos') != ALASAOS_DISPLAY:
+                node['alasaos'] = ALASAOS_DISPLAY
                 i18n_patched = True
         if i18n_patched:
             _dump_json(I18N_ZH, zh)

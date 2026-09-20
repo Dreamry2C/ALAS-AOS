@@ -2,7 +2,7 @@ from lxml import etree
 
 from module.base.timer import Timer
 from module.device.method.adb import Adb
-from module.device.method.maaal import MaaAL
+from module.device.method.alasaos import AlasAos
 from module.device.method.uiautomator_2 import Uiautomator2
 from module.device.method.utils import HierarchyButton
 from module.device.method.wsa import WSA
@@ -10,7 +10,7 @@ from module.exception import ScriptError
 from module.logger import logger
 
 
-class AppControl(MaaAL, Adb, WSA, Uiautomator2):
+class AppControl(AlasAos, Adb, WSA, Uiautomator2):
     hierarchy: etree._Element
     _app_u2_family = ['uiautomator2', 'minitouch', 'scrcpy', 'MaaTouch', 'nemu_ipc']
     _hierarchy_interval = Timer(0.1)
@@ -19,9 +19,9 @@ class AppControl(MaaAL, Adb, WSA, Uiautomator2):
         method = self.config.Emulator_ControlMethod
         if self.is_wsa:
             package = self.app_current_wsa()
-        elif method == 'maaal':
-            # MaaAL: 经代理 shell 探测虚拟屏前台应用
-            package = self.app_current_maaal()
+        elif method == 'alasaos':
+            # AlasAos: 经代理 shell 探测虚拟屏前台应用
+            package = self.app_current_alasaos()
         elif method in AppControl._app_u2_family:
             package = self.app_current_uiautomator2()
         else:
@@ -39,8 +39,8 @@ class AppControl(MaaAL, Adb, WSA, Uiautomator2):
         logger.info(f'App start: {self.package}')
         if self.config.Emulator_Serial == 'wsa-0':
             self.app_start_wsa(display=0)
-        elif method == 'maaal':
-            self.app_start_maaal()
+        elif method == 'alasaos':
+            self.app_start_alasaos()
         elif method in AppControl._app_u2_family:
             self.app_start_uiautomator2()
         else:
@@ -49,8 +49,8 @@ class AppControl(MaaAL, Adb, WSA, Uiautomator2):
     def app_stop(self):
         method = self.config.Emulator_ControlMethod
         logger.info(f'App stop: {self.package}')
-        if method == 'maaal':
-            self.app_stop_maaal()
+        if method == 'alasaos':
+            self.app_stop_alasaos()
         elif method in AppControl._app_u2_family:
             self.app_stop_uiautomator2()
         else:
@@ -79,8 +79,8 @@ class AppControl(MaaAL, Adb, WSA, Uiautomator2):
         self._hierarchy_interval.reset()
 
         method = self.config.Emulator_ControlMethod
-        if method == 'maaal':
-            self.hierarchy = self.dump_hierarchy_maaal()
+        if method == 'alasaos':
+            self.hierarchy = self.dump_hierarchy_alasaos()
         elif method in AppControl._app_u2_family:
             self.hierarchy = self.dump_hierarchy_uiautomator2()
         else:

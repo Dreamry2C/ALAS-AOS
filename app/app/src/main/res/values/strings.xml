@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">MaaAzurLane</string>
+    <string name="app_name">ALAS-AOS</string>
 
     <!-- 通用 -->
     <string name="common_close">关闭</string>
@@ -88,7 +88,7 @@
         <item quantity="other">诊断：%1$d 条（%2$d 条错误）</item>
     </plurals>
 
-    <!-- 设置页；分组对齐 MaaMeow 的 settings_section_* -->
+    <!-- 设置页；分组命名沿用上游 MaaFwApp 系的 settings_section_* 约定 -->
     <string name="settings_section_global_option">任务设置</string>
     <string name="settings_section_resource_option">资源设置</string>
     <string name="settings_section_display">显示设置</string>
@@ -405,7 +405,7 @@
     <string name="run_log_count">%1$d 条</string>
     <string name="run_log_export">导出</string>
     <string name="run_log_clear">清空</string>
-    <string name="run_log_empty">还没有日志；开始任务后 MaaFramework 的运行输出会显示在这里</string>
+    <string name="run_log_empty">还没有日志；开始任务后 ALAS 的运行输出会显示在这里</string>
     <string name="tasks_log">日志</string>
     <string name="run_log_filter_essential">关键</string>
     <string name="run_log_filter_all">全部</string>
@@ -459,7 +459,7 @@
     <string name="log_export_running">正在打包…</string>
     <string name="log_export_failed">导出失败：没有可导出的日志</string>
     <string name="log_export_saved">已保存为 %1$s</string>
-    <string name="log_export_subject">MaaAzurLane 日志</string>
+    <string name="log_export_subject">ALAS-AOS 日志</string>
 
     <!-- 设置页「日志」分组入口 -->
     <string name="settings_section_log">日志</string>
@@ -510,9 +510,9 @@
     <string name="diagnostic_boolean_conversion_failed">option "%1$s" 的输入 "%2$s" 无法转换为布尔值</string>
     <string name="schedule_default_name">定时任务 %1$d</string>
     <string name="settings_debug_mode">调试模式</string>
-    <string name="settings_debug_mode_desc">启用后错误日志记录全部过程，MaaFramework 详细日志从下一轮运行起</string>
+    <string name="settings_debug_mode_desc">启用后错误日志记录全部过程，特权进程详细日志从下一轮运行起</string>
     <string name="dialog_enable_debug_title">启用调试模式</string>
-    <string name="dialog_enable_debug_message">启用后需要重启 App 生效，将记录 MaaFramework 详细日志与 app、特权进程的 logcat。</string>
+    <string name="dialog_enable_debug_message">启用后需要重启 App 生效，将记录详细诊断日志与 app、特权进程的 logcat。</string>
 
     <!-- PI 解压 -->
     <string name="pi_install_title">正在准备项目资源</string>
@@ -561,7 +561,7 @@
     <string name="notification_include_log_details">推送内容附带运行日志</string>
     <string name="notification_section_test">测试推送</string>
     <string name="notification_test_title">测试通知</string>
-    <string name="notification_test_message">这是一条来自 MaaAzurLane 的测试通知</string>
+    <string name="notification_test_message">这是一条来自 ALAS-AOS 的测试通知</string>
 
     <!-- 推送渠道名 -->
     <string name="notification_provider_server_chan">Server 酱</string>

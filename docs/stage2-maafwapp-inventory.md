@@ -100,7 +100,7 @@
 4. **AppRoot tab 结构**：5 tab（Alas/Home/Tasks/Schedule/Settings，`AppRoot.kt:136-148`）→ 剩 Alas + 设置（+日志）；pager/NavHost/`Routes.mainTabs`（`Routes.kt:17`）同步；`TopDestination.entries[page]` 索引耦合，删枚举项注意顺序。
 5. **R8/清单收尾**：`build-logic/.../VerifyR8KeepsTask.kt:20-29` 的 `R8_CRITICAL_CLASSES` 含 maa.MaaFrameworkLibrary/MaaAgentClientLibrary → release 必挂，删类同步删；`proguard-rules.pro` 删 JNA 段、**必须保留** `bridge.NativeBridgeLib`/`DriverClass`（native 字面名 upcall）与 `remote.**`/`root.**`/`third.**`/AIDL 段；manifest FGS 子类型文案。
 6. **`ShellDirs.AGENT_DIR`/`JNA_TMPDIR`/`AppPaths.FOCUS_DIR`** 随剔除消失。
-7. **包体/命名**：appId `com.aliothmoon.maafw` + 配方后缀 → 建议去配方机制，硬编码 MaaAL 身份（AGPL LICENSE 与署名保留）。
+7. **包体/命名**：appId `com.aliothmoon.maafw` + 配方后缀 → 建议去配方机制，硬编码 ALAS-AOS 身份（AGPL LICENSE 与署名保留）。
 8. 坑：`interface.json` 的 agent 声明/`agent-runtime.json` 会让旧包启动报错（`ExecAgentHost.kt:27-45`）；m0-archive 只读，复活另建工作副本，勿把 `app/build/`（893MB）/`.maafw`/`.maa-cache` 提交进 git。
 
 ## 九、VD flag 现状核查（硬约束）

@@ -156,7 +156,7 @@ def load_font(arg):
     from PIL import ImageFont
     candidates = [arg] if arg else []
     candidates += [
-        os.environ.get('MAAAL_OCR_FONT', ''),
+        os.environ.get('ALASAOS_OCR_FONT', ''),
         'C:/Windows/Fonts/arial.ttf',
         '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
         '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf',
@@ -296,16 +296,16 @@ def test_screenshot(rpc, screenshot):
 # ---------------------------------------------------------------- main
 
 def main():
-    parser = argparse.ArgumentParser(description='Spike F OCR gate (MaaAL v3)')
-    parser.add_argument('--model-dir', default=os.environ.get('MAAAL_OCR_MODEL_DIR', './models/ocr'),
-                        help='含 det.onnx/rec.onnx/keys.txt 的目录（默认 $MAAAL_OCR_MODEL_DIR 或 ./models/ocr）')
+    parser = argparse.ArgumentParser(description='Spike F OCR gate (AlasAos v3)')
+    parser.add_argument('--model-dir', default=os.environ.get('ALASAOS_OCR_MODEL_DIR', './models/ocr'),
+                        help='含 det.onnx/rec.onnx/keys.txt 的目录（默认 $ALASAOS_OCR_MODEL_DIR 或 ./models/ocr）')
     parser.add_argument('--rpc-path', default=None, help='rpc.py 路径（默认按仓库/rootfs 布局自动探测）')
     parser.add_argument('--real-dir', default=None, help='真实行图目录（*.png，文件名=期望文本）')
     parser.add_argument('--screenshot', default=None, help='整屏截图路径，跑 det+rec 冒烟打印')
     parser.add_argument('--font', default=None, help='合成图 ttf 字体路径')
     args = parser.parse_args()
 
-    os.environ['MAAAL_OCR_MODEL_DIR'] = os.path.abspath(args.model_dir)
+    os.environ['ALASAOS_OCR_MODEL_DIR'] = os.path.abspath(args.model_dir)
 
     rpc_path = find_rpc_path(args.rpc_path)
     if not rpc_path:

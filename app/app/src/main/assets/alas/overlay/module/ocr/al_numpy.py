@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""MaaAL：azur_lane 字体 OCR（上游 cnocr densenet-lite-gru 的纯 numpy 移植）。
+"""AlasAos：azur_lane 字体 OCR（上游 cnocr densenet-lite-gru 的纯 numpy 移植）。
 
 背景：上游 ALAS 的 azur_lane 模型（39 字符 AL 字体微调，验证精度 99.43%）是 mxnet
 私有格式，mxnet 无 ARM64 wheel 且已退役，手机上装不了。本文件把同一份权重
@@ -186,12 +186,12 @@ class AlNumpyOcr:
 
     def __init__(self, model_dir):
         if cv2 is None:
-            raise RuntimeError('MaaAL AL-OCR: cv2 unavailable')
+            raise RuntimeError('AlasAos AL-OCR: cv2 unavailable')
         npz_path = os.path.join(model_dir, 'weights.npz')
         label_path = os.path.join(model_dir, 'label_cn.txt')
         for p in (npz_path, label_path):
             if not os.path.isfile(p):
-                raise RuntimeError(f'MaaAL AL-OCR: model file not found: {p}')
+                raise RuntimeError(f'AlasAos AL-OCR: model file not found: {p}')
         z = np.load(npz_path)
         self._w = {k: z[k] for k in z.files}
         self._alphabet = self._read_charset(label_path)

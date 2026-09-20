@@ -1,4 +1,4 @@
-"""MaaAL v3：in-proc OCR，替换 m0 的 TCP 桥版 rpc.py（原 zerorpc 实现的第二任替身）。
+"""AlasAos v3：in-proc OCR，替换 m0 的 TCP 桥版 rpc.py（原 zerorpc 实现的第二任替身）。
 
 双引擎按 lang 路由：
 - `azur_lane`：上游 cnocr densenet-lite-gru 权重的纯 numpy 移植（module/ocr/al_numpy.py +
@@ -19,7 +19,7 @@ ocr.py / al_ocr.py / resource.py / webui/app.py 零改动：
 与 m0 版的差异：
 - "TCP 调用"换成"本进程推理"。alive() 语义从"桥已连接"改为"PP-OCR 模型已加载"。
 - 模型路径：默认 ./models/ocr/（相对 ALAS 根；module/logger.py import 期已 chdir 到仓库根），
-  环境变量 MAAAL_OCR_MODEL_DIR 可覆盖（本机/CI 测试用）。
+  环境变量 ALASAOS_OCR_MODEL_DIR 可覆盖（本机/CI 测试用）。
 - cand_alphabet：azur_lane 引擎实现了上游同款候选掩码；PP-OCR 路径无对应物不接，
   ALAS 的 Digit/DigitCounter/Duration.after_process 自己清洗（module/ocr/ocr.py:150-202）。
 - onnxruntime/numpy/cv2 import 失败时：alive() 返回 False，OCR 调用 raise RequestHumanTakeover。
@@ -71,18 +71,18 @@ class _PpOcrEngine:
     def __init__(self, model_dir):
         if np is None or ort is None or cv2 is None:
             missing = [m for m, mod in [('numpy', np), ('onnxruntime', ort), ('cv2', cv2)] if mod is None]
-            raise RuntimeError(f'MaaAL OCR: missing dependency: {", ".join(missing)}')
+            raise RuntimeError(f'AlasAos OCR: missing dependency: {", ".join(missing)}')
 
         det_path = os.path.join(model_dir, 'det.onnx')
         rec_path = os.path.join(model_dir, 'rec.onnx')
         keys_path = os.path.join(model_dir, 'keys.txt')
         for p in (det_path, rec_path, keys_path):
             if not os.path.isfile(p):
-                raise RuntimeError(f'MaaAL OCR: model file not found: {p}')
+                raise RuntimeError(f'AlasAos OCR: model file not found: {p}')
 
         sess_options = ort.SessionOptions()
         sess_options.log_severity_level = 3
-        threads = os.environ.get('MAAAL_OCR_THREADS')
+        threads = os.environ.get('ALASAOS_OCR_THREADS')
         if threads:
             sess_options.intra_op_num_threads = max(1, int(threads))
         providers = ['CPUExecutionProvider']
@@ -111,7 +111,7 @@ class _PpOcrEngine:
             elif rec_out_dim == n_keys + 2:
                 self._tail_char = ' '
             else:
-                logger.warning(f'MaaAL OCR: rec output dim {rec_out_dim} != keys {n_keys} +1/+2, assume +1')
+                logger.warning(f'AlasAos OCR: rec output dim {rec_out_dim} != keys {n_keys} +1/+2, assume +1')
                 self._tail_char = None
         else:
             self._tail_char = None
@@ -287,28 +287,28 @@ class ModelProxy:
         with cls._lock:
             if cls._engine is not None or cls._load_failed:
                 return
-            model_dir = os.environ.get('MAAAL_OCR_MODEL_DIR', './models/ocr')
-            logger.info(f'MaaAL OCR: loading PP-OCR in-process from {model_dir}')
+            model_dir = os.environ.get('ALASAOS_OCR_MODEL_DIR', './models/ocr')
+            logger.info(f'AlasAos OCR: loading PP-OCR in-process from {model_dir}')
             try:
                 cls._engine = _PpOcrEngine(model_dir)
                 cls.online = True
-                logger.info('MaaAL OCR: PP-OCR loaded (det+rec)')
+                logger.info('AlasAos OCR: PP-OCR loaded (det+rec)')
             except Exception as e:
                 cls._engine = None
                 cls._load_failed = True
                 cls.online = False
-                logger.warning(f'MaaAL OCR: model load failed: {e}')
+                logger.warning(f'AlasAos OCR: model load failed: {e}')
 
     @classmethod
     def close(cls):
         with cls._lock:
             if cls._engine is not None:
-                logger.info('MaaAL OCR: release PP-OCR sessions')
+                logger.info('AlasAos OCR: release PP-OCR sessions')
                 cls._engine.close()
             cls._engine = None
             cls._load_failed = False
             if cls._al_engine is not None:
-                logger.info('MaaAL OCR: release azur_lane numpy model')
+                logger.info('AlasAos OCR: release azur_lane numpy model')
             cls._al_engine = None
             cls._al_load_failed = False
 
@@ -317,7 +317,7 @@ class ModelProxy:
         if cls._engine is None:
             cls.init()
         if cls._engine is None:
-            logger.critical('MaaAL OCR: model unavailable')
+            logger.critical('AlasAos OCR: model unavailable')
             raise RequestHumanTakeover
         return cls._engine
 
@@ -332,15 +332,15 @@ class ModelProxy:
         with cls._lock:
             if cls._al_engine is not None or cls._al_load_failed:
                 return cls._al_engine
-            model_dir = os.path.join(os.environ.get('MAAAL_OCR_MODEL_DIR', './models/ocr'), 'azur_lane')
-            logger.info(f'MaaAL OCR: loading azur_lane numpy model from {model_dir}')
+            model_dir = os.path.join(os.environ.get('ALASAOS_OCR_MODEL_DIR', './models/ocr'), 'azur_lane')
+            logger.info(f'AlasAos OCR: loading azur_lane numpy model from {model_dir}')
             try:
                 cls._al_engine = AlNumpyOcr(model_dir)
-                logger.info('MaaAL OCR: azur_lane numpy model loaded (39 classes)')
+                logger.info('AlasAos OCR: azur_lane numpy model loaded (39 classes)')
             except Exception as e:
                 cls._al_engine = None
                 cls._al_load_failed = True
-                logger.warning(f'MaaAL OCR: azur_lane numpy model load failed: {e}, fallback to PP-OCR')
+                logger.warning(f'AlasAos OCR: azur_lane numpy model load failed: {e}, fallback to PP-OCR')
             return cls._al_engine
 
     def _best_text(self, image, cand=None) -> str:
@@ -430,7 +430,7 @@ class ModelProxyFactory:
 
 def start_ocr_server(port=22268):
     """no-op：OCR 在本进程内推理，无需本地服务端。"""
-    logger.info('MaaAL: OCR served in-process, local OCR server not started')
+    logger.info('AlasAos: OCR served in-process, local OCR server not started')
 
 
 def start_ocr_server_process(port=22268):

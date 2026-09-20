@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MaaAL v3 · ALAS 薄 runner（rootfs 内，由 wrapper.py 以子进程方式拉起）。
+"""AlasAos v3 · ALAS 薄 runner（rootfs 内，由 wrapper.py 以子进程方式拉起）。
 
 职责只有三件：
 1. 把 CWD 钉在脚本所在目录（= ALAS 根；ALAS 所有路径都是 './...' 相对路径，
@@ -18,7 +18,7 @@
 3. 顶层异常落 ./log/wrapper_runner_error.txt 并以非零码退出，供 wrapper 判死。
 
 用法：runner.py <config> [task]。实例名默认 'alas'（= AzurLaneAutoScript() 默认值），
-可用 argv[1] 或环境变量 MAAAL_ALAS_CONFIG 覆盖。日志文件随之是
+可用 argv[1] 或环境变量 ALASAOS_ALAS_CONFIG 覆盖。日志文件随之是
 ./log/{YYYY-MM-DD}_{实例名}.txt（logger.py:171-177）。
 
 停止语义：不装 SIGTERM handler——ALAS 本身没有（m0 ProcessManager.stop 就是 SIGKILL），
@@ -40,14 +40,14 @@ _TOOL_TASKS = ('daemon', 'event_story')
 
 
 def main():
-    config_name = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('MAAAL_ALAS_CONFIG', 'alas')
+    config_name = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('ALASAOS_ALAS_CONFIG', 'alas')
     task = sys.argv[2] if len(sys.argv) > 2 else None
     if task is not None and task not in _TOOL_TASKS:
         print(f'usage: runner.py <config> [{"|".join(_TOOL_TASKS)}]  # task 省略=挂机 loop',
               file=sys.stderr)
         return 2
     from module.logger import logger  # 可选；import 副作用 = chdir 兜底 + 建 ./log/{date}_runner.txt
-    logger.info(f'MaaAL runner: start AzurLaneAutoScript(config_name={config_name!r}, task={task!r})')
+    logger.info(f'AlasAos runner: start AzurLaneAutoScript(config_name={config_name!r}, task={task!r})')
 
     from alas import AzurLaneAutoScript
     alas = AzurLaneAutoScript(config_name=config_name)
@@ -63,7 +63,7 @@ def main():
             alas.device.screenshot()
             image = alas.device.image
             if image is None or float(image.mean()) * 3 < 1.0:
-                logger.warning('MaaAL runner: orphan game (pid alive, black frames), '
+                logger.warning('AlasAos runner: orphan game (pid alive, black frames), '
                                'app_stop before loop')
                 alas.device.app_stop()
         alas.loop()  # 阻塞；内部 set_file_logger(config_name)，正常退出/崩溃均有 exit(1) 分支
@@ -85,12 +85,12 @@ def main():
                 image = alas.device.image
                 if image is not None and float(image.mean()) * 3 >= 1.0:
                     need_start = False
-                    logger.info('MaaAL runner: game already on screen, skip daemon pre-start')
+                    logger.info('AlasAos runner: game already on screen, skip daemon pre-start')
                 else:
-                    logger.warning('MaaAL runner: game process alive but frames black, '
+                    logger.warning('AlasAos runner: game process alive but frames black, '
                                    'treat as not running')
             if need_start and not alas.run('start', skip_first_screenshot=True):
-                logger.error('MaaAL runner: daemon pre-start (app_start) failed, abort tool')
+                logger.error('AlasAos runner: daemon pre-start (app_start) failed, abort tool')
                 return 1
         alas.run(task, skip_first_screenshot=True)  # 工具任务：一次性/常驻，由 wrapper 保证与挂机互斥
     return 0

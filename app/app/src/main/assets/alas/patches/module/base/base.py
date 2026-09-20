@@ -88,14 +88,14 @@ class ModuleBase:
                 time.sleep(0.01)
 
             logger.info('early_ocr_import start')
-            # MaaAL BEGIN: 桥接模式下预热代理 OCR 通道（手机无 cnocr/mxnet）
-            if str(self.config.Emulator_Serial).startswith('maaal'):
+            # AlasAos BEGIN: 桥接模式下预热代理 OCR 通道（手机无 cnocr/mxnet）
+            if str(self.config.Emulator_Serial).startswith('alasaos'):
                 from module.ocr.ocr import OCR_MODEL  # UseOcrServer 分支，不触 cnocr
                 _ = OCR_MODEL
             else:
                 from module.ocr.al_ocr import AlOcr
                 _ = AlOcr
-            # MaaAL END
+            # AlasAos END
             logger.info('early_ocr_import finish')
 
         logger.info('early_ocr_import call')

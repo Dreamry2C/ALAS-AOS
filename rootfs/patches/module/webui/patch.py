@@ -40,7 +40,7 @@ def patch_executor():
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
-        # MaaAL: Python 3.12+ 无当前事件循环时 get_event_loop 直接抛错
+        # AlasAos: Python 3.12+ 无当前事件循环时 get_event_loop 直接抛错
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     loop.set_default_executor(CachedThreadPoolExecutor.executor)
@@ -67,9 +67,9 @@ def patch_mimetype():
     mimetypes.common_types = db.types_map[False]
 
 
-def patch_maaal_scheduler_lock():
+def patch_alasaos_scheduler_lock():
     """
-    MaaAL: Lock the WebUI ProcessManager start/stop channel.
+    AlasAos: Lock the WebUI ProcessManager start/stop channel.
 
     The floating-overlay panel (wrapper thin HTTP) is the ONLY scheduler surface
     (roadmap 双头管理决策, M4-a 定案, 阶段五硬化). WebUI Start/Stop buttons
@@ -78,12 +78,12 @@ def patch_maaal_scheduler_lock():
     Read paths (alive/renderables overview) are untouched; updater is already
     locked by deploy.yaml (AutoUpdate:false).
 
-    Escape hatch for debugging: MAAAL_SCHEDULER_LOCK=0.
+    Escape hatch for debugging: ALASAOS_SCHEDULER_LOCK=0.
 
     Self-executed at import: module.webui.app imports this module at startup.
     """
     import os
-    if os.environ.get('MAAAL_SCHEDULER_LOCK', '1') == '0':
+    if os.environ.get('ALASAOS_SCHEDULER_LOCK', '1') == '0':
         return
 
     from module.logger import logger
@@ -91,7 +91,7 @@ def patch_maaal_scheduler_lock():
 
     def _locked(self, *args, **kwargs):
         logger.warning(
-            f'[{self.config_name}] WebUI start/stop channel is locked by MaaAL, '
+            f'[{self.config_name}] WebUI start/stop channel is locked by AlasAos, '
             f'use the floating overlay panel instead / WebUI 启停通道已锁定，请用悬浮窗面板'
         )
 
@@ -99,7 +99,7 @@ def patch_maaal_scheduler_lock():
     ProcessManager.stop = _locked
 
 
-patch_maaal_scheduler_lock()
+patch_alasaos_scheduler_lock()
 
 
 def fix_py37_subprocess_communicate():

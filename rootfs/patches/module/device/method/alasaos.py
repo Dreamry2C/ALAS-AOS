@@ -1,14 +1,14 @@
-"""MaaAL 桥接 method：设备 I/O 全部经 TCP 代理转发到 MaaFwApp 特权进程。
+"""AlasAos 桥接 method：设备 I/O 全部经 TCP 代理转发到 MaaFwApp 特权进程。
 
 代理（spike/m0/agent/main.py）在手机上监听 127.0.0.1:22300，协议为行分隔 JSON + 二进制帧：
     ping/screencap/click/swipe/ocr/shell，详见代理源文件 docstring。
 
-启用方式：Emulator_Serial 以 "maaal" 开头（默认 serial 即 "maaal"），
-截图/控制方法选择 "maaal"。本模块不 import 任何 adb/u2 依赖。
+启用方式：Emulator_Serial 以 "alasaos" 开头（默认 serial 即 "alasaos"），
+截图/控制方法选择 "alasaos"。本模块不 import 任何 adb/u2 依赖。
 
 注意：
-- MaaFW 截图为 BGR 序，ALAS 图像为 RGB 序，screenshot_maaal 负责翻通道。
-- 游戏必须跑在 MaaFwApp 的虚拟屏上：app_start_maaal 用 `am start --display <VID>`，
+- MaaFW 截图为 BGR 序，ALAS 图像为 RGB 序，screenshot_alasaos 负责翻通道。
+- 游戏必须跑在 MaaFwApp 的虚拟屏上：app_start_alasaos 用 `am start --display <VID>`，
   VID 由代理侧 shell 探测（dumpsys display 找 VIRTUAL displayId），每轮进程缓存一次。
 - get_orientation 对桥接固定返回 0（虚拟屏始终横屏 1280x720）。
 - dump_hierarchy 反映的是物理屏 UI 树（uiautomator 看不到虚拟屏），仅作兜底。
@@ -24,42 +24,42 @@ from module.base.decorator import cached_property
 from module.exception import RequestHumanTakeover, ScriptError
 from module.logger import logger
 
-MAAAL_DEFAULT_ADDR = '127.0.0.1:22300'
+ALASAOS_DEFAULT_ADDR = '127.0.0.1:22300'
 
 
-class MaaALBridgeError(Exception):
+class AlasAosBridgeError(Exception):
     pass
 
 
-class MaaAL:
-    _maaal_sock = None
-    _maaal_req_id = 0
+class AlasAos:
+    _alasaos_sock = None
+    _alasaos_req_id = 0
 
     # ---------------------------------------------------------------- 协议层
 
     @cached_property
-    def maaal_addr(self) -> str:
+    def alasaos_addr(self) -> str:
         import os
-        return os.environ.get('MAAAL_PROXY_ADDR', MAAAL_DEFAULT_ADDR)
+        return os.environ.get('ALASAOS_PROXY_ADDR', ALASAOS_DEFAULT_ADDR)
 
-    def _maaal_connect(self) -> socket.socket:
-        host, _, port = self.maaal_addr.partition(':')
+    def _alasaos_connect(self) -> socket.socket:
+        host, _, port = self.alasaos_addr.partition(':')
         sock = socket.create_connection((host, int(port)), timeout=10)
         sock.settimeout(60)
         return sock
 
-    def _maaal_call(self, payload: dict, frame: bytes = None) -> dict:
+    def _alasaos_call(self, payload: dict, frame: bytes = None) -> dict:
         """发送一条请求（可随附一帧二进制），返回响应 dict。连接错误重连重试一次。"""
-        MaaAL._maaal_req_id += 1
+        AlasAos._alasaos_req_id += 1
         payload = dict(payload)
-        payload['id'] = MaaAL._maaal_req_id
+        payload['id'] = AlasAos._alasaos_req_id
 
         last_error = None
         for _ in range(2):
             try:
-                sock = MaaAL._maaal_sock
+                sock = AlasAos._alasaos_sock
                 if sock is None:
-                    sock = MaaAL._maaal_sock = self._maaal_connect()
+                    sock = AlasAos._alasaos_sock = self._alasaos_connect()
                 sock.sendall(json.dumps(payload, separators=(',', ':')).encode('utf-8') + b'\n')
                 if frame is not None:
                     sock.sendall(frame)
@@ -68,45 +68,45 @@ class MaaAL:
                 while not buf.endswith(b'\n'):
                     data = sock.recv(1)
                     if not data:
-                        raise MaaALBridgeError('proxy closed connection')
+                        raise AlasAosBridgeError('proxy closed connection')
                     buf += data
                     if len(buf) > 256 * 1024:
-                        raise MaaALBridgeError('response line too long')
+                        raise AlasAosBridgeError('response line too long')
                 return json.loads(buf.decode('utf-8'))
-            except (OSError, MaaALBridgeError, json.JSONDecodeError) as e:
+            except (OSError, AlasAosBridgeError, json.JSONDecodeError) as e:
                 last_error = e
-                logger.warning(f'MaaAL proxy error: {e}, reconnect')
+                logger.warning(f'AlasAos proxy error: {e}, reconnect')
                 try:
-                    if MaaAL._maaal_sock is not None:
-                        MaaAL._maaal_sock.close()
+                    if AlasAos._alasaos_sock is not None:
+                        AlasAos._alasaos_sock.close()
                 except OSError:
                     pass
-                MaaAL._maaal_sock = None
-        logger.critical(f'MaaAL proxy unreachable: {last_error}')
+                AlasAos._alasaos_sock = None
+        logger.critical(f'AlasAos proxy unreachable: {last_error}')
         raise RequestHumanTakeover
 
-    def _maaal_call_ok(self, payload: dict, frame: bytes = None) -> dict:
-        resp = self._maaal_call(payload, frame)
+    def _alasaos_call_ok(self, payload: dict, frame: bytes = None) -> dict:
+        resp = self._alasaos_call(payload, frame)
         if not resp.get('ok'):
-            raise ScriptError(f'MaaAL proxy error: {resp.get("error", "unknown")}')
+            raise ScriptError(f'AlasAos proxy error: {resp.get("error", "unknown")}')
         return resp
 
-    def _maaal_read_exact(self, n: int) -> bytes:
-        sock = MaaAL._maaal_sock
+    def _alasaos_read_exact(self, n: int) -> bytes:
+        sock = AlasAos._alasaos_sock
         chunks = []
         while n > 0:
             data = sock.recv(min(1048576, n))
             if not data:
-                raise MaaALBridgeError('connection closed mid-frame')
+                raise AlasAosBridgeError('connection closed mid-frame')
             chunks.append(data)
             n -= len(data)
         return b''.join(chunks)
 
     # ---------------------------------------------------------------- 截图 / 触控
 
-    def screenshot_maaal(self) -> np.ndarray:
-        resp = self._maaal_call_ok({'method': 'screencap'})
-        raw = self._maaal_read_exact(int(resp['length']))
+    def screenshot_alasaos(self) -> np.ndarray:
+        resp = self._alasaos_call_ok({'method': 'screencap'})
+        raw = self._alasaos_read_exact(int(resp['length']))
         image = np.frombuffer(raw, dtype=np.uint8).reshape(
             int(resp['height']), int(resp['width']), int(resp['channels']))
         # BGR(A) -> RGB（ALAS 图像约定 RGB 序）
@@ -114,19 +114,19 @@ class MaaAL:
             image = image[..., :3][..., ::-1]
         return np.ascontiguousarray(image)
 
-    def click_maaal(self, x, y):
-        self._maaal_call_ok({'method': 'click', 'x': int(x), 'y': int(y)})
+    def click_alasaos(self, x, y):
+        self._alasaos_call_ok({'method': 'click', 'x': int(x), 'y': int(y)})
 
-    def long_click_maaal(self, x, y, duration):
+    def long_click_alasaos(self, x, y, duration):
         # 等效长按：原地滑动，duration 单位为秒（ALAS 约定），代理侧为毫秒
-        self._maaal_call_ok({
+        self._alasaos_call_ok({
             'method': 'swipe',
             'x1': int(x), 'y1': int(y), 'x2': int(x), 'y2': int(y),
             'duration': int(duration * 1000),
         })
 
-    def swipe_maaal(self, p1, p2, duration=0.1):
-        self._maaal_call_ok({
+    def swipe_alasaos(self, p1, p2, duration=0.1):
+        self._alasaos_call_ok({
             'method': 'swipe',
             'x1': int(p1[0]), 'y1': int(p1[1]),
             'x2': int(p2[0]), 'y2': int(p2[1]),
@@ -135,48 +135,48 @@ class MaaAL:
 
     # ---------------------------------------------------------------- shell 通道
 
-    def maaal_shell(self, cmd: str, timeout: float = 30) -> dict:
+    def alasaos_shell(self, cmd: str, timeout: float = 30) -> dict:
         """经代理以 shell uid 执行系统命令，返回 {ok, code, stdout, stderr}。"""
-        return self._maaal_call({'method': 'shell', 'cmd': cmd, 'timeout': timeout})
+        return self._alasaos_call({'method': 'shell', 'cmd': cmd, 'timeout': timeout})
 
-    def maaal_shell_output(self, cmd: str, timeout: float = 30) -> str:
-        resp = self.maaal_shell(cmd, timeout)
+    def alasaos_shell_output(self, cmd: str, timeout: float = 30) -> str:
+        resp = self.alasaos_shell(cmd, timeout)
         if not resp.get('ok'):
-            raise ScriptError(f'MaaAL shell failed: {cmd!r}: {resp.get("stderr", "")[:200]}')
+            raise ScriptError(f'AlasAos shell failed: {cmd!r}: {resp.get("stderr", "")[:200]}')
         return resp.get('stdout', '')
 
     @cached_property
-    def maaal_display_id(self) -> int:
-        out = self.maaal_shell_output(
+    def alasaos_display_id(self) -> int:
+        out = self.alasaos_shell_output(
             "dumpsys display | grep -oE 'type=VIRTUAL, [^}]*displayId=[0-9]+' | grep -oE '[0-9]+' | tail -1"
         ).strip()
         if not out.isdigit():
-            raise ScriptError(f'MaaAL virtual display not found: {out!r}')
-        logger.attr('MaaAL', f'virtual display id={out}')
+            raise ScriptError(f'AlasAos virtual display not found: {out!r}')
+        logger.attr('AlasAos', f'virtual display id={out}')
         return int(out)
 
     # ---------------------------------------------------------------- App 控制
 
-    def app_start_maaal(self, package=None, activity=None, wait=True):
+    def app_start_alasaos(self, package=None, activity=None, wait=True):
         from module.config.server import DICT_PACKAGE_TO_ACTIVITY
         package = package or self.package
         if activity is None:
             activity = DICT_PACKAGE_TO_ACTIVITY.get(package)
             if activity is None:
                 raise ScriptError(f'No known activity for package: {package}')
-        self.maaal_shell_output(
-            f'am start --display {self.maaal_display_id} -n {package}/{activity}')
+        self.alasaos_shell_output(
+            f'am start --display {self.alasaos_display_id} -n {package}/{activity}')
         if wait:
             time.sleep(1)
 
-    def app_stop_maaal(self, package=None):
-        self.maaal_shell_output(f'am force-stop {package or self.package}')
+    def app_stop_alasaos(self, package=None):
+        self.alasaos_shell_output(f'am force-stop {package or self.package}')
 
-    def app_current_maaal(self) -> str:
+    def app_current_alasaos(self) -> str:
         """虚拟屏的前台应用包名。dumpsys window displays 按 displayId 分块，
         取目标块内的 mCurrentFocus；找不到则回退 pidof 判定。"""
-        out = self.maaal_shell_output('dumpsys window displays')
-        vid = self.maaal_display_id
+        out = self.alasaos_shell_output('dumpsys window displays')
+        vid = self.alasaos_display_id
         current = ''
         for block in re.split(r'\n\s*(?=Display )', out):
             if f'displayId={vid}' in block:
@@ -185,26 +185,26 @@ class MaaAL:
                     current = m.group(1)
                 break
         if not current:
-            resp = self.maaal_shell(f'pidof {self.package}')
+            resp = self.alasaos_shell(f'pidof {self.package}')
             current = self.package if resp.get('ok') and resp.get('stdout', '').strip() else ''
-        logger.attr('App current (maaal)', current)
+        logger.attr('App current (alasaos)', current)
         return current
 
     def get_orientation(self):
         """桥接模式下虚拟屏始终横屏 1280x720，直接返回 0。
-        注意：本方法在 MaaAL 混入类上，MRO 先于 Connection 的 adb 实现。"""
-        if str(self.serial).startswith('maaal'):
+        注意：本方法在 AlasAos 混入类上，MRO 先于 Connection 的 adb 实现。"""
+        if str(self.serial).startswith('alasaos'):
             self.orientation = 0
             return 0
         return super().get_orientation()
 
-    def dump_hierarchy_maaal(self):
+    def dump_hierarchy_alasaos(self):
         """兜底实现：uiautomator dump 看到的是物理屏 UI 树（虚拟屏内容不可见）。
         仅用于不依赖游戏画面的系统级弹窗处理；游戏内 UI 不应走这里。"""
         from lxml import etree
-        logger.warning('dump_hierarchy on maaal reflects the PHYSICAL display, not the virtual one')
-        out = self.maaal_shell_output(
-            'uiautomator dump /data/local/tmp/maaal_ui.xml >/dev/null 2>&1; '
-            'cat /data/local/tmp/maaal_ui.xml', timeout=60)
+        logger.warning('dump_hierarchy on alasaos reflects the PHYSICAL display, not the virtual one')
+        out = self.alasaos_shell_output(
+            'uiautomator dump /data/local/tmp/alasaos_ui.xml >/dev/null 2>&1; '
+            'cat /data/local/tmp/alasaos_ui.xml', timeout=60)
         self.hierarchy = etree.fromstring(out.encode('utf-8'))
         return self.hierarchy

@@ -55,7 +55,7 @@ from module.logger import logger
 RETRY_TRIES = 5
 RETRY_DELAY = 3
 
-# MaaAL: uiautomator2>=3 移除了 init 子模块；maaal 桥接运行时不用 u2，
+# AlasAos: uiautomator2>=3 移除了 init 子模块；alasaos 桥接运行时不用 u2，
 # 旧版 u2 补丁仅在 u2<=2.x 时应用，3.x 下全部跳过（仅保 import 兼容）。
 _U2_LEGACY_INIT = hasattr(u2, 'init')
 

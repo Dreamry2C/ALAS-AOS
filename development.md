@@ -12,9 +12,9 @@
 
 - `app/` — 阶段二/三主战场：MaaFwApp fork 复活副本（b2b0f54 + m0 WebView 6 处改动固化 + 构建修复）。阶段三新增：
   - `app/src/main/java/.../provision/`（首启 rootfs 解压，M3-a）与 `.../proot/`（ProotHost 会话宿主 / AlasOverlay 资产覆盖 / AlasUpdater 热更新，M3-b）。
-  - `app/src/main/prootLibs/arm64-v8a/`（proot 九件套，Spike A 钉版入库）+ `app/src/main/assets/alas/`（wrapper/runner/seed/maaal_update.sh/rpc.py + patches 全量，运行时幂等铺 /opt/alas）。
+  - `app/src/main/prootLibs/arm64-v8a/`（proot 九件套，Spike A 钉版入库）+ `app/src/main/assets/alas/`（wrapper/runner/seed/alasaos_update.sh/rpc.py + patches 全量，运行时幂等铺 /opt/alas）。
   - `app/src/main/assets/rootfs/`（rootfs.tar.xz 随包，gitignore 不入库；BUILD_MANIFEST 入库）。
-- `rootfs/` — 阶段一资产：`build/build-rootfs.sh`（GHA ARM64 构建脚本）、`patches/`（ALAS 补丁集，含 `module/device/method/maaal.py` 桥客户端）、`overlays/`（wrapper.py 监管 WebUI 版 / runner.py / rpc.py）、`seeds/`（deploy.yaml 七锁 / seed_config.py / maaal_update.sh 热更新脚本）。
+- `rootfs/` — 阶段一资产：`build/build-rootfs.sh`（GHA ARM64 构建脚本）、`patches/`（ALAS 补丁集，含 `module/device/method/alasaos.py` 桥客户端）、`overlays/`（wrapper.py 监管 WebUI 版 / runner.py / rpc.py）、`seeds/`（deploy.yaml 七锁 / seed_config.py / alasaos_update.sh 热更新脚本）。
 - `.github/workflows/` — rootfs 构建 workflow（手动触发；`ALAS_REF` 默认 master 浮动，manifest 记录解析后 commit）。
 - `docs/` — `roadmap-v3.md`、`stage2-maafwapp-inventory.md`、`spike-d-wrapper-surface.md`。
 - `spike/` — 阶段〇交付：`a-proot-exec/`（Spike A/C 工程+报告）、`e-adb-virtual-display/`（Spike E/B′）。
