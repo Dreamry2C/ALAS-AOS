@@ -2,6 +2,13 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
+### 2026-09-20 · 发版 🚀：v0.1.3「ALAS-AOS 断代」（用户授权 commit/push/release）
+
+- **提交**：`fc807ab feat(rebrand): ALAS-AOS 全量断代更名 + 启动链双加固 + v0.1.3 发版准备`（121 文件，+770/-8147）；tag `v0.1.3` 打在发版 commit 上（versionName 由 git describe 导出，确保 APK=0.1.3 精确版）。
+- **APK**：tag 上重建 1m15s 全绿，badging package=`io.github.shinarin.alasaos` / versionCode=63 / versionName=0.1.3 / label=ALAS-AOS；发版命名 `ALAS-AOS-v0.1.3-android-arm64.apk`（327,667,485 B）。
+- **发布**：[v0.1.3](https://github.com/Shinarin/ALAS-AOS/releases/tag/v0.1.3) 已建，notes 置顶「安装前必读」（卸载旧版→装新版→重授 Shizuku→勿双装），资产尺寸与本地逐字节一致。push main + tag 均已上 origin。
+- **更名整改闭环**：R1-R3 三轮 + build 补漏 + 双加固（STALE_FILES 删除 / supervise 熔断）+ 真机复验（旧包端口占位事故始末见前条）全部入账，handoff 见 `2026-09-20-release-v013.md`。
+
 ### 2026-09-20 · 文档 📝：README 增名字由来 + shizuku-m 提示（用户指令）
 
 - **名字由来**：开头引言区加 `AOS = ALAS on Android OS——ALAS 的 Android 系统版`。
