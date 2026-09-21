@@ -2,6 +2,15 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
+### 2026-09-21 · 发版 🚀：v0.1.4「日志中心重做」（用户授权 push + release）
+
+- **提交**：`70fc569 feat(logs): 设置页日志区重构——日志中心 + 双导出 + 自动清理 + v0.1.4 发版准备`（51 文件，+1599/-833）；tag `v0.1.4` 打在发版 commit 上（versionName 由 git describe 导出）。
+- **APK**：tag 上重建 1m35s 全绿（R8 keeps verified: 5）；badging package=`io.github.shinarin.alasaos` / versionCode=66 / versionName=0.1.4；发版资产 `ALAS-AOS-v0.1.4-android-arm64.apk`（327,689,385 B，远端尺寸与本地逐字节一致）。
+- **发布**：[v0.1.4](https://github.com/Shinarin/ALAS-AOS/releases/tag/v0.1.4) 已建（非 draft），notes 置顶安装说明（v0.1.3 直接覆盖；MaaAzurLane 旧版走 v0.1.3 迁移说明）。
+- **网络坑**：直连 github.com 超时（curl 000）；探测本机常用代理端口发现 127.0.0.1:7897 可用。git 走命令级 `git -c http.proxy -c https.proxy`（未改任何 git 配置），gh 走 `HTTPS_PROXY` 环境变量。首次 `gh release create`（连资产一把梭）在 PATCH 阶段 EOF 且服务端未残留 release，改「先建空 release → `gh release upload` 传资产」两段式成功。
+- **CHANGELOG/README**：CHANGELOG v0.1.4 段（日志中心/双导出/自动清理/调试模式移除，面向用户重写）；README 无设置页日志与调试模式相关描述，核对无需改动。
+- **用户走查**：两个导出 zip 已在真机导出并核验格式——ALAS zip 镜像 `log/` 相对路径、近 7 天 txt、无 properties.txt；启动器 zip 含 app.log/session.log/debug/properties.txt。附带说明：无日期前缀的 `env_fix.txt` 会被 ALAS zip 收录（`LogExportCollector.kt:57` 无法判定日期→保留），用户已知情，倾向保留。设备上重复导出的旧 zip 与用户确认后已删。
+
 ### 2026-09-21 · 改造 🔧：设置页日志区重构（规格 A–H，用户确认稿）
 
 - **A 日志卡 5 行**：启动器日志 / ALAS日志 / 导出ALAS日志 / 导出启动器日志 / 自动清理开关（关闭弹确认框）；调试模式行+确认框整删（`SettingsScreen.kt`）。
