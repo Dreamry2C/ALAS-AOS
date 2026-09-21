@@ -3,7 +3,7 @@ package com.aliothmoon.maafw.log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aliothmoon.maafw.MaaDispatchers
-import kotlinx.coroutines.CoroutineDispatcher
+import com.aliothmoon.maafw.constant.AppPaths
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 data class AppLogFileInfo(
+    /** 相对 `log/` 目录的路径（app.log、proot/session.log、crash/xxx.txt） */
     val name: String,
     val sizeBytes: Long,
     val lastModified: Long,
@@ -25,7 +26,12 @@ sealed interface AppLogIntent {
     data object ClearAll : AppLogIntent
 }
 
-/** 错误日志的文件列表；正文归 [AppLogDetailViewModel] */
+/**
+ * 启动器日志的文件列表（整个 `log/` 目录递归）；正文归 [LogTailViewModel]
+ *
+ * 「全部清除」的范围维持 app.log 滚动系列（`AppLogWriter.purge()`），不扩大到
+ * session.log 与 crash——那两份分别是会话时间线与崩溃现场，清了等于自断排查后路
+ */
 class AppLogViewModel(
     private val writer: AppLogWriter,
 ) : ViewModel() {
@@ -48,9 +54,14 @@ class AppLogViewModel(
     }
 
     private suspend fun reload() {
+        val root = AppPaths.LOG_DIR
         val files = withContext(MaaDispatchers.IO) {
-            writer.listFiles().map {
-                AppLogFileInfo(name = it.name, sizeBytes = it.length(), lastModified = it.lastModified())
+            LauncherLogScanner.scan(root).map {
+                AppLogFileInfo(
+                    name = it.relativeTo(root).invariantSeparatorsPath,
+                    sizeBytes = it.length(),
+                    lastModified = it.lastModified(),
+                )
             }
         }
         _uiState.value = AppLogUiState(files = files, loading = false)

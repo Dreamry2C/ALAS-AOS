@@ -13,6 +13,7 @@ import com.aliothmoon.maafw.di.provisionModule
 import com.aliothmoon.maafw.di.viewModelModule
 import com.aliothmoon.maafw.log.AppLogWriter
 import com.aliothmoon.maafw.log.CrashHandler
+import com.aliothmoon.maafw.log.LogCleaner
 import com.aliothmoon.maafw.log.LogTreeHolder
 import com.aliothmoon.maafw.overlay.OverlayController
 import com.aliothmoon.maafw.overlay.screensaver.ScreenSaverOverlayManager
@@ -33,6 +34,7 @@ import org.koin.core.Koin
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
 import org.koin.core.qualifier.named
+import timber.log.Timber
 
 class MaaFwApp : Application() {
 
@@ -59,9 +61,15 @@ class MaaFwApp : Application() {
             )
         }.koin
         writer.setup()
-        LogTreeHolder(writer, settings.debugMode::value).setup()
+        LogTreeHolder(writer).setup()
         koin.get<CoroutineScope>(named<AppCoroutineScope>()).launch {
             settings.loaded.first { it }
+            // 自动清理门控：静默执行，失败不挡启动；汇总行由 LogCleaner 自己 Timber.w
+            launch(MaaDispatchers.IO) {
+                runCatching {
+                    if (settings.autoCleanLogs.value) koin.get<LogCleaner>().cleanOutdated()
+                }.onFailure { Timber.w(it, "LogCleaner 执行失败") }
+            }
             withContext(Dispatchers.Main) { postCreate(koin) }
         }
     }

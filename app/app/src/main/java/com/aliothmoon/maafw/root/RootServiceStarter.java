@@ -78,7 +78,7 @@ public final class RootServiceStarter {
 
     /**
      * 提前武装 RemoteServiceImpl 的 /proc 看门狗；
-     * 本 Starter 也用于启动 logcat 服务，非 RemoteService 的本地 binder 跳过
+     * 非 RemoteService 的本地 binder 跳过
      */
     private static void primeHeartbeat(IBinder service, int appPid) {
         if (appPid <= 0) {

@@ -10,7 +10,7 @@ import timber.log.Timber
  *
  * - [ShortTagDebugTree]  debug 下打全量到 logcat，tag 取类名
  * - [ReleaseTree]        release 下只放 W 以上进 logcat
- * - [FileLogTree]        两种构建都落盘，档位跟设置里的调试模式走
+ * - [FileLogTree]        两种构建都全量落盘
  *
  * 落盘那棵是重点：logcat 环形缓冲装不下一次长跑，而定时触发多半发生在没人看着的时候
  */
@@ -56,18 +56,12 @@ class ReleaseTree : Timber.Tree() {
  *
  * 继承 DebugTree 而不是 Tree：tag 的栈推导在 `DebugTree.getTag()` 里，
  * 裸 Tree 拿到的 tag 恒为 null，落盘出来每行都是「-」。覆盖 log 之后不会再写 logcat
+ *
+ * 全量落盘不设级别门槛：单份 4MB×5 滚动自带总量上限，落全量比让用户翻空日志强
  */
 class FileLogTree(
     private val writer: AppLogWriter,
-    /**
-     * 跟设置里的调试模式，不跟构建类型：这份落盘件在界面上叫「错误日志」，
-     * 关着就该只有 W 以上，否则用户翻开满屏是 D/I 流水
-     */
-    private val verbose: () -> Boolean,
 ) : Timber.DebugTree() {
-
-    override fun isLoggable(tag: String?, priority: Int): Boolean =
-        verbose() || priority >= Log.WARN
 
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
         writer.submit(priority, tag, message, t)
@@ -76,7 +70,6 @@ class FileLogTree(
 
 class LogTreeHolder(
     private val writer: AppLogWriter,
-    private val verbose: () -> Boolean,
 ) {
 
     fun setup() {
@@ -84,7 +77,7 @@ class LogTreeHolder(
         Timber.plant(
             *arrayOf(
                 if (BuildConfig.DEBUG) ShortTagDebugTree() else ReleaseTree(),
-                FileLogTree(writer, verbose)
+                FileLogTree(writer)
             )
         )
     }

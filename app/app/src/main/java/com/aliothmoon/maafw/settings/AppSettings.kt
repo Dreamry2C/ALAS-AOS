@@ -41,9 +41,9 @@ data class AppSettings(
     @PrefKey(default = "false")
     val screenSaverEnabled: String = "false",
 
-    /** 调试模式：开启后给特权进程传 isDebug，记录详细诊断日志 */
-    @PrefKey(default = "false")
-    val debugMode: String = "false",
+    /** 冷启动自动清理过期日志（ALAS 7 天前日志、过期 session.log 截尾）；默认开 */
+    @PrefKey(default = "true")
+    val autoCleanLogs: String = "true",
 
     /** [com.aliothmoon.maafw.theme.ThemeStyle] 的 name；DEFAULT 暖石蓝，SEMI_DESIGN 取 Semi Design 配色 */
     @PrefKey(default = "DEFAULT")

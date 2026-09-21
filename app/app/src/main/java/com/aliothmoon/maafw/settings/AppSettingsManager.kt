@@ -68,8 +68,8 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     private val _screenSaverEnabled = MutableStateFlow(defaults.screenSaverEnabled.toBoolean())
     override val screenSaverEnabled: StateFlow<Boolean> = _screenSaverEnabled.asStateFlow()
 
-    private val _debugMode = MutableStateFlow(defaults.debugMode.toBoolean())
-    override val debugMode: StateFlow<Boolean> = _debugMode.asStateFlow()
+    private val _autoCleanLogs = MutableStateFlow(defaults.autoCleanLogs.toBoolean())
+    override val autoCleanLogs: StateFlow<Boolean> = _autoCleanLogs.asStateFlow()
 
     private val _themeStyle = MutableStateFlow(parseThemeStyle(defaults.themeStyle))
     override val themeStyle: StateFlow<ThemeStyle> = _themeStyle.asStateFlow()
@@ -85,7 +85,7 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
                 _runMode.value = parseRunMode(s.runMode)
                 _overlayControlMode.value = parseOverlayMode(s.overlayControlMode)
                 _screenSaverEnabled.value = s.screenSaverEnabled.toBoolean()
-                _debugMode.value = s.debugMode.toBoolean()
+                _autoCleanLogs.value = s.autoCleanLogs.toBoolean()
                 _themeStyle.value = parseThemeStyle(s.themeStyle)
                 // 必须是最后一行：置位即宣告上面全部就位
                 _loaded.value = true
@@ -117,8 +117,8 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
         context.dataStore.edit { it[screenSaverEnabled] = enabled.toString() }
     }
 
-    override suspend fun setDebugMode(enabled: Boolean): Unit = with(AppSettingsSchema) {
-        context.dataStore.edit { it[debugMode] = enabled.toString() }
+    override suspend fun setAutoCleanLogs(enabled: Boolean): Unit = with(AppSettingsSchema) {
+        context.dataStore.edit { it[autoCleanLogs] = enabled.toString() }
     }
 
     override suspend fun setThemeStyle(style: ThemeStyle): Unit = with(AppSettingsSchema) {

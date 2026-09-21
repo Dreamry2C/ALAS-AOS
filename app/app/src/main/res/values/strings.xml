@@ -10,7 +10,6 @@
     <string name="common_delete">删除</string>
     <string name="common_loading">加载中…</string>
     <string name="dialog_confirm">确定</string>
-    <string name="common_restart">重启</string>
     <string name="dialog_cancel">取消</string>
 
     <!-- 任务页 -->
@@ -238,9 +237,6 @@
     <string name="run_countdown_start_now">立即开始</string>
     <string name="run_countdown_cancel">取消本次</string>
     <string name="run_countdown_cancelled">已取消本次定时触发</string>
-    <string name="run_log_screen_saver_skipped">熄屏挂机未能打开，本轮不自动关闭</string>
-    <string name="run_log_auto_sleep_skipped_not_run">任务未开始，跳过自动熄屏</string>
-    <string name="run_log_auto_sleep_skipped_awake">启动时屏幕已亮，跳过自动熄屏</string>
     <string name="wake_unlock_need_pin">需要 PIN 才能解锁，请到设置里填写</string>
     <string name="wake_unlock_pin_rejected">PIN 不对，或该机型锁屏不接受注入按键</string>
     <string name="wake_unlock_screen_off">屏幕没有亮起来</string>
@@ -400,30 +396,7 @@
     <string name="dialog_shizuku_uninstall_confirm">去卸载官方版</string>
     <string name="common_got_it">知道了</string>
 
-    <!-- 运行日志 -->
-    <string name="run_log_title">运行日志</string>
-    <string name="run_log_count">%1$d 条</string>
-    <string name="run_log_export">导出</string>
-    <string name="run_log_clear">清空</string>
-    <string name="run_log_empty">还没有日志；开始任务后 ALAS 的运行输出会显示在这里</string>
     <string name="tasks_log">日志</string>
-    <string name="run_log_filter_essential">关键</string>
-    <string name="run_log_filter_all">全部</string>
-    <string name="run_log_connecting">正在连接设备…</string>
-    <string name="run_log_connected">设备连接成功</string>
-    <string name="run_log_agent_connected">Agent 已连接: %1$s</string>
-    <string name="run_log_connect_failed">设备连接失败</string>
-    <string name="run_log_resource_loading">正在加载资源: %1$s</string>
-    <string name="run_log_resource_loaded">资源加载成功: %1$s</string>
-    <string name="run_log_resource_failed">资源加载失败: %1$s</string>
-    <string name="run_log_task_starting">任务开始: %1$s</string>
-    <string name="run_log_task_succeeded">任务完成: %1$s</string>
-    <string name="run_log_task_failed">任务失败: %1$s</string>
-    <string name="run_log_agent_flood">Agent 输出过快，已暂停显示；完整输出见 logcat</string>
-    <string name="run_log_app_left_display">目标应用已离开虚拟显示器且自动拉回失败(%1$s)，可改用前台模式</string>
-    <string name="run_log_app_process_gone">目标应用进程未启动或被异常关闭(%1$s)</string>
-    <string name="run_log_app_unknown">未知应用</string>
-    <string name="run_log_agent_flood_recovered">Agent 输出已恢复正常</string>
 
     <!-- 历史日志：每轮运行落盘一份 -->
     <string name="log_archive_title">运行历史</string>
@@ -437,23 +410,31 @@
     <string name="log_detail_tasks">任务：%1$s</string>
     <string name="log_detail_ended">结束 %1$s</string>
     <string name="log_detail_empty">此运行记录为空</string>
-    <string name="log_outcome_completed">全部完成</string>
-    <string name="log_outcome_completed_with_failures">部分失败</string>
-    <string name="log_outcome_cancelled">已取消</string>
-    <string name="log_outcome_failed">失败</string>
-    <string name="log_outcome_not_run">未开始</string>
 
-    <!-- 错误日志：app 自身的警告与错误，由 AppLogWriter 落盘 -->
-    <string name="app_log_title">错误日志</string>
-    <string name="app_log_empty">还没有错误日志</string>
+    <!-- 启动器日志：log/ 目录递归（AppLogWriter 落盘的 app.log 系列、session.log、crash） -->
+    <string name="app_log_title">启动器日志</string>
+    <string name="app_log_empty">还没有启动器日志</string>
     <string name="app_log_clear">全部清除</string>
     <!-- 大小 · 最后写入时间 -->
     <string name="app_log_meta">%1$s · %2$s</string>
-    <string name="app_log_clear_title">清除错误日志</string>
-    <string name="app_log_clear_message">删除全部错误日志文件？此操作无法撤销。</string>
+    <string name="app_log_clear_title">清除启动器日志</string>
+    <string name="app_log_clear_message">仅删除 app.log 系列滚动文件；session.log 与崩溃记录会保留。此操作无法撤销。</string>
+
+    <!-- ALAS 日志（rootfs/opt/alas/log）：错误现场 + 按天日志 -->
+    <string name="alas_log_title">ALAS日志</string>
+    <string name="alas_log_empty">还没有 ALAS 日志</string>
+    <string name="alas_log_section_errors">错误记录</string>
+    <string name="alas_log_section_daily">按天日志</string>
+    <string name="alas_log_error_meta">%1$d 个文件</string>
+
+    <!-- 日志查看器（尾部加载） -->
+    <string name="log_tail_load_earlier">加载更早</string>
+    <string name="log_tail_empty">这份日志是空的</string>
+    <string name="log_tail_missing">文件不存在或已被清理</string>
 
     <!-- 导出 -->
-    <string name="log_export_title">导出日志</string>
+    <string name="log_export_alas_title">导出ALAS日志</string>
+    <string name="log_export_launcher_title">导出启动器日志</string>
     <string name="log_export_share">分享</string>
     <string name="log_export_save">保存到设备</string>
     <string name="log_export_running">正在打包…</string>
@@ -463,9 +444,14 @@
 
     <!-- 设置页「日志」分组入口 -->
     <string name="settings_section_log">日志</string>
-    <string name="settings_log_archive_desc">查看每次运行的执行日志</string>
-    <string name="settings_log_error_desc">查看应用异常和错误记录</string>
-    <string name="settings_log_export_desc">打包所有日志为 ZIP 文件分享</string>
+    <string name="settings_log_launcher_desc">查看启动器运行日志与崩溃记录</string>
+    <string name="settings_log_alas_desc">查看 ALAS 按天日志与错误现场</string>
+    <string name="settings_log_export_alas_desc">打包近 7 天的 ALAS 日志（官方 issue 格式）</string>
+    <string name="settings_log_export_launcher_desc">打包启动器全部日志与设备属性</string>
+    <string name="settings_auto_clean_logs">自动清理日志</string>
+    <string name="settings_auto_clean_logs_desc">冷启动时自动删除 7 天前的 ALAS 日志，并截断过期的会话日志</string>
+    <string name="dialog_disable_auto_clean_title">关闭自动清理</string>
+    <string name="dialog_disable_auto_clean_message">关闭后过期日志将不再自动清理，长期使用可能占大量手机空间。</string>
 
     <!-- 诊断文案；构造点在 domain/Diagnostics.kt 的 DiagnosticMessages -->
     <string name="diagnostic_severity_warning">警告</string>
@@ -509,10 +495,6 @@
     <string name="diagnostic_integer_conversion_failed">option "%1$s" 的输入 "%2$s" 无法转换为整数</string>
     <string name="diagnostic_boolean_conversion_failed">option "%1$s" 的输入 "%2$s" 无法转换为布尔值</string>
     <string name="schedule_default_name">定时任务 %1$d</string>
-    <string name="settings_debug_mode">调试模式</string>
-    <string name="settings_debug_mode_desc">启用后错误日志记录全部过程，特权进程详细日志从下一轮运行起</string>
-    <string name="dialog_enable_debug_title">启用调试模式</string>
-    <string name="dialog_enable_debug_message">启用后需要重启 App 生效，将记录详细诊断日志与 app、特权进程的 logcat。</string>
 
     <!-- PI 解压 -->
     <string name="pi_install_title">正在准备项目资源</string>

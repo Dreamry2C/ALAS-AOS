@@ -13,14 +13,10 @@ object AppFiles {
     /** 运行日志树：Timber、定时触发记录、缓存帧 */
     const val LOG_DIR = "log"
 
-    /** 启动诊断树：服务绑定/启动 trace、root launcher 输出、logcat 抓取 */
+    /** 启动诊断树：服务绑定/启动 trace、root launcher 输出 */
     const val DEBUG_DIR = "debug"
 
     /** [LOG_DIR] 下：未捕获异常现场 */
     const val CRASH_DIR = "crash"
-
-    /** [DEBUG_DIR] 下：logcat 抓取子目录（core=特权进程，app=App 进程） */
-    const val LOGCAT_CORE_DIR = "logcat/core"
-    const val LOGCAT_APP_DIR = "logcat/app"
 }
 

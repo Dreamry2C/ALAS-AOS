@@ -1,5 +1,7 @@
 package com.aliothmoon.maafw.ui.navigation
 
+import android.net.Uri
+
 /**
  * 二级页面路由
  *
@@ -14,11 +16,24 @@ object Routes {
     /** 主 tab 路由集合，用来判断当前是否停在主界面 */
     val mainTabs: Set<String> = setOf(HANGAR, ALAS, SETTINGS)
 
-    /** 错误日志（app 自身的警告与错误） */
+    /** 启动器日志（`log/` 目录递归：app.log 系列 / session.log / crash） */
     const val APP_LOG = "app_log"
 
-    /** 某一份错误日志的正文；file 是 `AppLogFileInfo.name` */
+    /** 某一份启动器日志的正文；file 是相对 `log/` 目录的路径（含 `/`，必须 URL 编码） */
     const val APP_LOG_DETAIL = "app_log_detail/{file}"
     const val APP_LOG_DETAIL_ARG = "file"
-    fun appLogDetail(fileName: String) = "app_log_detail/$fileName"
+    fun appLogDetail(path: String) = "app_log_detail/${Uri.encode(path)}"
+
+    /** ALAS 日志（错误现场 + 按天日志两区） */
+    const val ALAS_LOG = "alas_log"
+
+    /** 某一份 ALAS 按天日志的正文；file 是 txt 文件名 */
+    const val ALAS_LOG_DETAIL = "alas_log_detail/{file}"
+    const val ALAS_LOG_DETAIL_ARG = "file"
+    fun alasLogDetail(fileName: String) = "alas_log_detail/${Uri.encode(fileName)}"
+
+    /** 一个 ALAS 错误现场（error/<毫秒时间戳>/）：log.txt + 截图 */
+    const val ALAS_ERROR_DETAIL = "alas_error_detail/{dir}"
+    const val ALAS_ERROR_DETAIL_ARG = "dir"
+    fun alasErrorDetail(dirName: String) = "alas_error_detail/${Uri.encode(dirName)}"
 }

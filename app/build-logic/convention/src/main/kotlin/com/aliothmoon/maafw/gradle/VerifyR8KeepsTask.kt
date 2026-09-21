@@ -21,7 +21,6 @@ internal val R8_CRITICAL_CLASSES = setOf(
     "com.aliothmoon.maafw.bridge.NativeBridgeLib",
     "com.aliothmoon.maafw.bridge.DriverClass",
     "com.aliothmoon.maafw.remote.RemoteServiceImpl",
-    "com.aliothmoon.maafw.remote.LogcatCaptureServiceImpl",
     "com.aliothmoon.maafw.root.RootServiceStarter",
     "com.aliothmoon.maafw.root.RootUserService",
 )
