@@ -15,7 +15,7 @@ data class SettingsUiState(
     val remoteAccess: RemoteAccessState = RemoteAccessState(),
     val themeMode: ThemeMode = ThemeMode.System,
     val themeStyle: ThemeStyle = ThemeStyle.DEFAULT,
-    val debugMode: Boolean = false,
+    val autoCleanLogs: Boolean = true,
 )
 
 sealed interface SettingsIntent {
@@ -29,11 +29,5 @@ sealed interface SettingsIntent {
     /** null 恢复跟随系统；切换后 Activity 重建 */
     data class SetLanguage(val tag: String?) : SettingsIntent
 
-    data class SetDebugMode(val enabled: Boolean) : SettingsIntent
-}
-
-/** 一次性副作用；路由层消费 */
-sealed interface SettingsEvent {
-    /** 调试模式已落盘，重启让日志管线以新状态起来 */
-    data object RestartApp : SettingsEvent
+    data class SetAutoCleanLogs(val enabled: Boolean) : SettingsIntent
 }

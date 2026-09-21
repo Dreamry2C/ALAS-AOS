@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.aliothmoon.maafw.R
+import com.aliothmoon.maafw.log.LogExportKind
 import com.aliothmoon.maafw.log.LogExportService
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.ui.components.MaaModalSheet
@@ -38,6 +39,8 @@ import org.koin.compose.koinInject
 /**
  * 导出日志：sheet 显隐、SAF 选位置、分享 Intent、重复点击保护
  *
+ * [kind] 为空 = 不显示。两类导出（ALAS / 启动器）共用这一个 sheet，标题与产物按类型走
+ *
  * 必须无条件挂在调用方的组合顶层——`rememberLauncherForActivityResult` 的注册要稳定，
  * 跟着 sheet 的显隐一起装卸的话，回调回来时注册已经没了
  *
@@ -45,7 +48,7 @@ import org.koin.compose.koinInject
  */
 @Composable
 fun LogExportController(
-    visible: Boolean,
+    kind: LogExportKind?,
     onDismiss: () -> Unit,
     onMessage: (String) -> Unit,
     service: LogExportService = koinInject(),
@@ -53,10 +56,11 @@ fun LogExportController(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
+    // SAF 回调回来时 sheet 已关、kind 已置空，发起那刻的类型得另存一份
+    var pendingKind by remember { mutableStateOf(LogExportKind.LAUNCHER) }
 
     val runningText = stringResource(R.string.log_export_running)
     val failedText = stringResource(R.string.log_export_failed)
-    val chooserTitle = stringResource(R.string.log_export_title)
 
     val saveLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument(MIME_ZIP),
@@ -65,18 +69,26 @@ fun LogExportController(
             busy = false
             return@rememberLauncherForActivityResult
         }
+        val targetKind = pendingKind
         scope.launch {
-            val name = service.exportTo(uri)
+            val name = service.exportTo(targetKind, uri)
             busy = false
             onMessage(name?.let { context.getString(R.string.log_export_saved, it) } ?: failedText)
         }
     }
 
-    if (!visible) return
+    if (kind == null) return
+
+    val title = stringResource(
+        when (kind) {
+            LogExportKind.ALAS -> R.string.log_export_alas_title
+            LogExportKind.LAUNCHER -> R.string.log_export_launcher_title
+        },
+    )
 
     MaaModalSheet(onDismiss = onDismiss) { modifier ->
         Column(modifier = modifier) {
-            MaaSheetHeader(title = stringResource(R.string.log_export_title), onClose = onDismiss)
+            MaaSheetHeader(title = title, onClose = onDismiss)
             ExportAction(
                 label = stringResource(R.string.log_export_share),
                 icon = Icons.Outlined.Share,
@@ -86,10 +98,10 @@ fun LogExportController(
                     busy = true
                     onMessage(runningText)
                     scope.launch {
-                        val intent = service.shareIntent()
+                        val intent = service.shareIntent(kind)
                         busy = false
                         if (intent == null) onMessage(failedText)
-                        else context.startActivity(Intent.createChooser(intent, chooserTitle))
+                        else context.startActivity(Intent.createChooser(intent, title))
                     }
                 },
             )
@@ -101,8 +113,9 @@ fun LogExportController(
                     if (busy) return@ExportAction
                     busy = true
                     onMessage(runningText)
+                    pendingKind = kind
                     // 打包推迟到用户选完位置：选一半退出去就白打了
-                    saveLauncher.launch(service.suggestedFileName())
+                    saveLauncher.launch(service.suggestedFileName(kind))
                 },
             )
         }

@@ -2,6 +2,25 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
+### 2026-09-21 · 改造 🔧：设置页日志区重构（规格 A–H，用户确认稿）
+
+- **A 日志卡 5 行**：启动器日志 / ALAS日志 / 导出ALAS日志 / 导出启动器日志 / 自动清理开关（关闭弹确认框）；调试模式行+确认框整删（`SettingsScreen.kt`）。
+- **B 启动器日志页扩源**：新增 `LauncherLogScanner`（递归 `files/log/`，收 `app(\.\d+)?\.log`、`proot/session.log`、`crash/*.txt`，mtime 倒序，相对路径展示）；`AppLogViewModel` 换源，purge 仍只清 app.log 系列；详情页改统一尾部查看器 + canonical 校验。
+- **C 尾部加载查看器**：新增 `LogTailReader`（512KB 尾块、切口对齐换行）+ `LogTailViewModel`（幂等 load / loadEarlier 前插）+ `LogTailScreen`/`LogTailContent` + `LogLineColors`（app.log `] E/W `、ALAS `| ERROR/WARNING |` 上色）；替代旧详情页整份读入。
+- **D ALAS日志页**：新增 `AlasLogSource`（`rootfs/opt/alas/log`，daily/error 双源带纯数字与路径段校验）+ 3 个 VM + `AlasLogScreen`（按天日志/错误记录两分区）+ `AlasLogDetailScreen` + `AlasErrorDetailScreen`（log.txt 查看器 + PNG 缩略图 LazyRow + 全屏 Dialog）；3 条路由 + 4 个 VM 注册。
+- **E 导出拆两条**：`LogExportService` 重写（`enum LogExportKind`：ALAS=官方 issue 格式 zip、不附 properties.txt；LAUNCHER 维持 collector、常驻附 properties.txt；按前缀清旧 zip，LAUNCHER 兼清遗留 `maafw_logs_`）；`LogExportCollector.collectAlas()`（近 7 天 txt+error）；Controller/AppRoot 按 kind 走。
+- **F 自动清理**：新增 `LogCleaner`（删 <今天-7 天的 ALAS txt/error，Timber.w 汇总留痕）；`ProotHost` 注入 SettingsManager，`cleanupStale()` 加 session.log 截尾（>7 天未动且 >2MB 截留尾 2MB）；`MaaFwApp` 在 loaded 门控协程内 IO 调清理；`AppSettings` 换轴 debugMode→autoCleanLogs（Manager/Gateway/Contracts/VM 全链），`SettingsEvent.RestartApp` 整删。
+- **G 删历史链条**：LogcatServiceManager / LogcatCaptureServiceImpl / ILogcatService.aidl / Misc.kt / AppLogDetailViewModel / AnsiAnnotatedText；RemoteServiceManager 的 logcat initialize 调用；AppFiles.LOGCAT_*；LogTrees verbose 门槛（app.log 常驻全量落盘）；proguard-rules 与 VerifyR8KeepsTask 同步删 keep。
+- **H 字符串**：zh/en 双边同步；删 settings_log_archive_desc、run_log_*、log_outcome_*、settings_debug_mode*、dialog_enable_debug_*、common_restart、log_export_title 等；新增 settings_log_launcher_desc、alas_log_*、log_tail_*、log_export_(alas|launcher)_*、settings_auto_clean_logs*、dialog_disable_auto_clean_*。
+- **构建**：assembleRelease 共 3 轮——① KDoc 里写 `log/*.txt` 触发 Kotlin 嵌套块注释 unclosed comment（LauncherLogScanner/LogCleaner 改写措辞修复）；② `VerifyR8KeepsTask` 漏删 LogcatCaptureServiceImpl 致 R8 keep 校验失败（删之）；③ 1m38s 全绿，"R8 keeps verified: 5 classes kept"。APK 327,689,337 B 已装机（AVAY025422002864）。
+- **真机冒烟**（截图 `.tmp/smoke/`）：挂机页正常；设置页 5 行卡渲染正确、调试模式行消失、自动清理开关开；启动器日志列表=app.log+proot/session.log 相对路径正确；session.log 尾部查看器等宽渲染正常；ALAS 列表 7 个 txt mtime 倒序、无 error 目录时该分区正确隐藏；ALAS txt 详情 `| INFO |` 渲染正常；导出 sheet 标题按 kind 切换正确（导出ALAS日志 + 分享/保存到设备）；app.log grep 命中 LogCleaner 留痕「过期日志清理完成，删除 0 项，释放 0 B」，且 I/D 级行可见（常驻全量落盘生效）；session.log mtime 新，截尾未触发（预期）。
+- **未实测项**：「加载更早」前插（设备无 >512KB 日志）；error 现场详情页（设备无 `error/` 目录）；导出 SAF/分享实际落盘链路（留用户走查）。`src/test/` 单测源集既存失修（引用 main 早已不存在的 runner/ 等类），assembleRelease 不编译它，非本次引入。
+- **文档**：`docs/logging-dev.md` 已重写为 9 节现状文档；`development.md` 核对无需更新。git 未提交（等授权）。
+
+### 2026-09-20 · 文档 📝：新增 `docs/logging-dev.md`（设置页日志功能开发文档，用户指令）
+
+- 供另一会话接手「设置页日志部分改造」用的自包含事实文档：日志卡三条目现状（SettingsScreen.kt:170-227）、调试模式真实生效范围（仅 app.log 级别 + 导出附 properties.txt）、六份日志产物清单与滚动策略、查看页/导出链实现、ALAS /logs 链路、7 项已知坑（session.log 无界增长、debugMode 名不副实、logcat 抓取链整条休眠、死串 run_log_*/settings_log_archive_desc、详情页整份读入等）、四类改造切入点与验证命令。事实由 explore 子代理全仓摸底（文件:行号级），未改任何代码。
+
 ### 2026-09-20 · 收尾 ✅：旧版 MaaAzurLane 已由用户卸载
 
 - 用户确认卸载，`pm list` 复核设备仅余 `io.github.shinarin.alasaos`；新包冷启动 2s 到 RUNNING（22:25:56），双装端口占位隐患彻底关闭。v0.1.3 发版链全部收尾。

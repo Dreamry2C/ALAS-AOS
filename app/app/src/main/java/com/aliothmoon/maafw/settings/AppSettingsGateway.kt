@@ -20,8 +20,8 @@ interface AppSettingsGateway {
     val screenSaverEnabled: StateFlow<Boolean>
     suspend fun setScreenSaverEnabled(enabled: Boolean)
 
-    val debugMode: StateFlow<Boolean>
-    suspend fun setDebugMode(enabled: Boolean)
+    val autoCleanLogs: StateFlow<Boolean>
+    suspend fun setAutoCleanLogs(enabled: Boolean)
 
     val themeStyle: StateFlow<ThemeStyle>
     suspend fun setThemeStyle(style: ThemeStyle)

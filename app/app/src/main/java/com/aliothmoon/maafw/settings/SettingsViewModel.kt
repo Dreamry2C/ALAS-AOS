@@ -5,11 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.aliothmoon.maafw.config.UserConfigurationStore
 import com.aliothmoon.maafw.i18n.AppLocales
 import com.aliothmoon.maafw.privileged.PermissionGateway
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -17,7 +14,7 @@ import kotlinx.coroutines.launch
 /**
  * 设置页的 Activity 作用域会话
  *
- * 后端选择是 app 设置而非运行配置；主题/语言/调试都是只改观感与日志详略的外壳设置
+ * 后端选择是 app 设置而非运行配置；主题/语言/日志清理都是只改观感与维护行为的外壳设置
  */
 class SettingsViewModel(
     private val permissionGateway: PermissionGateway,
@@ -29,13 +26,13 @@ class SettingsViewModel(
         permissionGateway.state,
         userConfigurationStore.data,
         appSettings.themeStyle,
-        appSettings.debugMode,
-    ) { remoteAccess, userConfig, themeStyle, debugMode ->
+        appSettings.autoCleanLogs,
+    ) { remoteAccess, userConfig, themeStyle, autoCleanLogs ->
         SettingsUiState(
             remoteAccess = remoteAccess,
             themeMode = userConfig.themeMode,
             themeStyle = themeStyle,
-            debugMode = debugMode,
+            autoCleanLogs = autoCleanLogs,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -59,14 +56,9 @@ class SettingsViewModel(
 
             is SettingsIntent.SetLanguage -> AppLocales.apply(intent.tag)
 
-            is SettingsIntent.SetDebugMode -> viewModelScope.launch {
-                appSettings.setDebugMode(intent.enabled)
-                // 落盘之后再通知重启：杀进程抢在写盘前，开关就白拨了
-                if (intent.enabled) _events.emit(SettingsEvent.RestartApp)
+            is SettingsIntent.SetAutoCleanLogs -> viewModelScope.launch {
+                appSettings.setAutoCleanLogs(intent.enabled)
             }
         }
     }
-
-    private val _events = MutableSharedFlow<SettingsEvent>()
-    val events: SharedFlow<SettingsEvent> = _events.asSharedFlow()
 }

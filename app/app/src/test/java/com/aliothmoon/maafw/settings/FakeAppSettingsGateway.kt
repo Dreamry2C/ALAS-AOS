@@ -44,10 +44,10 @@ class FakeAppSettingsGateway : AppSettingsGateway {
         resolutionPreference.value = preference
     }
 
-    override val debugMode = MutableStateFlow(false)
+    override val autoCleanLogs = MutableStateFlow(true)
 
-    override suspend fun setDebugMode(enabled: Boolean) {
-        debugMode.value = enabled
+    override suspend fun setAutoCleanLogs(enabled: Boolean) {
+        autoCleanLogs.value = enabled
     }
 
     override val themeStyle = MutableStateFlow(ThemeStyle.DEFAULT)

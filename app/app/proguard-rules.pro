@@ -20,7 +20,6 @@
 # ── 2. 特权进程的入口 ──
 # app_process --starter-class / --class 按名字加载；Shizuku 那条走 ComponentName
 -keep class com.aliothmoon.maafw.remote.RemoteServiceImpl { *; }
--keep class com.aliothmoon.maafw.remote.LogcatCaptureServiceImpl { *; }
 -keep class com.aliothmoon.maafw.root.** { *; }
 # 隐藏 API 的反射壳；反射目标是 framework，但这条路只在特权进程里跑，不值得赌
 -keep class com.aliothmoon.maafw.third.** { *; }
@@ -30,7 +29,6 @@
 -keep class com.aliothmoon.maafw.RemoteService** { *; }
 -keep class com.aliothmoon.maafw.IMaaRunnerCallback** { *; }
 -keep class com.aliothmoon.maafw.ITouchEventCallback** { *; }
--keep class com.aliothmoon.maafw.ILogcatService** { *; }
 
 # hidden-api 是 compileOnly，运行时由 framework 提供，包里没有
 -dontwarn android.**

@@ -10,7 +10,6 @@
     <string name="common_delete">Delete</string>
     <string name="common_loading">Loading…</string>
     <string name="dialog_confirm">OK</string>
-    <string name="common_restart">Restart</string>
     <string name="dialog_cancel">Cancel</string>
 
     <!-- Tasks screen -->
@@ -242,9 +241,6 @@
     <string name="run_countdown_start_now">Start now</string>
     <string name="run_countdown_cancel">Skip this run</string>
     <string name="run_countdown_cancelled">This scheduled run was cancelled</string>
-    <string name="run_log_screen_saver_skipped">Screen-off overlay did not show; it will not be dismissed automatically</string>
-    <string name="run_log_auto_sleep_skipped_not_run">The run did not start; skip auto-sleep</string>
-    <string name="run_log_auto_sleep_skipped_awake">The screen was already on at start; skip auto-sleep</string>
     <string name="wake_unlock_need_pin">A PIN is required to unlock; add it in Settings</string>
     <string name="wake_unlock_pin_rejected">Wrong PIN, or this lock screen does not accept injected keys</string>
     <string name="wake_unlock_screen_off">The screen did not turn on</string>
@@ -404,30 +400,7 @@
     <string name="dialog_shizuku_uninstall_confirm">Uninstall official build</string>
     <string name="common_got_it">Got it</string>
 
-    <!-- Run log -->
-    <string name="run_log_title">Run log</string>
-    <string name="run_log_count">%1$d entries</string>
-    <string name="run_log_export">Export</string>
-    <string name="run_log_clear">Clear</string>
-    <string name="run_log_empty">No entries yet. ALAS output appears here once a run starts.</string>
     <string name="tasks_log">Log</string>
-    <string name="run_log_filter_essential">Key</string>
-    <string name="run_log_filter_all">All</string>
-    <string name="run_log_connecting">Connecting to device…</string>
-    <string name="run_log_connected">Device connected</string>
-    <string name="run_log_agent_connected">Agent connected: %1$s</string>
-    <string name="run_log_connect_failed">Device connection failed</string>
-    <string name="run_log_resource_loading">Loading resource: %1$s</string>
-    <string name="run_log_resource_loaded">Resource loaded: %1$s</string>
-    <string name="run_log_resource_failed">Resource failed to load: %1$s</string>
-    <string name="run_log_task_starting">Task started: %1$s</string>
-    <string name="run_log_task_succeeded">Task completed: %1$s</string>
-    <string name="run_log_task_failed">Task failed: %1$s</string>
-    <string name="run_log_agent_flood">Agent output is flooding; display paused. Full output goes to logcat.</string>
-    <string name="run_log_app_left_display">The target app left the virtual display and could not be moved back (%1$s). Try foreground mode instead.</string>
-    <string name="run_log_app_process_gone">The target app process is not running or was closed unexpectedly (%1$s).</string>
-    <string name="run_log_app_unknown">unknown app</string>
-    <string name="run_log_agent_flood_recovered">Agent output is back to normal</string>
 
     <!-- Run history: one file per run -->
     <string name="log_archive_title">Run history</string>
@@ -441,23 +414,31 @@
     <string name="log_detail_tasks">Tasks: %1$s</string>
     <string name="log_detail_ended">Ended %1$s</string>
     <string name="log_detail_empty">This run record is empty</string>
-    <string name="log_outcome_completed">All completed</string>
-    <string name="log_outcome_completed_with_failures">Some failed</string>
-    <string name="log_outcome_cancelled">Cancelled</string>
-    <string name="log_outcome_failed">Failed</string>
-    <string name="log_outcome_not_run">Never started</string>
 
-    <!-- Error log: the app's own warnings and errors, written by AppLogWriter -->
-    <string name="app_log_title">Error log</string>
-    <string name="app_log_empty">No error log yet</string>
+    <!-- Launcher logs: the whole log/ directory (app.log rolling files by AppLogWriter, session.log, crash) -->
+    <string name="app_log_title">Launcher logs</string>
+    <string name="app_log_empty">No launcher logs yet</string>
     <string name="app_log_clear">Clear all</string>
     <!-- size · last written -->
     <string name="app_log_meta">%1$s · %2$s</string>
-    <string name="app_log_clear_title">Clear error log</string>
-    <string name="app_log_clear_message">Delete every error log file? This cannot be undone.</string>
+    <string name="app_log_clear_title">Clear launcher logs</string>
+    <string name="app_log_clear_message">Deletes only the app.log rolling files; session.log and crash records are kept. This cannot be undone.</string>
+
+    <!-- ALAS logs (rootfs/opt/alas/log): error captures + daily logs -->
+    <string name="alas_log_title">ALAS logs</string>
+    <string name="alas_log_empty">No ALAS logs yet</string>
+    <string name="alas_log_section_errors">Error records</string>
+    <string name="alas_log_section_daily">Daily logs</string>
+    <string name="alas_log_error_meta">%1$d files</string>
+
+    <!-- Log viewer (tail loading) -->
+    <string name="log_tail_load_earlier">Load earlier</string>
+    <string name="log_tail_empty">This log is empty</string>
+    <string name="log_tail_missing">The file no longer exists</string>
 
     <!-- Export -->
-    <string name="log_export_title">Export logs</string>
+    <string name="log_export_alas_title">Export ALAS logs</string>
+    <string name="log_export_launcher_title">Export launcher logs</string>
     <string name="log_export_share">Share</string>
     <string name="log_export_save">Save to device</string>
     <string name="log_export_running">Packing…</string>
@@ -467,9 +448,14 @@
 
     <!-- Settings "Logs" group entries -->
     <string name="settings_section_log">Logs</string>
-    <string name="settings_log_archive_desc">View the execution log of each run</string>
-    <string name="settings_log_error_desc">View the app\'s own exceptions and errors</string>
-    <string name="settings_log_export_desc">Pack all logs into a ZIP file to share</string>
+    <string name="settings_log_launcher_desc">View launcher run logs and crash records</string>
+    <string name="settings_log_alas_desc">View ALAS daily logs and error captures</string>
+    <string name="settings_log_export_alas_desc">Pack the last 7 days of ALAS logs (official issue format)</string>
+    <string name="settings_log_export_launcher_desc">Pack all launcher logs with device properties</string>
+    <string name="settings_auto_clean_logs">Auto-clean logs</string>
+    <string name="settings_auto_clean_logs_desc">On cold start, deletes ALAS logs older than 7 days and truncates stale session logs</string>
+    <string name="dialog_disable_auto_clean_title">Disable auto-clean</string>
+    <string name="dialog_disable_auto_clean_message">With auto-clean off, expired logs are never removed and may take up significant storage over time.</string>
 
     <!-- Diagnostic texts; built by DiagnosticMessages in domain/Diagnostics.kt -->
     <string name="diagnostic_severity_warning">Warning</string>
@@ -513,10 +499,6 @@
     <string name="diagnostic_integer_conversion_failed">Option "%1$s" input "%2$s" cannot be converted to an integer</string>
     <string name="diagnostic_boolean_conversion_failed">Option "%1$s" input "%2$s" cannot be converted to a boolean</string>
     <string name="schedule_default_name">Schedule %1$d</string>
-    <string name="settings_debug_mode">Debug mode</string>
-    <string name="settings_debug_mode_desc">Records everything in the error log; detailed privileged-process logs start on the next run</string>
-    <string name="dialog_enable_debug_title">Enable debug mode</string>
-    <string name="dialog_enable_debug_message">Requires an app restart to take effect. Detailed diagnostics plus app and privileged-process logcat will be recorded.</string>
 
     <!-- PI unpacking -->
     <string name="pi_install_title">Preparing project resources</string>

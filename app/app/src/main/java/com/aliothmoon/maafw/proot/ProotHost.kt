@@ -4,11 +4,13 @@ import android.app.Application
 import com.aliothmoon.maafw.MaaDispatchers
 import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.service.RunForegroundService
+import com.aliothmoon.maafw.settings.AppSettingsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
@@ -18,6 +20,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.io.File
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
@@ -39,6 +42,7 @@ import java.util.concurrent.TimeUnit
 class ProotHost(
     private val app: Application,
     private val scope: CoroutineScope,
+    private val settings: AppSettingsManager,
 ) {
 
     private val _state = MutableStateFlow(ProotSnapshot())
@@ -374,7 +378,7 @@ class ProotHost(
     // ------------------------------------------------------------------ 自愈清理与 DNS
 
     /** 自愈清锁：proot 临时目录整体重来 + git 锁 + reloadalas（会话不在跑时才可调） */
-    private fun cleanupStale() {
+    private suspend fun cleanupStale() {
         runCatching {
             prootTmpDir.deleteRecursively()
             prootTmpDir.mkdirs()
@@ -387,6 +391,52 @@ class ProotHost(
                     .forEach { it.delete() }
             }
         }.onFailure { Timber.w(it, "cleanup git locks failed") }
+        truncateSessionLogIfStale()
+    }
+
+    /**
+     * session.log 截尾：mtime 超 7 天且体积超上限时只留最后 [SESSION_LOG_KEEP_BYTES]
+     *
+     * 放在这里做是因为 startLocked 每次启动必经、且早于 spawnSession——此刻没有
+     * drain 线程在写，无竞争；截断会刷新 mtime，崩溃重拉循环里不会再重复截
+     */
+    private suspend fun truncateSessionLogIfStale() {
+        // 设置读盘是异步的：最多等一拍，等不到就本次跳过（下轮启动再判），不卡启动链
+        val loaded = withTimeoutOrNull(SETTINGS_LOADED_WAIT_MS) {
+            settings.loaded.first { it }
+            true
+        } ?: false
+        if (!loaded || !settings.autoCleanLogs.value) return
+
+        val file = sessionLog
+        val length = file.length()
+        if (!file.isFile || length <= SESSION_LOG_KEEP_BYTES) return
+        if (System.currentTimeMillis() - file.lastModified() < SESSION_LOG_STALE_MS) return
+
+        runCatching {
+            RandomAccessFile(file, "rw").use { raf ->
+                val tail = ByteArray(SESSION_LOG_KEEP_BYTES.toInt())
+                raf.seek(length - tail.size)
+                raf.readFully(tail)
+                // 切口多半落在半行/半个 UTF-8 字符上：从第一个换行之后开始留
+                val firstNewline = tail.indexOf('\n'.code.toByte())
+                val body = if (firstNewline in 0 until tail.size - 1) {
+                    tail.copyOfRange(firstNewline + 1, tail.size)
+                } else {
+                    tail
+                }
+                val marker = buildString {
+                    append("[host] ")
+                    synchronized(sessionLogLock) { append(phaseTs.format(java.util.Date())) }
+                    append(" TRUNCATED 过期 session.log，仅保留尾部 ")
+                    append(SESSION_LOG_KEEP_BYTES / 1024 / 1024).append("MB\n")
+                }.toByteArray()
+                raf.setLength(0)
+                raf.write(marker)
+                raf.write(body)
+            }
+            Timber.w("session.log 过期且超 %dMB，已截尾（原 %dKB）", SESSION_LOG_KEEP_BYTES / 1024 / 1024, length / 1024)
+        }.onFailure { Timber.w(it, "session.log 截尾失败") }
     }
 
     /**
@@ -452,5 +502,10 @@ class ProotHost(
         private const val RESTART_BACKOFF_MAX_MS = 60_000L
         private const val QUICK_DEATH_MS = 10_000L
         private const val MAX_RAPID_DEATHS = 5
+
+        /** session.log 截尾：保留尾部 2MB；mtime 超 7 天才算过期 */
+        private const val SESSION_LOG_KEEP_BYTES = 2L * 1024 * 1024
+        private const val SESSION_LOG_STALE_MS = 7L * 24 * 60 * 60 * 1000
+        private const val SETTINGS_LOADED_WAIT_MS = 2_000L
     }
 }

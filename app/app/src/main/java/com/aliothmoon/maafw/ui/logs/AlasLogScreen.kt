@@ -12,65 +12,44 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maafw.R
-import com.aliothmoon.maafw.log.AppLogFileInfo
-import com.aliothmoon.maafw.log.AppLogIntent
-import com.aliothmoon.maafw.log.AppLogViewModel
+import com.aliothmoon.maafw.log.AlasDailyLogInfo
+import com.aliothmoon.maafw.log.AlasErrorDirInfo
+import com.aliothmoon.maafw.log.AlasLogViewModel
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.ui.components.MaaCardSurface
-import com.aliothmoon.maafw.ui.components.MaaPromptDialog
 import com.aliothmoon.maafw.ui.components.maaClickable
 import org.koin.androidx.compose.koinViewModel
 
 /**
- * 启动器日志的文件列表（二级页面）：`log/` 目录递归（app.log 系列 / session.log / crash）
+ * ALAS 日志列表（二级页面）：直读内部存储的 `rootfs/opt/alas/log`，不走 wrapper HTTP
  *
- * 与运行历史同一形态的两级页；版面对齐 MaaMeow 的 `ErrorLogView`
+ * 两个分区：「错误记录」是 ALAS 出错时落的时间戳现场（log.txt + 截图），
+ * 「按天日志」是整天 append 的 txt
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppLogScreen(
+fun AlasLogScreen(
     onBack: () -> Unit,
-    onOpen: (fileName: String) -> Unit,
-    viewModel: AppLogViewModel = koinViewModel(),
+    onOpenDaily: (fileName: String) -> Unit,
+    onOpenError: (dirName: String) -> Unit,
+    viewModel: AlasLogViewModel = koinViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var confirmClear by remember { mutableStateOf(false) }
-
-    if (confirmClear) {
-        MaaPromptDialog(
-            title = stringResource(R.string.app_log_clear_title),
-            message = stringResource(R.string.app_log_clear_message),
-            icon = Icons.Outlined.DeleteOutline,
-            confirmText = stringResource(R.string.common_delete),
-            dismissText = stringResource(R.string.dialog_cancel),
-            onConfirm = {
-                viewModel.onIntent(AppLogIntent.ClearAll)
-                confirmClear = false
-            },
-            onDismissRequest = { confirmClear = false },
-            dismissOnOutsideClick = true,
-        )
-    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -80,7 +59,7 @@ fun AppLogScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
-                title = { Text(stringResource(R.string.app_log_title)) },
+                title = { Text(stringResource(R.string.alas_log_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -89,20 +68,11 @@ fun AppLogScreen(
                         )
                     }
                 },
-                actions = {
-                    if (state.files.isNotEmpty()) {
-                        TextButton(onClick = { confirmClear = true }) {
-                            Text(
-                                text = stringResource(R.string.app_log_clear),
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                },
             )
         },
     ) { padding ->
-        if (state.files.isEmpty()) {
+        val empty = state.errorDirs.isEmpty() && state.dailyLogs.isEmpty()
+        if (empty) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -112,7 +82,7 @@ fun AppLogScreen(
             ) {
                 Text(
                     text = stringResource(
-                        if (state.loading) R.string.common_loading else R.string.app_log_empty,
+                        if (state.loading) R.string.common_loading else R.string.alas_log_empty,
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -128,15 +98,60 @@ fun AppLogScreen(
             contentPadding = PaddingValues(MaaDesignTokens.Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
         ) {
-            items(state.files, key = { it.name }) { file ->
-                AppLogFileRow(file = file, onClick = { onOpen(file.name) })
+            if (state.errorDirs.isNotEmpty()) {
+                item(key = "header_errors") {
+                    AlasLogSectionHeader(stringResource(R.string.alas_log_section_errors))
+                }
+                items(state.errorDirs, key = { "error_${it.name}" }) { dir ->
+                    AlasErrorDirRow(dir = dir, onClick = { onOpenError(dir.name) })
+                }
+            }
+            if (state.dailyLogs.isNotEmpty()) {
+                item(key = "header_daily") {
+                    AlasLogSectionHeader(stringResource(R.string.alas_log_section_daily))
+                }
+                items(state.dailyLogs, key = { "daily_${it.name}" }) { file ->
+                    AlasDailyLogRow(file = file, onClick = { onOpenDaily(file.name) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AppLogFileRow(file: AppLogFileInfo, onClick: () -> Unit) {
+private fun AlasLogSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = MaaDesignTokens.Spacing.sm),
+    )
+}
+
+@Composable
+private fun AlasErrorDirRow(dir: AlasErrorDirInfo, onClick: () -> Unit) {
+    AlasLogRow(
+        title = logTimestamp(dir.timestamp),
+        subtitle = stringResource(R.string.alas_log_error_meta, dir.fileCount),
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun AlasDailyLogRow(file: AlasDailyLogInfo, onClick: () -> Unit) {
+    AlasLogRow(
+        title = file.name,
+        subtitle = stringResource(
+            R.string.app_log_meta,
+            formatFileSize(file.sizeBytes),
+            logTimestamp(file.lastModified),
+        ),
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun AlasLogRow(title: String, subtitle: String, onClick: () -> Unit) {
     MaaCardSurface(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -149,13 +164,9 @@ private fun AppLogFileRow(file: AppLogFileInfo, onClick: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xxs),
             ) {
-                Text(text = file.name, style = MaterialTheme.typography.titleSmall)
+                Text(text = title, style = MaterialTheme.typography.titleSmall)
                 Text(
-                    text = stringResource(
-                        R.string.app_log_meta,
-                        formatFileSize(file.sizeBytes),
-                        logTimestamp(file.lastModified),
-                    ),
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -67,15 +67,14 @@ import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.BuildConfig
 import com.aliothmoon.maafw.domain.RemoteBackend
 import com.aliothmoon.maafw.domain.ThemeMode
+import com.aliothmoon.maafw.log.LogExportKind
 import com.aliothmoon.maafw.privileged.PermissionManager
 import com.aliothmoon.maafw.proot.ProotHost
 import com.aliothmoon.maafw.provision.ProvisionState
 import com.aliothmoon.maafw.provision.RootfsProvisioner
-import com.aliothmoon.maafw.settings.SettingsEvent
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.SettingsViewModel
 import com.aliothmoon.maafw.service.HostState
-import com.aliothmoon.maafw.util.Misc
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaFwTheme
 import com.aliothmoon.maafw.ui.components.clearFocusOnBlankTap
@@ -86,6 +85,9 @@ import com.aliothmoon.maafw.ui.hangar.HangarScreen
 import com.aliothmoon.maafw.ui.hangar.PreviewTouchAction
 import com.aliothmoon.maafw.ui.hangar.rememberMovablePreview
 import com.aliothmoon.maafw.ui.navigation.Routes
+import com.aliothmoon.maafw.ui.logs.AlasErrorDetailScreen
+import com.aliothmoon.maafw.ui.logs.AlasLogDetailScreen
+import com.aliothmoon.maafw.ui.logs.AlasLogScreen
 import com.aliothmoon.maafw.ui.logs.AppLogDetailScreen
 import com.aliothmoon.maafw.ui.logs.AppLogScreen
 import com.aliothmoon.maafw.ui.logs.LogExportController
@@ -169,7 +171,7 @@ fun AppRoot(
         val pagerState = rememberPagerState(pageCount = { TopDestination.entries.size })
         val scope = rememberCoroutineScope()
         val snackbarHostState = remember { SnackbarHostState() }
-        var exportSheetVisible by remember { mutableStateOf(false) }
+        var exportKind by remember { mutableStateOf<LogExportKind?>(null) }
 
         // 预览面（SurfaceView）的所有权在这一层：全屏宿主必须在 Scaffold 之外才盖得住
         // 底部 tab 栏，而 movableContent 要求内嵌与全屏两处调用点同属一棵组合树（m0 同款）
@@ -183,13 +185,6 @@ fun AppRoot(
         )
 
         val context = LocalContext.current
-        LaunchedEffect(Unit) {
-            settingsViewModel.events.collect { event ->
-                when (event) {
-                    SettingsEvent.RestartApp -> Misc.restartApp(context)
-                }
-            }
-        }
 
         // 未装/未启动/未授权时的引导；needsGuidance 为 false 时自身不渲染
         ShizukuReadinessDialog(
@@ -313,7 +308,9 @@ fun AppRoot(
                         state = settingsState,
                         onIntent = settingsViewModel::onIntent,
                         onOpenAppLog = { navController.navigate(Routes.APP_LOG) },
-                        onExportLogs = { exportSheetVisible = true },
+                        onOpenAlasLog = { navController.navigate(Routes.ALAS_LOG) },
+                        onExportAlasLogs = { exportKind = LogExportKind.ALAS },
+                        onExportLauncherLogs = { exportKind = LogExportKind.LAUNCHER },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -360,6 +357,35 @@ fun AppRoot(
                         onBack = { navController.popBackStack() },
                     )
                 }
+                composable(Routes.ALAS_LOG) {
+                    AlasLogScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenDaily = { navController.navigate(Routes.alasLogDetail(it)) },
+                        onOpenError = { navController.navigate(Routes.alasErrorDetail(it)) },
+                    )
+                }
+                composable(
+                    route = Routes.ALAS_LOG_DETAIL,
+                    arguments = listOf(
+                        navArgument(Routes.ALAS_LOG_DETAIL_ARG) { type = NavType.StringType },
+                    ),
+                ) { entry ->
+                    AlasLogDetailScreen(
+                        fileName = entry.arguments?.getString(Routes.ALAS_LOG_DETAIL_ARG).orEmpty(),
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = Routes.ALAS_ERROR_DETAIL,
+                    arguments = listOf(
+                        navArgument(Routes.ALAS_ERROR_DETAIL_ARG) { type = NavType.StringType },
+                    ),
+                ) { entry ->
+                    AlasErrorDetailScreen(
+                        dirName = entry.arguments?.getString(Routes.ALAS_ERROR_DETAIL_ARG).orEmpty(),
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
         }
 
@@ -391,8 +417,8 @@ fun AppRoot(
 
         // 无条件挂在这一层：它注册的 SAF launcher 要活得比 sheet 的显隐久
         LogExportController(
-            visible = exportSheetVisible,
-            onDismiss = { exportSheetVisible = false },
+            kind = exportKind,
+            onDismiss = { exportKind = null },
             onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
         )
     }

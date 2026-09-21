@@ -51,7 +51,9 @@ fun SettingsScreen(
     onIntent: (SettingsIntent) -> Unit,
     // 二级页面与 SAF 都需要 Activity 宿主，导航与弹窗归 AppRoot 那一层
     onOpenAppLog: () -> Unit,
-    onExportLogs: () -> Unit,
+    onOpenAlasLog: () -> Unit,
+    onExportAlasLogs: () -> Unit,
+    onExportLauncherLogs: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -85,7 +87,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.lg),
         ) {
             DisplayCard(state, onIntent)
-            LogCard(state, onIntent, onOpenAppLog, onExportLogs)
+            LogCard(state, onIntent, onOpenAppLog, onOpenAlasLog, onExportAlasLogs, onExportLauncherLogs)
             OtherCard(state, onIntent)
             AboutCard()
         }
@@ -163,62 +165,73 @@ private fun ColumnScope.LanguageChoice(onIntent: (SettingsIntent) -> Unit) {
 }
 
 /**
- * 入口都是「离开这一页」，不带任何开关
+ * 日志区：两个查看入口 + 两条导出 + 自动清理开关
  *
- * 调试模式并在这里（对齐 MaaMeow）：它管的就是日志详略，跟运行行为无关
+ * 前四项都是「离开这一页」，只有自动清理是就地开关；关闭走确认弹窗（占空间警告）
  */
 @Composable
 private fun LogCard(
     state: SettingsUiState,
     onIntent: (SettingsIntent) -> Unit,
     onOpenAppLog: () -> Unit,
-    onExportLogs: () -> Unit,
+    onOpenAlasLog: () -> Unit,
+    onExportAlasLogs: () -> Unit,
+    onExportLauncherLogs: () -> Unit,
 ) {
-    var showEnableConfirm by remember { mutableStateOf(false) }
+    var showDisableConfirm by remember { mutableStateOf(false) }
     MaaCard(title = stringResource(R.string.settings_section_log), collapsible = true) {
         MaaNavigationRow(
             label = stringResource(R.string.app_log_title),
-            description = stringResource(R.string.settings_log_error_desc),
+            description = stringResource(R.string.settings_log_launcher_desc),
             onClick = onOpenAppLog,
         )
         MaaNavigationRow(
-            label = stringResource(R.string.log_export_title),
-            description = stringResource(R.string.settings_log_export_desc),
-            onClick = onExportLogs,
+            label = stringResource(R.string.alas_log_title),
+            description = stringResource(R.string.settings_log_alas_desc),
+            onClick = onOpenAlasLog,
         )
-        // 启用走确认弹窗，确认即落盘 + 重启 App（对齐 MaaMeow）；关闭直接关
+        MaaNavigationRow(
+            label = stringResource(R.string.log_export_alas_title),
+            description = stringResource(R.string.settings_log_export_alas_desc),
+            onClick = onExportAlasLogs,
+        )
+        MaaNavigationRow(
+            label = stringResource(R.string.log_export_launcher_title),
+            description = stringResource(R.string.settings_log_export_launcher_desc),
+            onClick = onExportLauncherLogs,
+        )
+        // 开启直接落盘；关闭先弹确认：关掉之后过期日志只增不减
         MaaLabeledControlRow(
-            label = stringResource(R.string.settings_debug_mode),
+            label = stringResource(R.string.settings_auto_clean_logs),
             trailing = {
                 MaaSwitch(
-                    checked = state.debugMode,
+                    checked = state.autoCleanLogs,
                     onCheckedChange = { enabled ->
-                        if (enabled) showEnableConfirm = true
-                        else onIntent(SettingsIntent.SetDebugMode(false))
+                        if (enabled) onIntent(SettingsIntent.SetAutoCleanLogs(true))
+                        else showDisableConfirm = true
                     },
                 )
             },
         )
         Text(
-            text = stringResource(R.string.settings_debug_mode_desc),
+            text = stringResource(R.string.settings_auto_clean_logs_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-    if (showEnableConfirm) {
+    if (showDisableConfirm) {
         AlertDialog(
-            onDismissRequest = { showEnableConfirm = false },
-            title = { Text(stringResource(R.string.dialog_enable_debug_title)) },
-            text = { Text(stringResource(R.string.dialog_enable_debug_message)) },
+            onDismissRequest = { showDisableConfirm = false },
+            title = { Text(stringResource(R.string.dialog_disable_auto_clean_title)) },
+            text = { Text(stringResource(R.string.dialog_disable_auto_clean_message)) },
             confirmButton = {
                 TextButton(onClick = {
-                    showEnableConfirm = false
-                    // 落盘完成后由 SettingsEvent.RestartApp 拉到路由层重启
-                    onIntent(SettingsIntent.SetDebugMode(true))
-                }) { Text(stringResource(R.string.common_restart)) }
+                    showDisableConfirm = false
+                    onIntent(SettingsIntent.SetAutoCleanLogs(false))
+                }) { Text(stringResource(R.string.dialog_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { showEnableConfirm = false }) {
+                TextButton(onClick = { showDisableConfirm = false }) {
                     Text(stringResource(R.string.dialog_cancel))
                 }
             },
