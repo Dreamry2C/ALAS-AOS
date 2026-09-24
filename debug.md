@@ -4,6 +4,19 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-24] Android 10 云机重建 deviceId=0 输入事件时丢 displayId
+
+- **现象**：游戏原本显示在 VD，登录按钮首击后 AOS 自动进入横屏全屏预览；手动触摸无效，日志 touch up failed、反复重启游戏，InputDispatcher 高频注入。
+- **根本原因**：从问题云机只读提取 services.jar，反汇编 `InputManagerService.replaceDeviceId` 确认：当 MotionEvent.deviceId=0 时重新 obtain 事件并改 deviceId=-1，但没有传递 displayId；事件回到主屏，点击预览卡，预览再转发形成回环。前述“显示组导致旋转”是假设，已通过源码与实测排除，勿靠强制竖屏掩盖。
+- **解决方案**：注入源使用 `KeyCharacterMap.VIRTUAL_KEYBOARD` (-1)，保留原 MotionEvent 的目标 displayId。独立 app_process 探针验证 DOWN/UP=true，TouchStatesByDisplay 指向 VD 上游戏。无需修改系统输入服务、游戏或 ALAS 上游。
+- **伴随问题**：云机 dumpsys 标题是 `Display: mDisplayId=N`，旧代码只按 `Display ` 切分导致跨屏串读；按明确标题/精确 ID 切块，并仅用同块 mFocusedApp 回退。进程存在不等于在目标屏，不能用全局 pidof 作前台判据。
+
+## [2026-09-24] 通用 config/ 忽略规则误伤 Kotlin 源码
+
+- **现象**：干净克隆 assembleDebug 报 UserConfigurationStore/UserConfigurationSerializer 不存在。
+- **根本原因**：`.gitignore` 的 config/ 匹配任意层级；原本应跟随 MaaFwApp 基线的 config/UserConfigurationStore.kt 从未入库。
+- **解决方案**：恢复基线 b2b0f54 原文件，增加完整源码目录例外。构建还需补齐 gitignored 的 rootfs.tar.xz；本次复用原 v0.1.4 APK 内 assets，不能交付缺 rootfs 的 APK。
+
 ## [2026-09-18] git:// 9418 裸 TCP 在运营商网络下不可靠：ping 通≠端口快，大陆正解是 CDN pack（443）
 
 - **现象**：手机热更新连续 5 次 `FAILED fetch`，每次白烧 240s 超时（开机链 4 分钟）；但 ping git.lyoko.io 正常（24~48ms），ls-remote（小包）也能成。

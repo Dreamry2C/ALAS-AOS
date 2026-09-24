@@ -4,6 +4,7 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.InputEvent;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
@@ -30,7 +31,9 @@ public final class InputControlUtils {
         return manager;
     }
 
-    private static final int DEFAULT_DEVICE_ID = 0;
+    // Some cloud ROMs rebuild device-0 events and lose their target displayId.
+    // Use Android's virtual input device so the original event reaches the VD.
+    private static final int DEFAULT_DEVICE_ID = KeyCharacterMap.VIRTUAL_KEYBOARD;
     private static final int DEFAULT_SOURCE = InputDevice.SOURCE_TOUCHSCREEN;
 
     private static final List<TouchPointerSequence.Pointer> slots = new ArrayList<>();

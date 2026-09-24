@@ -2,6 +2,18 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
+## 未发布（基于 v0.1.4）
+
+### 2026-09-24 · 修复：Android 10 云机虚拟屏输入串到主屏
+
+- 用户授权排查 `10.126.126.52:5555`、修改源码、commit、构建与重装 AOS；要求不重启云机、不停止 Moontier、不动游戏数据。过程记录 `.tmp/2026-09-24-cloudphone-debug.md`。
+- 系统 services.jar 只读取证确认：ROM 的 `InputManagerService.replaceDeviceId` 重建 deviceId=0 的 MotionEvent 时丢失 displayId。登录点击因此落到 AOS 预览卡，触发全屏横屏与递归转发，并产生 touch up failed。
+- InputControlUtils 改用 Android 虚拟设备 ID -1；不改屏幕方向、显示 flags 或系统配置。独立设备探针 DOWN/UP 均 true，触摸目标确认为 display 7 的游戏窗口。
+- ALAS-AOS 自有桥补丁按精确 display 标题分块，兼容 Android 10 的 `Display: mDisplayId=N`；同块 mFocusedApp 兜底空 mCurrentFocus，避免串读主屏导致误重启；双源同步，8 个独立 unittest 通过。
+- 修复首次克隆构建缺文件：根目录 config/ 忽略规则误伤 Android 源码，恢复 MaaFwApp b2b0f54 的 UserConfigurationStore.kt 并增加精确例外。
+- 复用 Moontier JDK17/SDK；项目所需 Gradle 9.4.1 下载到本项目 `.tmp/` 并核验 SHA256。原 APK 与内置 rootfs 已备份复用，AOS 私有数据已备份（1GB）；调度器已停、VD 已清场到仅 display 0。
+- 提交前编译检查通过；按用户追加指令，先提交再重新构建安装，端到端回归待执行。未 push/发版。
+
 ### 2026-09-21 · 发版 🚀：v0.1.4「日志中心重做」（用户授权 push + release）
 
 - **提交**：`70fc569 feat(logs): 设置页日志区重构——日志中心 + 双导出 + 自动清理 + v0.1.4 发版准备`（51 文件，+1599/-833）；tag `v0.1.4` 打在发版 commit 上（versionName 由 git describe 导出）。
