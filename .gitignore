@@ -23,10 +23,9 @@ local.properties
 *.iml
 .idea/
 
-# Local experiment reports and device captures
-/spike/**/dist/
-/spike/**/logs/
-/spike/**/REPORT*.md
+# spike 产物：APK 二进制可重建不入库；dist/logs 文本证据保留
+!spike/**/dist/
+spike/**/dist/*.apk
 
 # rootfs/ 资产必须进仓，解除上方通用目录名规则（build/、config/）的误伤
 !rootfs/build/
