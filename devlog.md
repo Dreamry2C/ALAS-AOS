@@ -2,6 +2,21 @@
 
 > 倒序排列，最新在上；按发版版本号分段。
 
+### 2026-09-24 · 修复 🔧：切页签不再闪「启动环境」+ 秒级黑屏（方案 A，用户批准）
+
+- **归因**（explore 全仓实证）：切回挂机页时 `ensureEnvironmentStarted()` 末尾必发桥 ping，挂机满负荷（ALAS 每帧 2.7MB 打 screencap）下单次 ping 超时 → `bridgeReachable=false` → `environmentUp=false` → 预览卡切「启动环境」占位分支把 SurfaceView 踢出 composition 销毁 → 等 ≤4s 周期探测翻回再重建一次。用户关键对照实验：退手机主屏再回来不触发（`active` 未变、无强制 ping），坐实"整条表演是应用内代码自找的"。
+- **A1 判据解耦**：`HangarScreen.kt` VdPreview 的 envUp 从 `environmentUp`（含桥 ping）改为只看 `vdDisplayId`——预览不走桥 TCP，桥挂了画面照渲染；屏真没了（特权断线快照清零）才给「启动环境」。`environmentUp` 定义不动（悬浮球/FGS 判据照旧）。
+- **A2 探测迟滞**：`HostState.probeBridgeNow()` 加 `probeFailStreak`，连续 2 次（`BRIDGE_FAIL_THRESHOLD`）失败才置 `bridgeReachable=false`，与 `RunForegroundService`「桥抖动不撤保活」原则对齐。
+- **A3 pager 常驻**：`AppRoot.kt` `beyondViewportPageCount` 1→2，三 tab 全留 composition，切设置页不再销毁挂机页 SurfaceView。
+- **验证**：assembleRelease 2m29s 全绿（v0.1.5-alpha.1/67）；真机冒烟——挂机运行中（桥满负荷真实条件）uiautomator 驱动切页：ALAS回切 4 拍 + 设置回切 4 拍 + 连续 3 轮快切（ALAS→设置→挂机）各 2 拍，「启动环境/环境未启动」出现次数 **14/14 全 0**；回切后实拍游戏画面实时渲染正常，特权已连接/桥正常/虚拟屏 #45/调度器运行中。装机导致 wrapper 会话重启（runner 停止），已通过 `/start` 恢复挂机（pid 26585）。
+- 未 commit（等授权）。
+
+### 2026-09-21 · 文档 📝：新增项目级 skills——push 与发版流程（用户指令）
+
+- `.kimi-code/skills/pushing-to-github/SKILL.md`：push/tag 推送流程。本机代理探测（7897 等常用端口扫描）、命令级注入红线（禁改 git 配置）、fetch/push/gh 全联网命令同一打法、验收标准（fetch 后 origin/main..HEAD 为空）。
+- `.kimi-code/skills/releasing-new-version/SKILL.md`：发版全流程。第 0 步 pre-flight（防空版/tag 撞车/auth 失效）→ CHANGELOG 用户向重写 + README 核对 → 选择性 add + 发版 commit + tag → push → tag 上重建（BUILD SUCCESSFUL + R8 verified）→ badging 核验（versionName 无 -alpha.N、versionCode 递增）→ 资产改名 → 两段式 GitHub Release（防空上传 EOF，资产尺寸核验）→ 收官账册。要点：版本号 git tag 推导、tag 顺序承力、回滚链（删远端+本地 tag）。
+- 两个 skill 经两轮子代理应用场景测试（首轮 16 项缺口全部闭合，次轮 1 实质问题 + 5 小项全部修复）。
+
 ### 2026-09-21 · 发版 🚀：v0.1.4「日志中心重做」（用户授权 push + release）
 
 - **提交**：`70fc569 feat(logs): 设置页日志区重构——日志中心 + 双导出 + 自动清理 + v0.1.4 发版准备`（51 文件，+1599/-833）；tag `v0.1.4` 打在发版 commit 上（versionName 由 git describe 导出）。
