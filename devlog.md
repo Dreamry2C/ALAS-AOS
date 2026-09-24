@@ -17,6 +17,12 @@
 - 端到端回归：游戏更新/登录画面显示在 VD #8，桥 screencap 与 App 预览一致；display 0 始终 `720x1280` portrait，display 8 `1280x720` landscape；登录点击无 `touch up failed`，无 AOS 全屏横屏与误重启。回归后已停止 runner、force-stop AOS/游戏，VD 清场仅剩 display 0。
 - 设备 /data 余 4.3GB，未重启云机，Moontier 组网未停止。未 push/发版。
 
+### 2026-09-24 · 合并上游 v0.1.5
+
+- 从 `upstream/main` 拉取 v0.1.5；预演确认与本次 `InputControlUtils`/ALAS 前台解析修复无代码冲突，只有 `devlog.md` 顶部账册冲突。
+- 纳入上游三项预览稳定性修复：桥探测连续失败 2 次才降级、预览判据改为虚拟屏存在、Pager 保持三个 tab composition，避免切页黑屏重建。
+- 冲突已保留两边记录并提交 `f7d069e`；合并后 `assembleDebug` 通过（Gradle 9.4.1，1m57s）。未 push、未重新安装云机。
+
 ### 2026-09-24 · 发版 🚀：v0.1.5「切页不重载」（用户授权 push+release）
 
 - **提交**：`f90b7db fix(hangar): 切页不再闪「启动环境」与黑屏重载 + v0.1.5 发版准备`（5 文件，+46/-3）；tag `v0.1.5` 在发版 commit 上（describe 精确 v0.1.5）。main 与 tag 均已 push（发版主体直连 200 未走代理；收官 push 直连卡死，换 7897 代理命令级注入成功）。
