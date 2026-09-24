@@ -4,7 +4,7 @@
 
 ### 2026-09-24 · 发版 🚀：v0.1.5「切页不重载」（用户授权 push+release）
 
-- **提交**：`f90b7db fix(hangar): 切页不再闪「启动环境」与黑屏重载 + v0.1.5 发版准备`（5 文件，+46/-3）；tag `v0.1.5` 在发版 commit 上（describe 精确 v0.1.5）。main 与 tag 均已 push（本次直连 200，未走代理）。
+- **提交**：`f90b7db fix(hangar): 切页不再闪「启动环境」与黑屏重载 + v0.1.5 发版准备`（5 文件，+46/-3）；tag `v0.1.5` 在发版 commit 上（describe 精确 v0.1.5）。main 与 tag 均已 push（发版主体直连 200 未走代理；收官 push 直连卡死，换 7897 代理命令级注入成功）。
 - **APK**：tag 上重建 1m16s 全绿（R8 keeps verified: 5）；badging package=`io.github.shinarin.alasaos` / versionCode=68（较 v0.1.4 的 66 递增）/ versionName=0.1.5（无 -alpha）；资产 `ALAS-AOS-v0.1.5-android-arm64.apk`（327,689,465 B）。
 - **发布**：[v0.1.5](https://github.com/Shinarin/ALAS-AOS/releases/tag/v0.1.5)；两段式（create → upload）一次成功，远端资产尺寸与本地逐字节一致。notes：覆盖安装说明置顶 + 用户向小节 + CHANGELOG 链接。
 - handoff 见 `2026-09-24-release-v015.md`。
