@@ -27,6 +27,27 @@ from module.logger import logger
 ALASAOS_DEFAULT_ADDR = '127.0.0.1:22300'
 
 
+def _display_foreground_package(output: str, display_id: int) -> str:
+    """Read only the requested display, including Android 10's unfocused VD."""
+    headers = list(re.finditer(
+        r'^[ \t]*Display(?:[ \t]*:[ \t]*mDisplayId=|[ \t]+(?:displayId=|mDisplayId=)?)(\d+)\b',
+        output, re.MULTILINE))
+    for index, header in enumerate(headers):
+        if int(header.group(1)) != display_id:
+            continue
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(output)
+        block = output[header.end():end]
+        for pattern in (
+            r'mCurrentFocus=Window\{[^\n}]*?\s([\w.]+)/[\w.$]+',
+            r'mFocusedApp=[^\n]*?ActivityRecord\{[^\n}]*?\s([\w.]+)/[\w.$]+',
+        ):
+            match = re.search(pattern, block)
+            if match:
+                return match.group(1)
+        return ''
+    return ''
+
+
 class AlasAosBridgeError(Exception):
     pass
 
@@ -173,20 +194,10 @@ class AlasAos:
         self.alasaos_shell_output(f'am force-stop {package or self.package}')
 
     def app_current_alasaos(self) -> str:
-        """虚拟屏的前台应用包名。dumpsys window displays 按 displayId 分块，
-        取目标块内的 mCurrentFocus；找不到则回退 pidof 判定。"""
+        """只读取目标虚拟屏的焦点，避免把物理屏应用误判为游戏前台。"""
         out = self.alasaos_shell_output('dumpsys window displays')
         vid = self.alasaos_display_id
-        current = ''
-        for block in re.split(r'\n\s*(?=Display )', out):
-            if f'displayId={vid}' in block:
-                m = re.search(r'mCurrentFocus=\S+\s*\{[^}]*?\s([\w.]+)/[\w.]+', block)
-                if m:
-                    current = m.group(1)
-                break
-        if not current:
-            resp = self.alasaos_shell(f'pidof {self.package}')
-            current = self.package if resp.get('ok') and resp.get('stdout', '').strip() else ''
+        current = _display_foreground_package(out, vid)
         logger.attr('App current (alasaos)', current)
         return current
 
