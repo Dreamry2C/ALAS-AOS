@@ -30,6 +30,7 @@ spike/**/dist/*.apk
 # v3 阶段一：rootfs/ 资产必须进仓，解除上方通用目录名规则（build/、config/）的误伤
 !rootfs/build/
 !rootfs/patches/module/config/
+!app/app/src/main/java/com/aliothmoon/maafw/config/
 
 # 阶段三：rootfs 资产随包内置（300MB+ 不入库，构建前从 rootfs-dist 拷入）；BUILD_MANIFEST 入库
 /app/app/src/main/assets/rootfs/rootfs.tar.xz
