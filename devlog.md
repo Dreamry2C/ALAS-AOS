@@ -12,7 +12,10 @@
 - ALAS-AOS 自有桥补丁按精确 display 标题分块，兼容 Android 10 的 `Display: mDisplayId=N`；同块 mFocusedApp 兜底空 mCurrentFocus，避免串读主屏导致误重启；双源同步，8 个独立 unittest 通过。
 - 修复首次克隆构建缺文件：根目录 config/ 忽略规则误伤 Android 源码，恢复 MaaFwApp b2b0f54 的 UserConfigurationStore.kt 并增加精确例外。
 - 复用 Moontier JDK17/SDK；项目所需 Gradle 9.4.1 下载到本项目 `.tmp/` 并核验 SHA256。原 APK 与内置 rootfs 已备份复用，AOS 私有数据已备份（1GB）；调度器已停、VD 已清场到仅 display 0。
-- 提交前编译检查通过；按用户追加指令，先提交再重新构建安装，端到端回归待执行。未 push/发版。
+- 提交前编译检查通过；按用户追加指令先提交 `6fe1cc4`，再重新构建安装。assembleDebug 成功（Gradle 9.4.1，48s），APK versionCode=68/versionName=`6fe1cc4`。
+- 签名核验：原包 SHA-256 证书 `f52207...`，本地 debug 包为 Android Debug `8e967c...`；按用户预授权卸载 AOS 后安装，恢复 AOS 私有 files/shared_prefs，`alas.json` 哈希一致。未触碰游戏包/数据。
+- 端到端回归：游戏更新/登录画面显示在 VD #8，桥 screencap 与 App 预览一致；display 0 始终 `720x1280` portrait，display 8 `1280x720` landscape；登录点击无 `touch up failed`，无 AOS 全屏横屏与误重启。回归后已停止 runner、force-stop AOS/游戏，VD 清场仅剩 display 0。
+- 设备 /data 余 4.3GB，未重启云机，Moontier 组网未停止。未 push/发版。
 
 ### 2026-09-21 · 发版 🚀：v0.1.4「日志中心重做」（用户授权 push + release）
 

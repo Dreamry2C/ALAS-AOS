@@ -10,4 +10,7 @@
 - JDK：`E:/GitRepository/Moontier/.build-tools/jdk17/jdk-17.0.16+8`；SDK 同项目 `.build-tools/android-sdk`；Gradle：本项目 `.tmp/gradle-dist/gradle-9.4.1`，GRADLE_USER_HOME=`.tmp/gradle-home`。Gradle 命令参数 `'-Pandroid.builder.sdkDownload=false'` 在 PowerShell 要加引号。
 - GitHub 下载走用户指定代理 `http://127.0.0.1:7890`。Gradle 9.3.1 不满足 AGP 9.2.1 的最低 9.4.1 要求。
 - 实时步骤记录：`.tmp/2026-09-24-cloudphone-debug.md`；构建日志 `.tmp/cloud-build-debug.log`；证据 `.tmp/cloud-input-probe-result.txt` 与 cloud-inputservice-dex.txt。
-- 下一步：提交本次文件 → 重建带 commit 版本的 APK → 核签名并安装/恢复 AOS 数据 → 验证内嵌登录、手动全屏触摸与 ALAS 自动登录 → 停调度器清 VD → 更新最终验证账册。
+- 已完成：提交 `6fe1cc4` → 重建 APK → 核签名 → 卸载/安装并恢复 AOS 数据 → 进入 ALAS 自动登录/游戏更新页面验证 → 停调度器清 VD。
+- 最终实证：游戏画面/桥帧在 VD #8；物理 display 0 始终 720x1280；游戏 display 8 为 1280x720；无 `touch up failed`、无 AOS 横屏全屏、无误判重启。runner、AOS、游戏已停止，设备只剩 display 0。
+- 构建 APK：`app/app/build/outputs/apk/debug/app-debug.apk`，versionCode=68、versionName=`6fe1cc4`、396960034 bytes；本地 commit 已完成，未 push。
+- 结论：本次故障修复完成。后续若要继续长稳挂机，应在用户在场时重新点击开始挂机；本轮已按安全约束停止运行。
