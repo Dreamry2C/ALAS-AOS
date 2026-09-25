@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.LocalFloatingWindowContext
@@ -77,6 +78,7 @@ fun ITextField(
     supportingText: @Composable (() -> Unit)? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
     outlineColor: Color? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
     onImeAction: (() -> Unit)? = null
 ) {
     val isInFloatingWindow = LocalFloatingWindowContext.current
@@ -100,8 +102,12 @@ fun ITextField(
             outlineColor = outlineColor ?: MaterialTheme.colorScheme.outline,
             trailingIcon = trailingIcon,
             onImeAction = handleImeDone,
-            inputType = if (singleLine) InputType.TYPE_CLASS_TEXT else
-                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            inputType = when {
+                visualTransformation != VisualTransformation.None ->
+                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                singleLine -> InputType.TYPE_CLASS_TEXT
+                else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            }
         )
     } else {
         OutlinedTextField(
@@ -115,6 +121,7 @@ fun ITextField(
             shape = shape,
             supportingText = supportingText,
             trailingIcon = trailingIcon,
+            visualTransformation = visualTransformation,
             colors = if (outlineColor != null) {
                 OutlinedTextFieldDefaults.colors(
                     unfocusedBorderColor = outlineColor

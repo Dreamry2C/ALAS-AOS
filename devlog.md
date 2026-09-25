@@ -4,6 +4,12 @@
 
 ## 未发布（基于 v0.1.4）
 
+### 2026-09-25 · 更新源/分支设置项 + 热更新回归 ALAS 老样子（署名: mimov2.6pro）
+
+- 设置页「更新设置」新增两项：**更新源**（git URL；默认打码、点尾部小眼睛切换明文；留空=默认源 `git://git.lyoko.io/AzurLaneAutoScript`，填自己的源即从该源拉取）与**更新分支**（默认 master，可自定义填写）。源只有两个：内置默认 + 用户填写。
+- 热更新语义与 AlasToFox/upstream ALAS 完全对齐（`deploy/git.py::git_repository_init` 同款）：`git remote set-url origin <源>`（每次对齐，换源立即生效）→ `git fetch` → **`git reset --hard`** 直接打回远端——不做任何保文件/自愈，`/opt/alas` 就是配置源的完整镜像，避免内置源与用户源内容混杂冲突。CDN pack 通道仅在源为默认源时启用（该协议是 lyoko 官方源专用）。
+- 接线：`AppSettings.updateSource/updateBranch` → `AlasUpdater.update(repo, branch)` → `seeds/alasaos_update.sh $1 $2`（参数 > 环境变量 > 默认）；更新后照旧重放 AlasOverlay + assets_fix（上游跟踪文件被 reset 打回原版后的补丁恢复）。
+
 ### 2026-09-25 · 商店循环定音 + 主屏全屏模式接线（署名: mimov2.6pro）
 
 - **52/66 商店循环根因定音（离线探针经 52 报错帧校准后全矩阵实测）**：商店页判据 `SHOP_CHECK`（43×21px 小标题模板）在 AOS 钉版 ALAS 资产上相似度 **0.8410**，差 0.009 不过 0.85 阈值（即作者所言「卡在低于检测阈值」）；**AlasToFox 的同名资产同一帧 0.9993**——是**资产版本漂移**。叠加 `MUNITIONS/SUPPLY_PACK_CHECK`（商店左侧栏同屏可见的 tab 标签）双双 0.95 误命中 + 页面图缺「子页→商店」回链 → 误判子页后绕主界面再进商店，死循环。**实证排除两条假设**：页面识别链零 OCR（`ui_get_current_page`→`Button.match` 纯 cv2 模板匹配，阈值 0.85）；虚拟屏采集与主屏采集同帧分数逐位一致（0.9993/0.8410/0.9540/0.9552），渲染/缩放无差异。服务器 AlasToFox 不复现 = 其资产为新版。

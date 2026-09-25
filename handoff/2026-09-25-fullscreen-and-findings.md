@@ -20,7 +20,7 @@
 
 1. **重烘 rootfs：ubuntu-base 20.04（py3.8）**——现 guest 是 24.04/py3.12，与原版依赖（mxnet/cnocr 1.x/numpy 1.16/imageio 2.27）不兼容；`.tmp/构建py3.8版本/` 三份 mxnet whl 全含 aarch64 libmxnet.so（130/107/114MB）待试装，`mxnet_alas-0.0.5` 是重打包版。能 3.8 就 3.8，不行退 3.7。
 2. `ALAS_REPO` 指向 `E:\GitRepository\AlasToFox`（用户魔改版，原版特调 OCR=cnocr+mxnet+azur_lane 模型）。
-3. 运行期热更新远程置空/关闭（★用户指令：分支未发布，先置空，不填 gitee★）。
+3. 更新源/分支**可配置**（设置→「更新设置」）：源默认打码+小眼睛明文，**留空=默认源 `git://git.lyoko.io/AzurLaneAutoScript`**（★用户最终令：源只有内置默认+用户填写两个，gitee 撤销★）；分支默认 master 可自定义。更新语义=ALAS 老样子 `git fetch + reset --hard`（与 AlasToFox `deploy/git.py` 同款；remote 每次对齐配置源，不做保文件自愈）。用户分支未发布期间先用默认源，发布后在设置填自己的源。
 4. 渠道服包名核对（66=`com.bilibili.blhx.qihoo`，上游 server.py 已含）。
 5. 编译装 66 实测 + 商店任务（SUPPLY PACK）实证不循环。
 

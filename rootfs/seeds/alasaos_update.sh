@@ -1,46 +1,37 @@
 #!/bin/bash
 # =============================================================================
-# AlasAos · ALAS 热更新（rootfs 内由 App 侧 AlasUpdater 经 proot 拉起）
+# ALAS 热更新：拉取 ALAS 源码到 $ALAS_DIR（默认 /opt/alas），不动依赖与运行文件。
+# 更新语义与上游 ALAS 一致：git fetch 后 **git reset --hard** 直接打回远端，
+# 不做任何保文件/自愈（用户换源后 /opt/alas 就是配置源的完整镜像，避免内置源
+# 与用户源内容混杂冲突）。上游跟踪文件被打回原版后，由 App 侧重放 AlasOverlay。
 #
-# 只拉 ALAS 源码，不动依赖（InstallDependencies:false 已锁死 pip）。
-# deploy.yaml 里 ALAS 内置更新器已被 AutoUpdate:false 锁死，
-# 本脚本是设备上唯一的 ALAS 更新通道。
-#
-# 双通道（2026-09-18 起，按优先级）：
-#   1. CDN pack（seeds/cdn_update.py，复刻上游 git_over_cdn 协议）：
-#      latest.json(3s) → 有更新才下 {latest}/{current}.zip 增量 pack（仅 ~400KB，
-#      git 浅树的零头），落 .git/objects/pack + refs 后统一 reset --hard。
-#      404/403（无此增量包）或 CDN 不可达 → 回落通道 2。
-#   2. git://git.lyoko.io（9418 裸 TCP，运营商限速下 fetch 曾连续烧满 240s 超时，
-#      只作兜底）：ls-remote(60s) 比对 → 需要才 fetch --depth(240s)。
-#
-# 失败退避：两通道都失败 → 记当天日期到 $FAIL_FILE，当天后续启动直接跳过
-# （弱网/镜像抽风时开机不再每天烧 N 次 4 分钟）；次日自动恢复检查。
-#
-# 补丁重放不在本脚本职责内：git reset 会把上游跟踪文件打回原版，
-# App 侧在收到 UPDATED 后重放 assets/alas（patches/module、patches/assets、
-# overlays/rpc.py）并重跑 assets_fix.py。
-#
-# 与 App 的协议：最后一行打印三态之一，UPDATED/UNCHANGED 退出码 0，FAILED 退出码 1。
+# 与 App 的协议：最后一行 `UPDATED <sha> | UNCHANGED <sha> | FAILED <reason>`。
+# UPDATED 表示真的 checkout 了新 commit，调用方负责重放 overlay + assets_fix。
 # FAILED（断网/超时/镜像不可达）由 App 降级为"跳过更新"，不阻塞启动。
 #
-# 环境变量（均可 export 覆盖，冒号后为默认值）：
-#   ALASAOS_ALAS_ROOT      /opt/alas
-#   ALASAOS_UPDATE_REPO    git://git.lyoko.io/AzurLaneAutoScript
-#   ALASAOS_UPDATE_BRANCH  master
-#   ALASAOS_UPDATE_DEPTH   50
-#   ALASAOS_UPDATE_TIMEOUT 240（秒；首次 fetch 需整棵浅树，弱网可调大）
-#   ALASAOS_UPDATE_NO_CDN  置非空则跳过 CDN 通道（排障用）
+# 参数 / 环境变量（参数优先，冒号后为默认值）：
+#   $1  更新源 git URL        ALASAOS_UPDATE_REPO    git://git.lyoko.io/AzurLaneAutoScript
+#   $2  分支名                ALASAOS_UPDATE_BRANCH  master
+#   —   ALASAOS_ALAS_ROOT     /opt/alas
+#   —   ALASAOS_UPDATE_DEPTH  50
+#   —   ALASAOS_UPDATE_TIMEOUT 240（秒；首次 fetch 需整棵浅树，弱网可调大）
+#   —   ALASAOS_UPDATE_NO_CDN 置非空则跳过 CDN 通道（排障用）
+#
+# 设置项约定：源**留空 = 默认源**；分支默认 master（用户可在设置里自定义）。
+# CDN pack 通道是 lyoko 官方源专用协议，仅在源为默认源时启用。
 # =============================================================================
 set -uo pipefail
 
 ALAS_DIR="${ALASAOS_ALAS_ROOT:-/opt/alas}"
-REPO="${ALASAOS_UPDATE_REPO:-git://git.lyoko.io/AzurLaneAutoScript}"
-BRANCH="${ALASAOS_UPDATE_BRANCH:-master}"
+REPO="${1:-}"
+if [[ -z "$REPO" ]]; then REPO="${ALASAOS_UPDATE_REPO:-git://git.lyoko.io/AzurLaneAutoScript}"; fi
+BRANCH="${2:-}"
+if [[ -z "$BRANCH" ]]; then BRANCH="${ALASAOS_UPDATE_BRANCH:-master}"; fi
 DEPTH="${ALASAOS_UPDATE_DEPTH:-50}"
 TIMEOUT="${ALASAOS_UPDATE_TIMEOUT:-240}"
 STATE_FILE="$ALAS_DIR/.alasaos_alas_commit"
 FAIL_FILE="$ALAS_DIR/.alasaos_update_fail_date"
+DEFAULT_REPO="git://git.lyoko.io/AzurLaneAutoScript"
 
 # 终态失败才记退避：通道内回落不算失败
 fail() { date +%F > "$FAIL_FILE" 2>/dev/null; echo "FAILED $1"; exit 1; }
@@ -64,14 +55,16 @@ fi
 
 if [[ ! -d .git ]]; then
   git init -q . || fail "git init"
-  git remote add origin "$REPO" || fail "git remote add"
 fi
+# origin 每次对齐配置源：用户换源后新源立即生效，绝不会 fetch 到旧源
+git remote remove origin 2>/dev/null
+git remote add origin "$REPO" || fail "git remote add"
 
 # 上次被杀的 fetch/reset 可能留锁（App 侧启动清理也会扫一遍，这里双保险）
 find .git -name '*.lock' -delete 2>/dev/null
 
-# ---------- 通道 1：CDN pack ----------
-if [[ -z "${ALASAOS_UPDATE_NO_CDN:-}" ]]; then
+# ---------- 通道 1：CDN pack（仅 lyoko 官方源；其协议就是该源的 git_over_cdn） ----------
+if [[ -z "${ALASAOS_UPDATE_NO_CDN:-}" && "$REPO" == "$DEFAULT_REPO" ]]; then
   cdn_out="$(python3 seeds/cdn_update.py "$ALAS_DIR" "$current" 2>&1)"; cdn_rc=$?
   echo "$cdn_out" | sed 's/^/  /'
   cdn_last="$(echo "$cdn_out" | tail -1)"
@@ -87,10 +80,10 @@ if [[ -z "${ALASAOS_UPDATE_NO_CDN:-}" ]]; then
     echo "UPDATED $new (cdn)"
     exit 0
   fi
-  echo "  cdn| 通道不可用（$cdn_last），回落 git://"
+  echo "  cdn| 通道不可用（$cdn_last），回落 git fetch"
 fi
 
-# ---------- 通道 2：git:// 兜底 ----------
+# ---------- 通道 2：git fetch（任意源通用） ----------
 # 快进路径：ls-remote 直取远端 HEAD（无需本地仓库对象，秒级），
 # 与当前一致就连 fetch 都免了——已是最新的常态下热更新必须零下载
 remote_head="$(timeout 60 git ls-remote origin "$BRANCH" | head -1 | cut -f1)"

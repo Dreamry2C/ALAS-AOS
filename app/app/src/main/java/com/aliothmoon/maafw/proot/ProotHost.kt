@@ -132,7 +132,8 @@ class ProotHost(
         if (!updateAttempted) {
             updateAttempted = true
             setState(ProotPhase.UPDATING, "检查 ALAS 热更新")
-            val update = AlasUpdater { cmd, timeout -> runGuestRaw(cmd, timeout) }.update()
+            val update = AlasUpdater { cmd, timeout -> runGuestRaw(cmd, timeout) }
+                .update(settings.updateSource.value, settings.updateBranch.value)
             _state.update { it.copy(updateResult = update.summary) }
             if (update.updated) {
                 // reset --hard 打回了上游跟踪文件：重放补丁；assets_fix 失败=漂移，记警告不阻塞
