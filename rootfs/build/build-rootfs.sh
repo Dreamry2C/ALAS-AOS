@@ -134,7 +134,7 @@ chroot_run apt-get install -y --no-install-recommends \
   python3 python3-pip python3-venv git ca-certificates \
   libglib2.0-0t64 libgomp1 curl xz-utils binutils \
   libopenblas0-pthread libopencv-core406t64 libopencv-imgproc406t64 libopencv-imgcodecs406t64
-chroot_run /bin/bash -c 'rm -rf /var/lib/apt/lists/*'
+chroot_run /bin/bash -c 'apt-get clean; rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/cache/apt/*.bin'
 
 # deploy.yaml 里 PythonExecutable: python；ubuntu-base 只有 python3，补软链对齐
 chroot_run ln -sf /usr/bin/python3 /usr/local/bin/python
@@ -173,10 +173,23 @@ pip_install \
 # ALAS 原版 OCR 引擎：mxnet aarch64 轮子（仓库内置，需先拷进 chroot 才能 pip 装）+ cnocr 1.2.2。
 # cnocr 用 --no-deps：其声明依赖会拉 mxnet1.6/gluoncv/matplotlib/pandas 一大坨老死链，
 # 而 AlOcr 推理路径只用 mxnet+numpy（66 实测 INFER_OK），gluoncv 等一概不需要。
-install -D -m 0644 "$MXNET_WHL" "$ROOTFS_DIR/tmp/mxnet.whl"
-pip_install /tmp/mxnet.whl
+WHL_BASE="$(basename "$MXNET_WHL")"   # 必须保留合法 wheel 文件名，否则 pip 报 "not a valid wheel filename"
+install -D -m 0644 "$MXNET_WHL" "$ROOTFS_DIR/tmp/$WHL_BASE"
+pip_install "/tmp/$WHL_BASE"
 pip_install --no-deps cnocr==1.2.2
-rm -f "$ROOTFS_DIR/tmp/mxnet.whl"
+rm -f "$ROOTFS_DIR/tmp/$WHL_BASE"
+
+# 该 whl 把 libmxnet.so 装进 data scheme（如 /usr/local/mxnet/），mxnet 包目录里没有它，
+# `import mxnet` 会报 "Cannot find the MXNet library"（find_lib_path 先查包目录）。
+# 把真实 .so 软链进包目录（= 66 实测同款布局；不复制以免多占 ~102MB；strip 仍作用于真实文件）。
+REAL_SO="$(find "$ROOTFS_DIR" -type f -name libmxnet.so | head -1)"
+MX_PKG_DIR="$(find "$ROOTFS_DIR" -type d -path '*/dist-packages/mxnet' | head -1)"
+if [[ -n "$REAL_SO" && -n "$MX_PKG_DIR" && ! -e "$MX_PKG_DIR/libmxnet.so" ]]; then
+  ln -sf "${REAL_SO#"$ROOTFS_DIR"}" "$MX_PKG_DIR/libmxnet.so"
+  log "symlink libmxnet.so → $MX_PKG_DIR/libmxnet.so -> ${REAL_SO#"$ROOTFS_DIR"}"
+else
+  log "libmxnet.so 包目录链接跳过：REAL_SO=$REAL_SO MX_PKG_DIR=$MX_PKG_DIR"
+fi
 
 # ---------- 6. 应用本仓资产（宿主侧拷入 $ROOTFS_DIR/opt/alas） ----------
 # m0 补丁集：module/ 与 assets/ 子树整层覆盖上游同名文件
@@ -234,6 +247,41 @@ if [[ -n "$MXNET_SO" ]]; then
 else
   echo "::warning::libmxnet.so 未找到，跳过 strip"
 fi
+
+# 瘦身诊断（只记录、不改动）：查 mxnet 到底链哪些 opencv/blas 库（决定能否砍 imgcodecs→gdal→mesa/LLVM），
+# 以及镜像里最占地的 apt 包 top20。据此在后续迭代精准裁剪。
+if [[ -n "$MXNET_SO" ]]; then
+  log "libmxnet.so DT_NEEDED (opencv/blas/gfortran/lapack):"
+  chroot_run bash -c "readelf -d '${MXNET_SO#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | grep -iE 'opencv|blas|gfortran|gomp|lapack' | sed 's/^/  /' || echo '  (none matched)'"
+fi
+log "最大的 20 个已装 apt 包（Installed-Size KB）:"
+chroot_run bash -c "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' 2>/dev/null | sort -rn | head -20 | sed 's/^/  /'"
+
+# 依赖链诊断（定瘦身手术方案）：谁硬依赖 gdal/mesa/llvm/openblas；模拟移除会连带删什么；imgcodecs 直链什么。
+log "谁硬依赖 gdal/mesa/llvm/openblas（rdepends --installed）:"
+chroot_run bash -c "for p in libgdal34t64 mesa-libgallium libllvm20 libopenblas0-pthread; do echo \"  [\$p] <- \$(apt-cache rdepends --installed --no-recommends \$p 2>/dev/null | tail -n +3 | tr -d ' ' | tr '\n' ',')\"; done"
+log "模拟移除 gdal/mesa/llvm（--simulate 不真删），看是否连带 opencv:"
+chroot_run bash -c "apt-get remove --purge --auto-remove --simulate libgdal34t64 mesa-libgallium libllvm20 2>&1 | grep -iE 'Remv|opencv|mxnet|imgcodecs' | sed 's/^/  /' | head -40 || echo '  (simulate 无输出)'"
+IMGC="$(find "$ROOTFS_DIR" -name 'libopencv_imgcodecs.so.406' | head -1)"
+if [[ -n "$IMGC" ]]; then
+  log "libopencv_imgcodecs.so.406 DT_NEEDED（全部，勿删这些）:"
+  chroot_run bash -c "readelf -d '${IMGC#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | sed 's/^/  /'"
+fi
+
+# ---------- 瘦身手术：删 mxnet 用不到的 LLVM + mesa GL 软栈（~182MB） ----------
+# 教训（run 36187460677/36188071266）：imgcodecs 硬链并**真用** gdal 符号（GDALRasterBand::RasterIO），
+# 空壳 gdal 会 "undefined symbol" 载入失败；gdcm/OpenEXR 也是 imgcodecs 直接 DT_NEEDED。
+# → 放弃空壳，保留真 gdal + proj + gdcm + openexr 等全部编解码依赖；只删 **LLVM(136MB)+mesa(46MB)**——
+# 它们是 GL 软件渲染栈，只被 gdal 的 GL 驱动惰性 dlopen，mxnet 数值 OCR 链永不触发，且 gdal.so 不直链它们。
+# 仅删文件不 apt-remove（免连锁删 opencv）。import 硬门禁验证 mxnet 仍载入；挂则回滚本步。
+GLIBDIR="$ROOTFS_DIR/usr/lib/aarch64-linux-gnu"
+GDALSO="$(find "$GLIBDIR" -name 'libgdal.so.34*' -type f | head -1)"
+[[ -n "$GDALSO" ]] && { log "libgdal.so.34 DT_NEEDED 里的 mesa/llvm（应为空才安全）:"; chroot_run bash -c "readelf -d '${GDALSO#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | grep -iE 'mesa|LLVM|gallium' | sed 's/^/  /' || echo '  (无，删除安全)'"; }
+rm -f "$GLIBDIR"/libLLVM*.so* "$GLIBDIR"/libgallium*.so* "$GLIBDIR"/libgbm.so* \
+      "$GLIBDIR"/libglapi.so* "$GLIBDIR"/libGLX_mesa.so* "$GLIBDIR"/libEGL_mesa.so* 2>/dev/null
+rm -rf "$GLIBDIR/dri"
+chroot_run ldconfig 2>/dev/null || true
+log "瘦身手术：删 LLVM+mesa GL 软栈（约 -182MB 解压）；gdal/proj/gdcm/openexr 编解码依赖全保留"
 
 # ---------- 7. wrapper / runner（并行任务产物，fail-fast 已在开头验过） ----------
 cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ROOTFS_DIR/opt/alas/"
