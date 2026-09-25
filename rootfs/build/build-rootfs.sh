@@ -275,7 +275,7 @@ fi
 # 删：libLLVM(136MB) + mesa-libgallium/dri(46MB) + proj-data(23MB) + gdcm/spatialite/mysql(~26MB)。
 # import 硬门禁（后面）会 `import mxnet`→dlopen libmxnet→imgcodecs→gdal 空壳，验证仍能载入；挂则回滚本步。
 GLIBDIR="$ROOTFS_DIR/usr/lib/aarch64-linux-gnu"
-chroot_run bash -c "rm -f /usr/lib/aarch64-linux-gnu/libgdal.so.34*; ld -shared -soname libgdal.so.34 -o /usr/lib/aarch64-linux-gnu/libgdal.so.34 && echo '  stub libgdal.so.34 created'"
+chroot_run bash -c "rm -f /usr/lib/aarch64-linux-gnu/libgdal.so.34*; echo '' | as -o /tmp/empty.o && ld -shared -soname libgdal.so.34 -o /usr/lib/aarch64-linux-gnu/libgdal.so.34 /tmp/empty.o && rm -f /tmp/empty.o && echo '  stub libgdal.so.34 created'"
 rm -f "$GLIBDIR"/libLLVM*.so* "$GLIBDIR"/libgallium*.so* "$GLIBDIR"/libgdcm*.so* \
       "$GLIBDIR"/libspatialite*.so* "$GLIBDIR"/libmysqlclient.so* "$GLIBDIR"/libgbm.so* \
       "$GLIBDIR"/libglapi.so* "$GLIBDIR"/libGLX_mesa.so* "$GLIBDIR"/libEGL_mesa.so* 2>/dev/null
