@@ -8,12 +8,13 @@
 
 注意：
 - MaaFW 截图为 BGR 序，ALAS 图像为 RGB 序，screenshot_alasaos 负责翻通道。
-- 游戏必须跑在 MaaFwApp 的虚拟屏上：app_start_alasaos 用 `am start --display <VID>`，
-  VID 由代理侧 shell 探测（dumpsys display 找 VIRTUAL displayId），每轮进程缓存一次。
+- 游戏跑在哪块屏由桥 `display_info` 决定：BACKGROUND（虚拟屏）时 `am start --display <VID>`；
+  PRIMARY（全屏回退，虚拟屏不被 ROM 放行时用）时 VID=0，不带 --display 落主屏。
+  VID 由 display_info 端点回报（旧桥回落 dumpsys 探测），每轮进程缓存一次。
   部分 ROM（云机）会把游戏自身 Activity 二段跳（SplashActivity→MainActivity，caller=游戏
   uid）拦回 display 0（AOSP isCallerAllowedToLaunchOnDisplay：VD owner 是 shell、游戏
-  Activity 无 FLAG_ALLOW_EMBEDDED），故启动后用 `am display move-stack` 把任务钉回 VID。
-- get_orientation 对桥接固定返回 0（虚拟屏始终横屏 1280x720）。
+  Activity 无 FLAG_ALLOW_EMBEDDED），故启动后用 `am display move-stack` 把任务钉回目标屏。
+- get_orientation 对桥接固定返回 0（游戏画面恒横屏 1280x720；PRIMARY 下主屏被游戏拉横后同此）。
 - dump_hierarchy 反映的是物理屏 UI 树（uiautomator 看不到虚拟屏），仅作兜底。
 """
 import json
@@ -195,6 +196,19 @@ class AlasAos:
 
     @cached_property
     def alasaos_display_id(self) -> int:
+        """游戏目标屏：BACKGROUND=虚拟屏 id，PRIMARY(全屏回退)=0。
+
+        优先问桥 display_info（新协议端点）；旧桥无此端点时回落 dumpsys 探测。
+        0 表示主屏：app_start 不带 --display，pin 目标=0（自愈：游戏被扔去别处就拉回）。
+        """
+        try:
+            resp = self._alasaos_call({'method': 'display_info'})
+            if resp.get('ok') and 'displayId' in resp:
+                out = int(resp['displayId'])
+                logger.attr('AlasAos', f'display mode={resp.get("mode")} display id={out}')
+                return out
+        except (AlasAosBridgeError, KeyError, TypeError, ValueError) as e:
+            logger.warning(f'AlasAos display_info unavailable ({e}), fallback to dumpsys probe')
         out = self.alasaos_shell_output(
             "dumpsys display | grep -oE 'type=VIRTUAL, [^}]*displayId=[0-9]+' | grep -oE '[0-9]+' | tail -1"
         ).strip()
@@ -257,8 +271,9 @@ class AlasAos:
             activity = DICT_PACKAGE_TO_ACTIVITY.get(package)
             if activity is None:
                 raise ScriptError(f'No known activity for package: {package}')
-        self.alasaos_shell_output(
-            f'am start --display {self.alasaos_display_id} -n {package}/{activity}')
+        vid = self.alasaos_display_id
+        display = f'--display {vid} ' if vid else ''
+        self.alasaos_shell_output(f'am start {display}-n {package}/{activity}')
         if wait:
             time.sleep(1)
         self.alasaos_pin_game_to_display(package)
