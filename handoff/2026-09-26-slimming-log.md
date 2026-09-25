@@ -14,7 +14,12 @@
 |---|---|---|---|---|---|
 | 1 | `1c26093` | 清 apt 缓存（apt-get clean + rm /var/cache/apt 的 pkgcache/srcpkgcache/archives） | 461→**304MB**（-157MB） | ✅ GHA 36184673157 SUCCESS，门禁过 | `git revert 1c26093` |
 | 2 | `f66d1d7` | 加依赖链诊断（不改产物） | 不变(~304MB) | ✅ GHA 36186161374 SUCCESS | 无害可留 |
-| 3 | (本次) | **手术**：gdal→空壳 + 删 LLVM(136)/mesa(46)/proj(23)/gdcm/spatialite/mysql | 待 GHA | 待门禁验 `import mxnet` | `git revert <本步 hash>` |
+| 3 | `b45b36a`→`2ab5dbc` | **手术**：删 LLVM(136)+mesa(46) GL 软栈（gdal 空壳方案作废，保留真 gdal+全套编解码依赖） | 304→**283MB** | ✅ GHA 36188636403 SUCCESS，门禁过 | `git revert 2ab5dbc c20d18e b45b36a`（或 reset 到 1c26093） |
+
+## 汇总
+- rootfs.tar.xz：**461MB（基线）→ 304MB（清 apt 缓存）→ 283MB（删 LLVM+mesa）**，共 -178MB（-39%）。
+- OCR 链完好：每步 import 硬门禁均过（`import mxnet`+`cnocr`+numpy 垫片）。
+- 结论：283MB 为收尾。再往下（gdcm11/openexr/scipy-blas 十几 MB 级）事倍功半，除非用户要求，停。
 
 ## 诊断结论（run 36186161374 日志）
 - `imgcodecs.so.406` DT_NEEDED **直链 libgdal.so.34** + libjpeg/webp/png/tiff/openjp2 → gdal 必须在场（故换空壳，不能纯删）。
