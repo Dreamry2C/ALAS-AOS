@@ -35,3 +35,7 @@ spike/**/dist/*.apk
 # 阶段三：rootfs 资产随包内置（300MB+ 不入库，构建前从 rootfs-dist 拷入）；BUILD_MANIFEST 入库
 /app/app/src/main/assets/rootfs/rootfs.tar.xz
 /keystore/
+
+# 原版 OCR 的 mxnet aarch64 轮子：构建输入，~28.8MB 不入 git 历史（避免永久膨胀）。
+# 需自备到 rootfs/wheels/（见 rootfs/wheels/README.md）；GHA 复现时改 release 资产/LFS 托管。
+rootfs/wheels/*.whl
