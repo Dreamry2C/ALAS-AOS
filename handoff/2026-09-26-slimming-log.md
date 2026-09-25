@@ -22,6 +22,11 @@
 - `apt-get remove libgdal ...` 会**连锁 purge 掉 opencv-core/imgproc/imgcodecs** → 不能 apt-remove，只能「换空壳 + 删文件（不动 dpkg db）」。
 - 空壳原理：DT_NEEDED 只要求 .so 在场；推理不读图像文件 → 不触发 gdal 符号 → 惰性绑定不崩。若 imgcodecs 初始化真调了 gdal 符号，门禁会挂 → 回滚步 3。
 
+## 步骤 3 手术迭代（踩坑记录）
+- `b45b36a`：GHA 36187090572 **失败**——`ld: no input files`（我 `ld -shared` 没给输入）。非概念问题。
+- `c20d18e`：修 ld（`echo|as -o empty.o` 再 ld）。GHA 36187460677 **失败**——`OSError: libgdcmMSFF.so.3.0: cannot open`：**gdcm 是 imgcodecs 直接 DT_NEEDED，我误删了**。→ 学到：imgcodecs 的直接依赖一个都不能删，只能 keep 或 stub。
+- (本次修)：删除列表去掉 gdcm/spatialite/mysql（保留），只删 **LLVM+mesa+proj ≈205MB**（确认非 imgcodecs 直接依赖）；诊断改为打印 imgcodecs 全部 DT_NEEDED。待 GHA 验。**gdal 空壳本身能否过 import（imgcodecs 初始化不调 gdal 符号）仍待这轮首次验证。**
+
 ## 待做（从诊断数据决策）
 - LLVM(136MB)+mesa(46MB)+gdal 全家桶(~60MB)：被 mxnet 硬需的 `libopencv-imgcodecs406t64` 拖入。
   待诊断确认 imgcodecs 是否直链 gdal / 移除是否连带 opencv，再定「stub gdal」还是「apt remove」。
