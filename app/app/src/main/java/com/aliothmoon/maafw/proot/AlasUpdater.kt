@@ -24,9 +24,11 @@ class AlasUpdater(
      * 跑一次更新；永不抛异常——任何失败都折叠成 SKIPPED
      * 超时给足脚本内部 `timeout 240` 之外的余量
      */
-    suspend fun update(): Result {
+    suspend fun update(repo: String = "", branch: String = ""): Result {
+        // repo/branch 作为脚本首两参覆盖 ALASAOS_UPDATE_REPO/_BRANCH；
+        // 源留空=默认 git://git.lyoko.io/AzurLaneAutoScript，分支留空=master
         val result = runCatching {
-            exec(listOf("/bin/bash", "seeds/alasaos_update.sh"), TIMEOUT_MS)
+            exec(listOf("/bin/bash", "seeds/alasaos_update.sh", repo, branch), TIMEOUT_MS)
         }.getOrElse {
             Timber.w(it, "hot update exec failed")
             return Result(false, "SKIPPED exec: ${it.message}")

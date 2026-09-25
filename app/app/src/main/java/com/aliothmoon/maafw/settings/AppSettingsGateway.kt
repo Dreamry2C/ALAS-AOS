@@ -26,4 +26,12 @@ interface AppSettingsGateway {
     val themeStyle: StateFlow<ThemeStyle>
     suspend fun setThemeStyle(style: ThemeStyle)
 
+    /** ALAS 热更新源（git URL）；空串=默认 git://git.lyoko.io/AzurLaneAutoScript */
+    val updateSource: StateFlow<String>
+    suspend fun setUpdateSource(url: String)
+
+    /** ALAS 热更新分支；默认 master */
+    val updateBranch: StateFlow<String>
+    suspend fun setUpdateBranch(branch: String)
+
 }

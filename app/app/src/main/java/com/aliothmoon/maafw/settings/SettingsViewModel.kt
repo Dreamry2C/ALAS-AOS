@@ -36,6 +36,10 @@ class SettingsViewModel(
             autoCleanLogs = autoCleanLogs,
             runMode = runMode,
         )
+    }.combine(appSettings.updateSource) { state, source ->
+        state.copy(updateSource = source)
+    }.combine(appSettings.updateBranch) { state, branch ->
+        state.copy(updateBranch = branch)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -64,6 +68,14 @@ class SettingsViewModel(
 
             is SettingsIntent.SetRunMode -> viewModelScope.launch {
                 appSettings.setRunMode(intent.mode)
+            }
+
+            is SettingsIntent.SetUpdateSource -> viewModelScope.launch {
+                appSettings.setUpdateSource(intent.url)
+            }
+
+            is SettingsIntent.SetUpdateBranch -> viewModelScope.launch {
+                appSettings.setUpdateBranch(intent.branch)
             }
         }
     }
