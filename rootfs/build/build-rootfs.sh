@@ -268,20 +268,20 @@ if [[ -n "$IMGC" ]]; then
   chroot_run bash -c "readelf -d '${IMGC#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | sed 's/^/  /'"
 fi
 
-# ---------- 瘦身手术：砍 mxnet 用不到的 gdal/mesa/LLVM 全家桶（~240MB） ----------
-# imgcodecs.so 硬链 libgdal.so.34（DT_NEEDED），apt 装不了「只要 opencv 不要 gdal」；而推理路径不读图像文件、
-# 不会真调 gdal。做法：libgdal.so.34 换成空壳（.so 在→满足 DT_NEEDED；惰性绑定，never-call 不崩）+ 删掉
-# 只经 gdal/GL 可达的重型库文件（**仅删文件、不 apt-remove**，免连锁删掉 opencv；设备端不再跑 apt，dpkg db 不一致无害）。
-# 删：libLLVM(136MB) + mesa-libgallium/dri(46MB) + proj-data(23MB) ≈ 205MB。★保留 gdcm/spatialite/mysql★
-# （gdcm 是 imgcodecs 直接 DT_NEEDED，删了 mxnet 载入报 libgdcmMSFF.so.3.0 缺失——36187460677 已踩坑）。
-# import 硬门禁（后面）会 `import mxnet`→dlopen libmxnet→imgcodecs→gdal 空壳，验证仍能载入；挂则回滚本步。
+# ---------- 瘦身手术：删 mxnet 用不到的 LLVM + mesa GL 软栈（~182MB） ----------
+# 教训（run 36187460677/36188071266）：imgcodecs 硬链并**真用** gdal 符号（GDALRasterBand::RasterIO），
+# 空壳 gdal 会 "undefined symbol" 载入失败；gdcm/OpenEXR 也是 imgcodecs 直接 DT_NEEDED。
+# → 放弃空壳，保留真 gdal + proj + gdcm + openexr 等全部编解码依赖；只删 **LLVM(136MB)+mesa(46MB)**——
+# 它们是 GL 软件渲染栈，只被 gdal 的 GL 驱动惰性 dlopen，mxnet 数值 OCR 链永不触发，且 gdal.so 不直链它们。
+# 仅删文件不 apt-remove（免连锁删 opencv）。import 硬门禁验证 mxnet 仍载入；挂则回滚本步。
 GLIBDIR="$ROOTFS_DIR/usr/lib/aarch64-linux-gnu"
-chroot_run bash -c "rm -f /usr/lib/aarch64-linux-gnu/libgdal.so.34*; echo '' | as -o /tmp/empty.o && ld -shared -soname libgdal.so.34 -o /usr/lib/aarch64-linux-gnu/libgdal.so.34 /tmp/empty.o && rm -f /tmp/empty.o && echo '  stub libgdal.so.34 created'"
+GDALSO="$(find "$GLIBDIR" -name 'libgdal.so.34*' -type f | head -1)"
+[[ -n "$GDALSO" ]] && { log "libgdal.so.34 DT_NEEDED 里的 mesa/llvm（应为空才安全）:"; chroot_run bash -c "readelf -d '${GDALSO#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | grep -iE 'mesa|LLVM|gallium' | sed 's/^/  /' || echo '  (无，删除安全)'"; }
 rm -f "$GLIBDIR"/libLLVM*.so* "$GLIBDIR"/libgallium*.so* "$GLIBDIR"/libgbm.so* \
       "$GLIBDIR"/libglapi.so* "$GLIBDIR"/libGLX_mesa.so* "$GLIBDIR"/libEGL_mesa.so* 2>/dev/null
-rm -rf "$GLIBDIR/dri" "$ROOTFS_DIR/usr/share/proj"
+rm -rf "$GLIBDIR/dri"
 chroot_run ldconfig 2>/dev/null || true
-log "瘦身手术：gdal→空壳 + 删 LLVM/mesa/proj/gdcm/spatialite/mysql（约 -240MB 解压）"
+log "瘦身手术：删 LLVM+mesa GL 软栈（约 -182MB 解压）；gdal/proj/gdcm/openexr 编解码依赖全保留"
 
 # ---------- 7. wrapper / runner（并行任务产物，fail-fast 已在开头验过） ----------
 cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ROOTFS_DIR/opt/alas/"
