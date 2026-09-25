@@ -1,6 +1,7 @@
 package com.aliothmoon.maafw.settings
 
 import com.aliothmoon.maafw.domain.RemoteBackend
+import com.aliothmoon.maafw.domain.RunMode
 import com.aliothmoon.maafw.domain.ThemeMode
 import com.aliothmoon.maafw.privileged.RemoteAccessState
 import com.aliothmoon.maafw.theme.ThemeStyle
@@ -16,6 +17,7 @@ data class SettingsUiState(
     val themeMode: ThemeMode = ThemeMode.System,
     val themeStyle: ThemeStyle = ThemeStyle.DEFAULT,
     val autoCleanLogs: Boolean = true,
+    val runMode: RunMode = RunMode.BACKGROUND,
 )
 
 sealed interface SettingsIntent {
@@ -30,4 +32,7 @@ sealed interface SettingsIntent {
     data class SetLanguage(val tag: String?) : SettingsIntent
 
     data class SetAutoCleanLogs(val enabled: Boolean) : SettingsIntent
+
+    /** 运行模式：BACKGROUND=虚拟屏承载游戏，PRIMARY=主屏全屏（虚拟屏不被 ROM 放行时的回退） */
+    data class SetRunMode(val mode: RunMode) : SettingsIntent
 }
