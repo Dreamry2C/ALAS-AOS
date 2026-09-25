@@ -240,11 +240,22 @@ private fun LogCard(
 }
 
 /**
- * 启动模式（特权后端）：「跑起来之前得先定」的环境选项（对齐 MaaMeow 的「其他设置」）
+ * 运行模式 + 启动模式（特权后端）：「跑起来之前得先定」的环境选项（对齐 MaaMeow 的「其他设置」）
  */
 @Composable
 private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
     MaaCard(title = stringResource(R.string.settings_section_other), collapsible = true) {
+        MaaFieldLabel(stringResource(R.string.settings_run_mode))
+        val runModes = listOf(
+            com.aliothmoon.maafw.domain.RunMode.BACKGROUND to stringResource(R.string.settings_run_mode_background),
+            com.aliothmoon.maafw.domain.RunMode.FOREGROUND to stringResource(R.string.settings_run_mode_foreground),
+        )
+        MaaSingleChoiceFlow(
+            options = runModes,
+            selected = state.runMode,
+            onSelect = { onIntent(SettingsIntent.SetRunMode(it)) },
+        )
+        Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
         MaaFieldLabel(stringResource(R.string.permission_backend))
         MaaSingleChoiceFlow(
             // 对齐 MaaMeow：只列后端名，不展示「可用/不可用」——选哪个都行，可用性交给连接流程判
