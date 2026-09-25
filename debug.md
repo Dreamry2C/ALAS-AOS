@@ -4,6 +4,15 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-25] 仅 66 云机：「此应用不支持在辅助屏上运行」把游戏任务拖回 display 0——52 不受影响，虚拟屏方案本身正常（署名: mimov2.6pro）
+
+> ★勿一概而论★：这是 **66 云机（CUN_AL00，360 渠道服 `com.bilibili.blhx.qihoo`）单机现象**。**52 云机（22041211AC，B 服官包）同一 AOS 构建能让游戏长期稳定跑在虚拟屏**（2026-09-24 输入修复回归实证：游戏更新/登录画面显示在 VD #8）。虚拟屏方案本身没有问题，后续回读**不得**据此判定「游戏上不了虚拟屏」或「应回落主屏」；只有在特定 ROM 复现同类 `Failed to put TaskRecord on display N` 时才用本条的钉屏手段。
+
+- **现象**（仅 66）：AOS 点「开始挂机」后游戏弹「此应用不支持在辅助屏上运行」、被强制回主屏横屏全屏；AOS 预览黑屏、ALAS 卡「登录界面」检测不到游戏画面。52 无此现象，游戏直接在 VD 上跑。
+- **根本原因**（66 这台 ROM 的判定路径）：`am start --display 3` 拉起 SplashActivity 成功落 VD（shell uid 2000 持 INTERNAL_SYSTEM_WINDOW 过闸），但游戏内部 SplashActivity→MainActivity 二段跳（caller=游戏 uid 10113）撞 AOSP `ActivityStackSupervisor.isCallerAllowedToLaunchOnDisplay`（`canPlaceEntityOnDisplay` 链）：虚拟屏 owner=shell(2000) 既非 SYSTEM_UID 也非游戏 uid → 要求 Activity 带 `FLAG_ALLOW_EMBEDDED`（游戏不带）→ 拒绝；`handleNonResizableTaskIfNeeded` 发现任务实际落点(0)≠期望(3) → `Failed to put TaskRecord on display 3` + `notifyActivityLaunchOnSecondaryDisplayFailed`（SystemUI toast 即那句「不支持辅助屏」），整任务被拖回 display 0。**root 发起首跳也没用**（拖回发生在游戏自己发起的第二跳，caller 永远是游戏 uid）；改 VD flags 也无效（`isPrivate()`=false 已是 public 语义，卡的是 owner-uid 分支）。52 能成 = 其 ROM 对该闸门的放行判定不同（别拿一台机的行为外推另一台）。
+- **解决方案**（66 类 ROM 的纠偏手段，52 不需要但无害）：启动后把任务钉回虚拟屏——`am display move-stack <STACK_ID> <DISPLAY_ID>`（`ATMS.moveStackToDisplay`）只校验调用方 `INTERNAL_SYSTEM_WINDOW`（shell 自带），随后 `clearCallingIdentity()` 以 system 身份搬移，无二次闸门。`alasaos.py`（rootfs/patches 与 app assets 双源）新增 `_game_task_placements`（解析 `dumpsys window windows` 块内的 stackId/displayId）+ `alasaos_pin_game_to_display`（启动后观察 ≤10s：偏屏即搬，连续 5 拍在目标屏收工），`app_start_alasaos` 启动后自动调用。9 个 ast 纯函数单测（`rootfs/tests/test_alasaos_game_pin.py`）+ 既有 8 例全绿。**无需 root、不动系统/游戏/ALAS 上游**。验证锚点：`dumpsys window windows` 游戏窗 `mDisplayId=<VID>` + AOS 预览可见游戏。
+- **方法资产**：遇「应用不支持辅助屏」先抓 `ActivityTaskManager: Failed to put TaskRecord ... on display N`——它是「任务落点≠期望屏」的果，真闸门在 `isCallerAllowedToLaunchOnDisplay`（按 startAnyPerm / owner-uid / FLAG_ALLOW_EMBEDDED 三分支定位）；事后纠偏用 `am display move-stack`（root/shell 均可）。**判「系统不支持虚拟屏」前先对照另一台机：52 同代码在 VD 上正常 = 不是方案问题，是单机 ROM 判定差异。**
+
 ## [2026-09-24] Android 10 云机重建 deviceId=0 输入事件时丢 displayId
 
 - **现象**：游戏原本显示在 VD，登录按钮首击后 AOS 自动进入横屏全屏预览；手动触摸无效，日志 touch up failed、反复重启游戏，InputDispatcher 高频注入。

@@ -4,6 +4,12 @@
 
 ## 未发布（基于 v0.1.4）
 
+### 2026-09-25 · 修复：游戏被 ROM 拖回主屏后自动钉回虚拟屏（署名: mimov2.6pro）
+
+- 66 云机（Android 10 渠道服）首启验证发现：点「开始挂机」后游戏弹「此应用不支持在辅助屏上运行」被强制回主屏横屏，AOS 预览黑屏、ALAS 卡「登录界面」。取证定位到 AOSP `isCallerAllowedToLaunchOnDisplay` 闸门：虚拟屏 owner 是 shell、游戏 Activity 无 FLAG_ALLOW_EMBEDDED，游戏自身 SplashActivity→MainActivity 二段跳（caller=游戏 uid）不放行 secondary display，任务被拖回 display 0（日志锚点 `Failed to put TaskRecord on display 3`）。**仅 66 单机现象**：52 云机同一 AOS 构建能让游戏长期稳定跑在虚拟屏（2026-09-24 回归实证），虚拟屏方案本身正常，无需回落主屏模式。
+- 绕法实证后落地：`am display move-stack <STACK_ID> <VID>` 只查 INTERNAL_SYSTEM_WINDOW（shell 自带），可把游戏任务钉回虚拟屏；钉回后 AOS 预览立刻可见游戏，ALAS 页面识别（page_main/page_research 等）与任务执行全部恢复正常。
+- `alasaos.py`（rootfs/patches 与 app assets 双源同步）新增 `_game_task_placements` 与 `alasaos_pin_game_to_display`，`app_start_alasaos` 启动后自动钉屏（偏屏即搬、连续 5 拍在屏收工、观察上限 10s）；新增 `rootfs/tests/test_alasaos_game_pin.py` 9 例，与既有 8 例全绿。未改 ALAS 上游、系统或游戏。
+
 ### 2026-09-24 · 修复：Android 10 云机虚拟屏输入串到主屏
 
 - 用户授权排查 `10.126.126.52:5555`、修改源码、commit、构建与重装 AOS；要求不重启云机、不停止 Moontier、不动游戏数据。过程记录 `.tmp/2026-09-24-cloudphone-debug.md`。
