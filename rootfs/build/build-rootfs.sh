@@ -264,20 +264,20 @@ log "模拟移除 gdal/mesa/llvm（--simulate 不真删），看是否连带 ope
 chroot_run bash -c "apt-get remove --purge --auto-remove --simulate libgdal34t64 mesa-libgallium libllvm20 2>&1 | grep -iE 'Remv|opencv|mxnet|imgcodecs' | sed 's/^/  /' | head -40 || echo '  (simulate 无输出)'"
 IMGC="$(find "$ROOTFS_DIR" -name 'libopencv_imgcodecs.so.406' | head -1)"
 if [[ -n "$IMGC" ]]; then
-  log "libopencv_imgcodecs.so.406 DT_NEEDED（是否直链 gdal）:"
-  chroot_run bash -c "readelf -d '${IMGC#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | grep -iE 'gdal|jpeg|png|tiff|webp|jp2|openjp|Imath|gomp' | sed 's/^/  /' || echo '  (none matched)'"
+  log "libopencv_imgcodecs.so.406 DT_NEEDED（全部，勿删这些）:"
+  chroot_run bash -c "readelf -d '${IMGC#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | sed 's/^/  /'"
 fi
 
 # ---------- 瘦身手术：砍 mxnet 用不到的 gdal/mesa/LLVM 全家桶（~240MB） ----------
 # imgcodecs.so 硬链 libgdal.so.34（DT_NEEDED），apt 装不了「只要 opencv 不要 gdal」；而推理路径不读图像文件、
 # 不会真调 gdal。做法：libgdal.so.34 换成空壳（.so 在→满足 DT_NEEDED；惰性绑定，never-call 不崩）+ 删掉
 # 只经 gdal/GL 可达的重型库文件（**仅删文件、不 apt-remove**，免连锁删掉 opencv；设备端不再跑 apt，dpkg db 不一致无害）。
-# 删：libLLVM(136MB) + mesa-libgallium/dri(46MB) + proj-data(23MB) + gdcm/spatialite/mysql(~26MB)。
+# 删：libLLVM(136MB) + mesa-libgallium/dri(46MB) + proj-data(23MB) ≈ 205MB。★保留 gdcm/spatialite/mysql★
+# （gdcm 是 imgcodecs 直接 DT_NEEDED，删了 mxnet 载入报 libgdcmMSFF.so.3.0 缺失——36187460677 已踩坑）。
 # import 硬门禁（后面）会 `import mxnet`→dlopen libmxnet→imgcodecs→gdal 空壳，验证仍能载入；挂则回滚本步。
 GLIBDIR="$ROOTFS_DIR/usr/lib/aarch64-linux-gnu"
 chroot_run bash -c "rm -f /usr/lib/aarch64-linux-gnu/libgdal.so.34*; echo '' | as -o /tmp/empty.o && ld -shared -soname libgdal.so.34 -o /usr/lib/aarch64-linux-gnu/libgdal.so.34 /tmp/empty.o && rm -f /tmp/empty.o && echo '  stub libgdal.so.34 created'"
-rm -f "$GLIBDIR"/libLLVM*.so* "$GLIBDIR"/libgallium*.so* "$GLIBDIR"/libgdcm*.so* \
-      "$GLIBDIR"/libspatialite*.so* "$GLIBDIR"/libmysqlclient.so* "$GLIBDIR"/libgbm.so* \
+rm -f "$GLIBDIR"/libLLVM*.so* "$GLIBDIR"/libgallium*.so* "$GLIBDIR"/libgbm.so* \
       "$GLIBDIR"/libglapi.so* "$GLIBDIR"/libGLX_mesa.so* "$GLIBDIR"/libEGL_mesa.so* 2>/dev/null
 rm -rf "$GLIBDIR/dri" "$ROOTFS_DIR/usr/share/proj"
 chroot_run ldconfig 2>/dev/null || true
