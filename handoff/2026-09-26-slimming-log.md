@@ -13,7 +13,14 @@
 | # | commit | 改动 | rootfs.tar.xz | 结果 | 回滚 |
 |---|---|---|---|---|---|
 | 1 | `1c26093` | 清 apt 缓存（apt-get clean + rm /var/cache/apt 的 pkgcache/srcpkgcache/archives） | 461→**304MB**（-157MB） | ✅ GHA 36184673157 SUCCESS，门禁过 | `git revert 1c26093` |
-| 2 | (本次) | 仅加依赖链诊断（rdepends/simulate-remove/imgcodecs DT_NEEDED），**不改产物** | 不变 | 待 GHA | 无害，可留 |
+| 2 | `f66d1d7` | 加依赖链诊断（不改产物） | 不变(~304MB) | ✅ GHA 36186161374 SUCCESS | 无害可留 |
+| 3 | (本次) | **手术**：gdal→空壳 + 删 LLVM(136)/mesa(46)/proj(23)/gdcm/spatialite/mysql | 待 GHA | 待门禁验 `import mxnet` | `git revert <本步 hash>` |
+
+## 诊断结论（run 36186161374 日志）
+- `imgcodecs.so.406` DT_NEEDED **直链 libgdal.so.34** + libjpeg/webp/png/tiff/openjp2 → gdal 必须在场（故换空壳，不能纯删）。
+- rdepends：`libgdal34t64 <- libopencv-imgcodecs406t64`；`mesa-libgallium <- libgbm1,libglx-mesa0`；`libllvm20 <- mesa-libgallium`；`libopenblas0-pthread <- (无 apt 包依赖，仅 mxnet DT_NEEDED)`。
+- `apt-get remove libgdal ...` 会**连锁 purge 掉 opencv-core/imgproc/imgcodecs** → 不能 apt-remove，只能「换空壳 + 删文件（不动 dpkg db）」。
+- 空壳原理：DT_NEEDED 只要求 .so 在场；推理不读图像文件 → 不触发 gdal 符号 → 惰性绑定不崩。若 imgcodecs 初始化真调了 gdal 符号，门禁会挂 → 回滚步 3。
 
 ## 待做（从诊断数据决策）
 - LLVM(136MB)+mesa(46MB)+gdal 全家桶(~60MB)：被 mxnet 硬需的 `libopencv-imgcodecs406t64` 拖入。

@@ -268,6 +268,21 @@ if [[ -n "$IMGC" ]]; then
   chroot_run bash -c "readelf -d '${IMGC#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | grep -iE 'gdal|jpeg|png|tiff|webp|jp2|openjp|Imath|gomp' | sed 's/^/  /' || echo '  (none matched)'"
 fi
 
+# ---------- 瘦身手术：砍 mxnet 用不到的 gdal/mesa/LLVM 全家桶（~240MB） ----------
+# imgcodecs.so 硬链 libgdal.so.34（DT_NEEDED），apt 装不了「只要 opencv 不要 gdal」；而推理路径不读图像文件、
+# 不会真调 gdal。做法：libgdal.so.34 换成空壳（.so 在→满足 DT_NEEDED；惰性绑定，never-call 不崩）+ 删掉
+# 只经 gdal/GL 可达的重型库文件（**仅删文件、不 apt-remove**，免连锁删掉 opencv；设备端不再跑 apt，dpkg db 不一致无害）。
+# 删：libLLVM(136MB) + mesa-libgallium/dri(46MB) + proj-data(23MB) + gdcm/spatialite/mysql(~26MB)。
+# import 硬门禁（后面）会 `import mxnet`→dlopen libmxnet→imgcodecs→gdal 空壳，验证仍能载入；挂则回滚本步。
+GLIBDIR="$ROOTFS_DIR/usr/lib/aarch64-linux-gnu"
+chroot_run bash -c "rm -f /usr/lib/aarch64-linux-gnu/libgdal.so.34*; ld -shared -soname libgdal.so.34 -o /usr/lib/aarch64-linux-gnu/libgdal.so.34 && echo '  stub libgdal.so.34 created'"
+rm -f "$GLIBDIR"/libLLVM*.so* "$GLIBDIR"/libgallium*.so* "$GLIBDIR"/libgdcm*.so* \
+      "$GLIBDIR"/libspatialite*.so* "$GLIBDIR"/libmysqlclient.so* "$GLIBDIR"/libgbm.so* \
+      "$GLIBDIR"/libglapi.so* "$GLIBDIR"/libGLX_mesa.so* "$GLIBDIR"/libEGL_mesa.so* 2>/dev/null
+rm -rf "$GLIBDIR/dri" "$ROOTFS_DIR/usr/share/proj"
+chroot_run ldconfig 2>/dev/null || true
+log "瘦身手术：gdal→空壳 + 删 LLVM/mesa/proj/gdcm/spatialite/mysql（约 -240MB 解压）"
+
 # ---------- 7. wrapper / runner（并行任务产物，fail-fast 已在开头验过） ----------
 cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ROOTFS_DIR/opt/alas/"
 
