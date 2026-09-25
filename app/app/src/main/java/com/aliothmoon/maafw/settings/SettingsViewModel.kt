@@ -27,12 +27,14 @@ class SettingsViewModel(
         userConfigurationStore.data,
         appSettings.themeStyle,
         appSettings.autoCleanLogs,
-    ) { remoteAccess, userConfig, themeStyle, autoCleanLogs ->
+        appSettings.runMode,
+    ) { remoteAccess, userConfig, themeStyle, autoCleanLogs, runMode ->
         SettingsUiState(
             remoteAccess = remoteAccess,
             themeMode = userConfig.themeMode,
             themeStyle = themeStyle,
             autoCleanLogs = autoCleanLogs,
+            runMode = runMode,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -58,6 +60,10 @@ class SettingsViewModel(
 
             is SettingsIntent.SetAutoCleanLogs -> viewModelScope.launch {
                 appSettings.setAutoCleanLogs(intent.enabled)
+            }
+
+            is SettingsIntent.SetRunMode -> viewModelScope.launch {
+                appSettings.setRunMode(intent.mode)
             }
         }
     }
