@@ -31,9 +31,10 @@ Deploy:
     InstallUiautomator2: false
 
   Ocr:
-    # in-proc 版 module/ocr/rpc.py（overlays，并行任务提供）保留读取下列键，
-    # 但 OCR 已在本进程内推理：UseOcrServer:true 走 ModelProxy 路径，地址不再真连
-    UseOcrServer: true
+    # AlasToFox 原版 OCR 链（cnocr 1.2.2 + mxnet 1.9.1 + azur_lane 模型）：
+    # UseOcrServer:false → ocr.py 直推 OCR_MODEL（=OcrModel/cnocr，本进程内推理），
+    # 不连 OCR server，也不走已退役的 AOS 自研 rpc.py。StartOcrServer 保持 false。
+    UseOcrServer: false
     StartOcrServer: false
     OcrServerPort: 22268
     OcrClientAddress: 127.0.0.1:22300

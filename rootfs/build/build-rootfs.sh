@@ -25,7 +25,7 @@ ALAS_REF="${ALAS_REF:-master}"
 ALAS_REPO="${ALAS_REPO:-https://github.com/LmeSzinc/AzurLaneAutoScript.git}"
 # 注：GHA runner 在海外，GitHub 原生最快；gitee 同名镜像对匿名克隆要凭证（401→挂凭证提示），勿用。
 # 国内本地复现构建时可 export ALAS_REPO=<可达镜像>；runtime 更新镜像由 deploy.yaml 的 fullcn 配置管，与此无关。
-ROOTFS_VERSION="${ROOTFS_VERSION:-0.1.0}"
+ROOTFS_VERSION="${ROOTFS_VERSION:-0.2.0-ocr}"
 UBUNTU_BASE="${UBUNTU_BASE:-https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -38,6 +38,9 @@ DIST_DIR="$GITHUB_WORKSPACE/dist"
 # 与设备运行时无关（InstallDependencies:false 已锁，rootfs 永不在设备上装包）。
 # 国内本地复现构建时可 export PYPI_MIRROR=https://mirrors.aliyun.com/pypi/simple
 PYPI_MIRROR="${PYPI_MIRROR:-https://pypi.org/simple}"
+# ALAS 原版 OCR 依赖 mxnet 的 aarch64 轮子（PyPI 无 aarch64 mxnet whl，仓库内置一份）；
+# 可 export MXNET_WHL=<路径> 覆盖。whl 内 libmxnet.so 未 strip，构建末尾会 strip 瘦身。
+MXNET_WHL="${MXNET_WHL:-$REPO_ROOT/rootfs/wheels/mxnet-1.9.1-py3-none-any.whl}"
 
 log() { echo "[build-rootfs] $*"; }
 
@@ -58,18 +61,16 @@ require_file() {
     exit 1
   fi
 }
-require_file "$ASSETS/overlays/module/ocr/rpc.py"
 require_file "$ASSETS/overlays/wrapper.py"
 require_file "$ASSETS/overlays/runner.py"
-require_file "$ASSETS/build/spike-f-ocr-gate.py"
 require_file "$ASSETS/patches/assets_fix.py"
 require_file "$ASSETS/seeds/deploy.yaml"
 require_file "$ASSETS/seeds/alasaos_update.sh"
 require_file "$ASSETS/seeds/regen_args.py"
 require_file "$ASSETS/shims/jellyfish.py"
-require_file "$ASSETS/models/ocr/det.onnx"
-require_file "$ASSETS/models/ocr/rec.onnx"
-require_file "$ASSETS/models/ocr/keys.txt"
+require_file "$ASSETS/shims/numpy_shim.py"
+require_file "$ASSETS/shims/zzz_alas_shim.pth"
+require_file "$MXNET_WHL"
 
 # chroot 内统一环境：干净 env + 非交互 + C.UTF-8（免 perl locale 警告）
 chroot_run() {
@@ -126,10 +127,13 @@ mount_bind /sys "$ROOTFS_DIR/sys"
 
 # ---------- 3. chroot 内 apt：最小系统依赖 ----------
 # opencv-headless 运行只需 glib/gomp 级系统库；不装 Qt/X11
+# 原版 OCR：mxnet 的 libmxnet.so 链 libopenblas.so.0 + OpenCV4.6(so.406)，用 apt 补运行时库；
+# binutils 供构建末尾 strip libmxnet.so 瘦身
 chroot_run apt-get update
 chroot_run apt-get install -y --no-install-recommends \
   python3 python3-pip python3-venv git ca-certificates \
-  libglib2.0-0t64 libgomp1 curl xz-utils
+  libglib2.0-0t64 libgomp1 curl xz-utils binutils \
+  libopenblas0-pthread libopencv-core406t64 libopencv-imgproc406t64 libopencv-imgcodecs406t64
 chroot_run /bin/bash -c 'rm -rf /var/lib/apt/lists/*'
 
 # deploy.yaml 里 PythonExecutable: python；ubuntu-base 只有 python3，补软链对齐
@@ -154,25 +158,25 @@ pip_install() {
   chroot_run python3 -m pip install --break-system-packages --no-cache-dir -i "$PYPI_MIRROR" "$@"
 }
 
-# 依赖层（单条 install）：现代化宽松版本，来源 = m0 termux/setup_env.sh 真机实证集
-# （Termux/py3.14 跑通 ALAS：numpy 2.4.4 / scipy 1.18.1 / cv2 4.14.0 / pydantic 1.10.26）。
-# 不以 ALAS deploy/headless/requirements.txt 钉版为底——其钉版在 aarch64 + py3.12 大面积
-# 无 wheel 死链（numpy==1.17.4 / scipy==1.4.1 / pillow==9.5.0 / av==10.0.0 / lz4==4.3.2 等）。
-# 不装清单：jellyfish（Rust/maturin 构建，由 shims/jellyfish.py 顶替）、cnocr/mxnet（被
-# in-proc onnxruntime OCR 取代）、zerorpc/pyzmq（TCP 桥方案废弃）、av（编译死链且用不上）。
-# uvicorn 装裸版不带 [standard]：standard extra 拉 uvloop/httptools 老钉版死链（m0 同款处理）。
-# deploy.yaml 的 RequirementsFile 键永不执行（InstallDependencies:false 已锁），无需迁就其清单。
-# native 包宽松不钉死（numpy 写 >=2 表意图）；pydantic 钉 <2 对齐 ALAS v1 API
-# cached-property：ALAS config_updater.py / alas.py 顶层 import；老 uiautomator2 2.x 的
-# 传递依赖，现代 3.x 不再传递，必须显式装（M1-d 真机 WebUI 实锤，静态全扫唯一缺口）
-# imageio 钉 2.27.0 对齐上游 requirements.txt:38（纯 Python 无死链）：2.35+ 把 P 模式 GIF
-# 统一解码成 RGB 3 通道，campaign 选关模板匹配时 cv2 通道断言直接崩（T2 真机崩溃根因）；
-# 已实证 2.27.0 与 numpy 2.5 共存且 GIF 解码回 2D 调色板索引（.tmp/verify_t2_envfix.py）
+# 依赖层：现代 py3.12 集，但为 ALAS 原版 OCR 链（cnocr 1.2.2 + mxnet 1.9.1）钉住 native 三件套——
+# numpy 必须 <2 且用 mxnet1.9.1/cnocr 实测可用的 1.26.4（2.x 与 mxnet 冲突，删掉的别名由 numpy_shim 补回）；
+# scipy 1.13.1 / opencv-python-headless 4.10.0.84 与之匹配（66 云机实测工作集）。
+# 不装：onnxruntime（PP-OCR 已退役）、jellyfish（shim 顶替）、zerorpc/pyzmq/gevent（rpc.py 惰性
+# import，UseOcrServer:false 不触发）、av/lz4（死链且用不上）。imageio 钉 2.27.0（P 模式 GIF 解码
+# 回 2D，campaign 模板匹配不崩）；pydantic <2 对齐 ALAS v1；cached-property 显式装；uvicorn 不带 [standard]。
 pip_install \
-  'numpy>=2' scipy pillow lxml opencv-python-headless onnxruntime \
+  'numpy==1.26.4' 'scipy==1.13.1' pillow lxml 'opencv-python-headless==4.10.0.84' \
   pywebio uvicorn fastapi aiofiles inflection pyyaml requests tqdm rich 'imageio==2.27.0' \
   'pydantic<2' adbutils uiautomator2 uiautomator2cache websockets pypresence onepush \
   cached-property
+
+# ALAS 原版 OCR 引擎：mxnet aarch64 轮子（仓库内置，需先拷进 chroot 才能 pip 装）+ cnocr 1.2.2。
+# cnocr 用 --no-deps：其声明依赖会拉 mxnet1.6/gluoncv/matplotlib/pandas 一大坨老死链，
+# 而 AlOcr 推理路径只用 mxnet+numpy（66 实测 INFER_OK），gluoncv 等一概不需要。
+install -D -m 0644 "$MXNET_WHL" "$ROOTFS_DIR/tmp/mxnet.whl"
+pip_install /tmp/mxnet.whl
+pip_install --no-deps cnocr==1.2.2
+rm -f "$ROOTFS_DIR/tmp/mxnet.whl"
 
 # ---------- 6. 应用本仓资产（宿主侧拷入 $ROOTFS_DIR/opt/alas） ----------
 # m0 补丁集：module/ 与 assets/ 子树整层覆盖上游同名文件
@@ -183,14 +187,19 @@ cp -rf "$ASSETS/patches/assets/." "$ROOTFS_DIR/opt/alas/assets/"
 # module/*/assets.py 里的 cn area/color/button，非整文件覆盖（上游资产更新后可重放，见脚本 docstring）
 python3 "$ASSETS/patches/assets_fix.py" "$ROOTFS_DIR/opt/alas"
 
-# OCR rpc.py：in-proc onnxruntime 版（overlays，并行任务产物），替换掉 ALAS 上游同名文件
-cp "$ASSETS/overlays/module/ocr/rpc.py" "$ROOTFS_DIR/opt/alas/module/ocr/rpc.py"
+# OCR：保留 ALAS 上游自带的 module/ocr/rpc.py（zerorpc 客户端；zerorpc 为惰性 import，
+# UseOcrServer:false 时不触发）。原版 OCR 走 models.OCR_MODEL=cnocr+mxnet，不覆盖 rpc.py。
 
 # jellyfish shim：现代 jellyfish（1.x）是 Rust/maturin 构建，目标环境装不了，未入依赖清单；
 # 把纯 Python shim 放到 site-packages 顶替模块名（ALAS 只调 levenshtein_distance）。
 # 模块路径在 chroot 内用 sysconfig 查实，不猜前缀
 PY_PURELIB="$(chroot_run python3 -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
 install -D -m 0644 "$ASSETS/shims/jellyfish.py" "$ROOTFS_DIR$PY_PURELIB/jellyfish.py"
+
+# numpy 兼容垫片：补回 numpy>=1.24 删掉的别名（np.long/PZERO/... mxnet1.9.1/cnocr1.2.2 要用）。
+# zzz_alas_shim.pth 让 site 启动时自动 `import numpy_shim`（zzz 前缀确保在其它 .pth 之后跑）。
+install -D -m 0644 "$ASSETS/shims/numpy_shim.py" "$ROOTFS_DIR$PY_PURELIB/numpy_shim.py"
+install -D -m 0644 "$ASSETS/shims/zzz_alas_shim.pth" "$ROOTFS_DIR$PY_PURELIB/zzz_alas_shim.pth"
 
 # deploy.yaml：更新器七键全锁（AutoUpdate:false 是保住钉版 commit 的唯一闸门，详见文件头注释）
 install -D -m 0644 "$ASSETS/seeds/deploy.yaml" "$ROOTFS_DIR/opt/alas/config/deploy.yaml"
@@ -211,37 +220,46 @@ install -D -m 0755 "$ASSETS/seeds/regen_args.py" "$ROOTFS_DIR/opt/alas/seeds/reg
 # imageio 钉回上游 2.27.0，并 git 还原被旧构建补丁盖过的上游跟踪文件；协议见脚本头注释
 install -D -m 0755 "$ASSETS/seeds/env_fix.sh" "$ROOTFS_DIR/opt/alas/seeds/env_fix.sh"
 
-# PP-OCR 模型三件套 → /opt/alas/models/ocr/
-# 注意：这是 v3 自定义路径（非 ALAS 上游约定）——in-proc 版 module/ocr/rpc.py 默认按
-# ./models/ocr/（相对 ALAS 根）加载，ALASAOS_OCR_MODEL_DIR 可覆盖；两边约定必须保持一致
-install -D -m 0644 "$ASSETS/models/ocr/det.onnx"  "$ROOTFS_DIR/opt/alas/models/ocr/det.onnx"
-install -D -m 0644 "$ASSETS/models/ocr/rec.onnx"  "$ROOTFS_DIR/opt/alas/models/ocr/rec.onnx"
-install -D -m 0644 "$ASSETS/models/ocr/keys.txt"  "$ROOTFS_DIR/opt/alas/models/ocr/keys.txt"
+# 原版 OCR 模型随上游 ALAS 自带（bin/cnocr_models/{azur_lane,azur_lane_jp,cnocr,jp,tw}，
+# 共约 31MB），无需另装；PP-OCR 的 det/rec/keys.onnx 已随自研 OCR 层退役，不再装入。
 
-# ---------- 7. wrapper / runner / Spike F 门禁（并行任务产物，fail-fast 已在开头验过） ----------
-# 门禁脚本也装进 /opt/alas：workflow 的 Spike F gate step 直接在 chroot 里跑它，
-# 设备端日后也可用同一入口复跑 OCR 自检
-cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" \
-   "$ASSETS/build/spike-f-ocr-gate.py" "$ROOTFS_DIR/opt/alas/"
+# strip libmxnet.so 瘦身：whl 内是未 strip 的 aarch64 .so（~102MB）；--strip-unneeded 去掉调试/
+# 符号表但保留动态导出符号（mxnet 靠动态符号加载，安全）。site-packages 内是符号链接，取真实文件。
+MXNET_SO="$(find "$ROOTFS_DIR" -type f -name libmxnet.so | head -1)"
+if [[ -n "$MXNET_SO" ]]; then
+  before=$(stat -c %s "$MXNET_SO")
+  chroot_run strip --strip-unneeded "${MXNET_SO#"$ROOTFS_DIR"}"
+  after=$(stat -c %s "$MXNET_SO")
+  log "strip libmxnet.so: $before -> $after bytes"
+else
+  echo "::warning::libmxnet.so 未找到，跳过 strip"
+fi
+
+# ---------- 7. wrapper / runner（并行任务产物，fail-fast 已在开头验过） ----------
+cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ROOTFS_DIR/opt/alas/"
 
 # ---------- 8. import 硬门禁 + BUILD_MANIFEST（决策 #10：App 要可读） ----------
 PY_VER="$(chroot_run python3 -c 'import platform; print(platform.python_version())')"
-ORT_VER="$(chroot_run python3 -c 'import onnxruntime; print(onnxruntime.__version__)')"
 CV_VER="$(chroot_run python3 -c 'import cv2; print(cv2.__version__)')"
+MX_VER="$(chroot_run python3 -c 'import mxnet; print(mxnet.__version__)')"
+CN_VER="$(chroot_run python3 -c 'import cnocr; print(cnocr.__version__)')"
 
-# import 硬门禁（fail-fast）：m0 setup_env.sh 第 4 节同款校验并扩展 onnxruntime。
-# 必须在 jellyfish shim 安装（第 6 步）之后跑——此时 jellyfish 已是 shim 文件；
-# 任一 ImportError → ::error:: 并以退出码 1 中止构建（set -e 捕获）
+# import 硬门禁（fail-fast）：现代依赖 + 原版 OCR 链。import mxnet 会 dlopen libmxnet.so，
+# 顺带验 openblas/opencv apt 库齐全 + strip 未破坏；numpy_shim 由 .pth 自启，先验别名已补回。
+# 任一失败 → ::error:: 退出码 1 中止构建（set -e 捕获）。azur_lane 实推理留真机首启复验。
 chroot_run python3 - <<'PY'
 try:
-    import cv2, numpy, scipy, PIL, lxml.etree, yaml
+    import numpy
+    assert hasattr(numpy, 'long'), 'numpy_shim 未生效（缺 numpy.long）'
+    import cv2, scipy, PIL, lxml.etree, yaml
     import pywebio, uvicorn, fastapi, pydantic, imageio, rich, requests, jellyfish
-    import adbutils, uiautomator2, onnxruntime, cached_property
-except ImportError as e:
+    import adbutils, uiautomator2, cached_property
+    import mxnet, cnocr
+except (ImportError, AssertionError) as e:
     print(f'::error::import 硬门禁失败: {e}')
     raise SystemExit(1)
-print('cv2', cv2.__version__, '| numpy', numpy.__version__, '| scipy', scipy.__version__, '| PIL', PIL.__version__)
-print('pydantic', pydantic.VERSION, '| pywebio', pywebio.__version__, '| onnxruntime', onnxruntime.__version__)
+print('cv2', cv2.__version__, '| numpy', numpy.__version__, '| scipy', scipy.__version__)
+print('mxnet', mxnet.__version__, '| cnocr', cnocr.__version__, '| pydantic', pydantic.VERSION)
 print('jellyfish shim check:', jellyfish.levenshtein_distance('abc', 'abd') == 1)
 print('ALL_IMPORTS_OK')
 PY
@@ -250,14 +268,12 @@ PY
 # 直接 git 会撞 "dubious ownership"（仓属 runner 用户），故带 -c safe.directory
 REPO_COMMIT="${GITHUB_SHA:-$(git -c safe.directory='*' -C "$REPO_ROOT" rev-parse HEAD)}"
 BUILD_TIME_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-DET_SHA="$(sha256sum "$ASSETS/models/ocr/det.onnx" | awk '{print $1}')"
-REC_SHA="$(sha256sum "$ASSETS/models/ocr/rec.onnx" | awk '{print $1}')"
-KEYS_SHA="$(sha256sum "$ASSETS/models/ocr/keys.txt" | awk '{print $1}')"
+AZ_SHA="$(sha256sum "$ROOTFS_DIR/opt/alas/bin/cnocr_models/azur_lane/cnocr-v1.2.0-densenet-lite-gru-0015.params" | awk '{print $1}')"
 
 ROOTFS_VERSION="$ROOTFS_VERSION" BUILD_TIME_UTC="$BUILD_TIME_UTC" \
 ALAS_REPO="$ALAS_REPO" PINNED_COMMIT="$PINNED_COMMIT" REPO_COMMIT="$REPO_COMMIT" \
-DET_SHA="$DET_SHA" REC_SHA="$REC_SHA" KEYS_SHA="$KEYS_SHA" \
-PY_VER="$PY_VER" ORT_VER="$ORT_VER" CV_VER="$CV_VER" \
+AZ_SHA="$AZ_SHA" MX_VER="$MX_VER" CN_VER="$CN_VER" \
+PY_VER="$PY_VER" CV_VER="$CV_VER" \
 python3 - <<'PY' > "$ROOTFS_DIR/opt/alas/BUILD_MANIFEST"
 import json, os
 e = os.environ
@@ -266,14 +282,14 @@ manifest = {
     "build_time_utc": e["BUILD_TIME_UTC"],
     "alas_repo": e["ALAS_REPO"],
     "alas_commit": e["PINNED_COMMIT"],
-    "patches_source": f"m0-archive/termux/patches @ repo commit {e['REPO_COMMIT']}",
-    "ocr_models": {
-        "det.onnx": e["DET_SHA"],
-        "rec.onnx": e["REC_SHA"],
-        "keys.txt": e["KEYS_SHA"],
+    "patches_source": f"rootfs/patches @ repo commit {e['REPO_COMMIT']}",
+    "ocr": {
+        "engine": "cnocr+mxnet (ALAS original, UseOcrServer=false)",
+        "mxnet_version": e["MX_VER"],
+        "cnocr_version": e["CN_VER"],
+        "azur_lane_params_sha256": e["AZ_SHA"],
     },
     "python_version": e["PY_VER"],
-    "onnxruntime_version": e["ORT_VER"],
     "opencv_version": e["CV_VER"],
 }
 print(json.dumps(manifest, indent=2, ensure_ascii=False))
