@@ -4,6 +4,12 @@
 
 ## 未发布（基于 v0.1.4）
 
+### 2026-09-25 · 商店循环定音 + 主屏全屏模式接线（署名: mimov2.6pro）
+
+- **52/66 商店循环根因定音（离线探针经 52 报错帧校准后全矩阵实测）**：商店页判据 `SHOP_CHECK`（43×21px 小标题模板）在 AOS 钉版 ALAS 资产上相似度 **0.8410**，差 0.009 不过 0.85 阈值（即作者所言「卡在低于检测阈值」）；**AlasToFox 的同名资产同一帧 0.9993**——是**资产版本漂移**。叠加 `MUNITIONS/SUPPLY_PACK_CHECK`（商店左侧栏同屏可见的 tab 标签）双双 0.95 误命中 + 页面图缺「子页→商店」回链 → 误判子页后绕主界面再进商店，死循环。**实证排除两条假设**：页面识别链零 OCR（`ui_get_current_page`→`Button.match` 纯 cv2 模板匹配，阈值 0.85）；虚拟屏采集与主屏采集同帧分数逐位一致（0.9993/0.8410/0.9540/0.9552），渲染/缩放无差异。服务器 AlasToFox 不复现 = 其资产为新版。
+- **主屏全屏模式（PRIMARY）接线**（用户拍板：虚拟屏不稳就直接全屏）：新增 `DisplayTarget`（桥侧采集/注入目标唯一来源）；`RemoteServiceImpl.setVirtualDisplayMode` 同步写入；`BridgeServer` 的 screencap 尺寸校验/点击注入目标/display_info 新端点全模式感知；`HostState.ensureEnvironmentStarted` 按设置 `runMode` 先 `setVirtualDisplayMode` 再建屏（此前恒 BACKGROUND）；`alasaos.py` 经 `display_info` 取目标屏（旧桥回落 dumpsys），VID=0 时 `am start` 不带 `--display`、pin 目标=0 自愈。设置「前台模式」即全屏路线，「后台模式」保留虚拟屏路线。
+- 66 实机临时止血：AlasToFox 的 `SHOP_CHECK.png` 已覆盖设备 `/opt/alas/assets/cn/ui/`（热更新 reset 会打回；正式修复随换源 AlasToFox 一起解决）。
+
 ### 2026-09-25 · 修复：游戏被 ROM 拖回主屏后自动钉回虚拟屏（署名: mimov2.6pro）
 
 - 66 云机（Android 10 渠道服）首启验证发现：点「开始挂机」后游戏弹「此应用不支持在辅助屏上运行」被强制回主屏横屏，AOS 预览黑屏、ALAS 卡「登录界面」。取证定位到 AOSP `isCallerAllowedToLaunchOnDisplay` 闸门：虚拟屏 owner 是 shell、游戏 Activity 无 FLAG_ALLOW_EMBEDDED，游戏自身 SplashActivity→MainActivity 二段跳（caller=游戏 uid）不放行 secondary display，任务被拖回 display 0（日志锚点 `Failed to put TaskRecord on display 3`）。**仅 66 单机现象**：52 云机同一 AOS 构建能让游戏长期稳定跑在虚拟屏（2026-09-24 回归实证），虚拟屏方案本身正常，无需回落主屏模式。

@@ -4,6 +4,18 @@
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
 
+## [2026-09-25] 商店循环不是 OCR 也不是缩放：SHOP_CHECK 资产漂移 0.841<0.85 + 侧栏 tab 判据同屏误命中（署名: mimov2.6pro）
+
+> ★纠偏记录★：用户初判「ppocr 精度问题、换回原版 OCR 就好」，作者归因「渲染方案不同卡在低于检测阈值 2%」。全矩阵实测后定音：**页面识别链根本没有 OCR**（`ui_get_current_page`→`ui_page_appear`→`Button.match` = `cv2.TM_CCOEFF_NORMED` 阈值 0.85），也**不是缩放/画质**（虚拟屏采集与主屏采集同帧分数逐位一致）。真正病根是**模板资产版本漂移**，换原版 OCR 治不了这个病（但换源 AlasToFox 可顺带治好，因其资产是新版）。
+
+- **现象**：52/66 云机 ALAS 跑 SUPPLY PACK/商店类任务时死循环：点进商店→判成 page_munitions/page_supply_pack→GOTO_MAIN 退出→再进商店，17s 一圈直到 `GameTooManyClickError`。桌面/服务器 AlasToFox 控制同一台云机同一游戏不复现。
+- **根本原因**（离线探针经运行时校准后实测，探针可信度锚点：52 报错帧 MAIN_GOTO_CAMPAIGN_WHITE=0.945≡运行时判定）：
+  1. `SHOP_CHECK`（页面判据=商店顶部 43×21px「商店」小标题模板）：AOS 钉版 ALAS（rootfs 92c07aa）资产同一商店帧 **sim=0.8410**，恰低于 0.85 阈值 0.009；AlasToFox 资产 **sim=0.9993**。小模板对渲染/资产年代极敏感，两份资产字节不同（7081B vs 5050B）。
+  2. `MUNITIONS_CHECK`/`SUPPLY_PACK_CHECK` 是商店页左侧栏同屏可见的 tab 标签（area x=60-104），在商店页 **0.954/0.955 双双 ≥0.85 误命中**——`Page.iter_pages()` 先命中谁就报谁，SHOP_CHECK 一失手就误判成子页。
+  3. 页面图缺「子页→page_shop」回链（`page_supply_pack`/`page_munitions` 只链到 page_main，`page_shop→page_munitions` 甚至被注释）→ 误判后 `ui_goto(page_shop)` 只能绕主界面重进 → 循环。
+- **解决方案**：① 止血：把 AlasToFox 的 `SHOP_CHECK.png` 覆盖到 `/opt/alas/assets/cn/ui/`（实测复测 0.9993；热更新 `git reset --hard` 会打回，别当长期方案）；② 正治：换源 AlasToFox（资产+OCR 逻辑+页面图整体对齐用户实证可用的版本）；③ 兜底：overlay 钉版 SHOP_CHECK 资产/补回链。已同步实现**主屏全屏模式（PRIMARY）接线**（用户拍板虚拟屏不稳就全屏），商店循环与显示模式无关（两路采集同分），换模式不能替代①②。
+- **方法资产**：判「识别错页」先离线复算 `Button.match`（`load_image(file, area)` 裁模板 + `matchTemplate` + 0.85 阈值）——探针先在已知帧上校准（拿运行时日志确认过的页面帧验分），再测问题帧；多判据同屏可见时误判的优先级由 `Page.iter_pages()` 顺序决定，修判据要比修阈值优先。
+
 ## [2026-09-25] 仅 66 云机：「此应用不支持在辅助屏上运行」把游戏任务拖回 display 0——52 不受影响，虚拟屏方案本身正常（署名: mimov2.6pro）
 
 > ★勿一概而论★：这是 **66 云机（CUN_AL00，360 渠道服 `com.bilibili.blhx.qihoo`）单机现象**。**52 云机（22041211AC，B 服官包）同一 AOS 构建能让游戏长期稳定跑在虚拟屏**（2026-09-24 输入修复回归实证：游戏更新/登录画面显示在 VD #8）。虚拟屏方案本身没有问题，后续回读**不得**据此判定「游戏上不了虚拟屏」或「应回落主屏」；只有在特定 ROM 复现同类 `Failed to put TaskRecord on display N` 时才用本条的钉屏手段。

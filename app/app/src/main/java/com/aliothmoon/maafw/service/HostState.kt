@@ -41,6 +41,7 @@ class HostState(
     private val context: Context,
     private val servicePort: PrivilegedServicePort,
     private val scope: CoroutineScope,
+    private val settings: com.aliothmoon.maafw.settings.AppSettingsGateway,
 ) {
 
     private val _snapshot = MutableStateFlow(HostSnapshot())
@@ -117,6 +118,11 @@ class HostState(
             }
             runCatching { service.setup(null, null, BuildConfig.DEBUG) }
                 .onFailure { Timber.w(it, "setup failed") }
+            // 用户选择的运行模式：BACKGROUND=虚拟屏承载游戏，PRIMARY=主屏全屏（虚拟屏不被
+            // ROM 放行时的回退），由 setVirtualDisplayMode 决定 startVirtualDisplay 起哪套
+            val displayMode = settings.runMode.value.displayMode
+            runCatching { service.setVirtualDisplayMode(displayMode) }
+                .onFailure { Timber.w(it, "setVirtualDisplayMode(%s) failed", displayMode) }
             val displayId = runCatching { service.startVirtualDisplay() }
                 .getOrElse {
                     Timber.e(it, "startVirtualDisplay failed")
