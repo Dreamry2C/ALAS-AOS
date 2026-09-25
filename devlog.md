@@ -4,6 +4,13 @@
 
 ## 未发布（基于 v0.1.4）
 
+### 2026-09-25 · 换源 AlasToFox + 原版特调 OCR 回归实测跑通（署名: mimov2.6pro）
+
+- **原版 OCR 链设备实测跑通**（用户核心诉求）：`module.ocr.models.OCR_MODEL.azur_lane` = cnocr 1.2.2 + mxnet 1.9.1 + `bin/cnocr_models/azur_lane`（densenet-lite-gru epoch15，99.43% 特调模型）在 66 云机上加载并推理出字（`INFER_OK`）。三颗 mxnet whl 依赖谱：#1→libcblas+OpenCV4.5、#2→libopenblas+OpenCV4.6（ubuntu 24.04 库名对口，实测 `libmxnet.so` 加载成功）、mxnet_alas→ARM PL 专有栈；「mxnet 编译拦路虎」不成立，选 #2。
+- **py3.8 路线技术否决（实证）**：①mxnet 1.9.1 需 `np.PZERO/np.long` 等 numpy 1.x 别名，与 py3.12 必需的 numpy≥1.26 版本死锁（「3.9+ 依赖不行」的真相）；②独立版 python3.8 虽可用，但其 numpy 1.19/1.23 aarch64 轮子在这颗高通 vCPU（HWCAP 保守）上 **SIGILL**，py3.8 反而更糟。**定案：py3.12 + numpy 兼容垫片**（`numpy_shim.py` 经 .pth 自启动，补回旧别名）+ numpy 1.26/cv2 4.10 钉版——原版链全通，3.8 仅在需要复刻老环境时才考虑。
+- **换源完成（设备侧实测）**：`/opt/alas` 整树换成 AlasToFox（toolkit/非源码目录剔除；原上游树备份 `/opt/alas-upstream-backup`）。`ocr.py` 在 `UseOcrServer=false` 时本就直推 `OCR_MODEL`（原版链），无需改源码。
+- **AOS 自研 OCR 层退役**：overlay 的 `module/ocr/{rpc.py,al_numpy.py}`（numpy azur_lane + PP-OCR 覆盖层）与 `models/ocr/` 权重从资产移除，`STALE_FILES` 加入清理项（`module/ocr/rpc.py` 为源码件保留）——PP-OCR 正式退出，识别一律走原版特调 OCR。AOS 保留的 overlay 仅 runner/wrapper/seeds/桥补丁（Android 适配层）。
+
 ### 2026-09-25 · 更新源/分支设置项 + 热更新回归 ALAS 老样子（署名: mimov2.6pro）
 
 - 设置页「更新设置」新增两项：**更新源**（git URL；默认打码、点尾部小眼睛切换明文；留空=默认源 `git://git.lyoko.io/AzurLaneAutoScript`，填自己的源即从该源拉取）与**更新分支**（默认 master，可自定义填写）。源只有两个：内置默认 + 用户填写。

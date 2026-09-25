@@ -84,6 +84,12 @@ class AlasOverlay(private val context: Context) {
         val STALE_FILES = listOf(
             "module/device/method/maaal.py",
             "seeds/maaal_update.sh",
+            // AOS 自研 OCR 引擎（numpy azur_lane + PP-OCR）随换源 AlasToFox 退役：
+            // 原版特调 OCR（cnocr+mxnet）回归后这些覆盖件/权重只删不盖。
+            // 注意 module/ocr/rpc.py 是源码件（zerorpc 客户端），不在此列。
+            "module/ocr/al_numpy.py",
+            "models/ocr/azur_lane/weights.npz",
+            "models/ocr/azur_lane/label_cn.txt",
         )
     }
 }
