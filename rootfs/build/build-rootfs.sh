@@ -179,6 +179,18 @@ pip_install "/tmp/$WHL_BASE"
 pip_install --no-deps cnocr==1.2.2
 rm -f "$ROOTFS_DIR/tmp/$WHL_BASE"
 
+# 该 whl 把 libmxnet.so 装进 data scheme（如 /usr/local/mxnet/），mxnet 包目录里没有它，
+# `import mxnet` 会报 "Cannot find the MXNet library"（find_lib_path 先查包目录）。
+# 把真实 .so 软链进包目录（= 66 实测同款布局；不复制以免多占 ~102MB；strip 仍作用于真实文件）。
+REAL_SO="$(find "$ROOTFS_DIR" -type f -name libmxnet.so | head -1)"
+MX_PKG_DIR="$(find "$ROOTFS_DIR" -type d -path '*/dist-packages/mxnet' | head -1)"
+if [[ -n "$REAL_SO" && -n "$MX_PKG_DIR" && ! -e "$MX_PKG_DIR/libmxnet.so" ]]; then
+  ln -sf "${REAL_SO#"$ROOTFS_DIR"}" "$MX_PKG_DIR/libmxnet.so"
+  log "symlink libmxnet.so → $MX_PKG_DIR/libmxnet.so -> ${REAL_SO#"$ROOTFS_DIR"}"
+else
+  log "libmxnet.so 包目录链接跳过：REAL_SO=$REAL_SO MX_PKG_DIR=$MX_PKG_DIR"
+fi
+
 # ---------- 6. 应用本仓资产（宿主侧拷入 $ROOTFS_DIR/opt/alas） ----------
 # m0 补丁集：module/ 与 assets/ 子树整层覆盖上游同名文件
 cp -rf "$ASSETS/patches/module/." "$ROOTFS_DIR/opt/alas/module/"
