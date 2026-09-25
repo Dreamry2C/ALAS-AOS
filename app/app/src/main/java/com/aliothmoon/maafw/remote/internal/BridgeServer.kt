@@ -171,6 +171,12 @@ object BridgeServer {
                 "click" -> handleClick(request, ::reply)
                 "swipe" -> handleSwipe(request, ::reply)
                 "shell" -> handleShell(request, ::reply)
+                "display_info" -> reply(
+                    JSONObject()
+                        .put("ok", true)
+                        .put("mode", DisplayTarget.modeName())
+                        .put("displayId", DisplayTarget.injectDisplayId())
+                )
                 else -> reply(err(if (method == null) "unknown method: None" else "unknown method: '$method'"))
             }
         } catch (e: Exception) {
@@ -191,17 +197,21 @@ object BridgeServer {
                 reply(err("no frame available"))
                 return@withLock
             }
-            val cfg = VirtualDisplayManager.getConfig()
-            if (bytes.size != cfg.width * cfg.height * 3) {
+            val (width, height) = DisplayTarget.captureSize()
+                ?: run {
+                    reply(err("capture size unknown"))
+                    return@withLock
+                }
+            if (bytes.size != width * height * 3) {
                 // VD 重启半途：native 帧缓冲还是旧尺寸，直接发给客户端会 reshape 炸掉
-                reply(err("frame size mismatch: got ${bytes.size}, expected ${cfg.width}x${cfg.height}x3"))
+                reply(err("frame size mismatch: got ${bytes.size}, expected ${width}x${height}x3"))
                 return@withLock
             }
             reply(
                 JSONObject()
                     .put("ok", true)
-                    .put("width", cfg.width)
-                    .put("height", cfg.height)
+                    .put("width", width)
+                    .put("height", height)
                     .put("channels", 3)
                     .put("length", bytes.size)
             )
@@ -232,7 +242,7 @@ object BridgeServer {
         val x = request.getInt("x")
         val y = request.getInt("y")
         DEVICE_LOCK.withLock {
-            val displayId = VirtualDisplayManager.getDisplayId()
+            val displayId = DisplayTarget.injectDisplayId()
             if (displayId == VirtualDisplayManager.DISPLAY_NONE) {
                 reply(err("no active virtual display"))
                 return@withLock
@@ -257,7 +267,7 @@ object BridgeServer {
         val y2 = request.getInt("y2")
         val durationMs = request.optLong("duration", DEFAULT_SWIPE_MS).coerceAtLeast(0)
         DEVICE_LOCK.withLock {
-            val displayId = VirtualDisplayManager.getDisplayId()
+            val displayId = DisplayTarget.injectDisplayId()
             if (displayId == VirtualDisplayManager.DISPLAY_NONE) {
                 reply(err("no active virtual display"))
                 return@withLock
