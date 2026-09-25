@@ -10,6 +10,9 @@
 - MaaFW 截图为 BGR 序，ALAS 图像为 RGB 序，screenshot_alasaos 负责翻通道。
 - 游戏必须跑在 MaaFwApp 的虚拟屏上：app_start_alasaos 用 `am start --display <VID>`，
   VID 由代理侧 shell 探测（dumpsys display 找 VIRTUAL displayId），每轮进程缓存一次。
+  部分 ROM（云机）会把游戏自身 Activity 二段跳（SplashActivity→MainActivity，caller=游戏
+  uid）拦回 display 0（AOSP isCallerAllowedToLaunchOnDisplay：VD owner 是 shell、游戏
+  Activity 无 FLAG_ALLOW_EMBEDDED），故启动后用 `am display move-stack` 把任务钉回 VID。
 - get_orientation 对桥接固定返回 0（虚拟屏始终横屏 1280x720）。
 - dump_hierarchy 反映的是物理屏 UI 树（uiautomator 看不到虚拟屏），仅作兜底。
 """
@@ -46,6 +49,30 @@ def _display_foreground_package(output: str, display_id: int) -> str:
                 return match.group(1)
         return ''
     return ''
+
+
+def _game_task_placements(output: str, package: str):
+    """Parse `dumpsys window windows`; return [(stack_id, display_id), ...] owned by package.
+
+    Each `  Window #N Window{... pkg/activity}:` block carries one
+    `mDisplayId=<id> stackId=<id>` line. Multiple windows of the same task
+    collapse to one entry.
+    """
+    placements = []
+    seen = set()
+    blocks = re.split(r'(?=^\s*Window #\d+ )', output, flags=re.MULTILINE)
+    for block in blocks:
+        if not re.search(r'Window\{[^}\n]*\s' + re.escape(package) + r'/[\w.$]+\}', block):
+            continue
+        display = re.search(r'mDisplayId=(\d+)', block)
+        stack = re.search(r'stackId=(\d+)', block)
+        if not display or not stack:
+            continue
+        key = (int(stack.group(1)), int(display.group(1)))
+        if key not in seen:
+            seen.add(key)
+            placements.append(key)
+    return placements
 
 
 class AlasAosBridgeError(Exception):
@@ -176,6 +203,51 @@ class AlasAos:
         logger.attr('AlasAos', f'virtual display id={out}')
         return int(out)
 
+    def alasaos_pin_game_to_display(self, package=None, timeout=10.0, interval=0.4):
+        """把游戏任务钉回虚拟屏（防游戏自身 Activity 二段跳把任务拖回 display 0）。
+
+        拖回时机在启动后 0.5~2s（SplashActivity→MainActivity），故持续观察；
+        连续 5 拍在目标屏（且已拖回过或观察满 3s）即收工。返回最终是否在虚拟屏上。
+        """
+        package = package or self.package
+        vid = self.alasaos_display_id
+        start = time.time()
+        deadline = start + float(timeout)
+        moved = False
+        stable = 0
+        final = None
+        while time.time() < deadline:
+            placements = _game_task_placements(
+                self.alasaos_shell_output('dumpsys window windows'), package)
+            final = placements or None
+            if not placements:
+                stable = 0
+            else:
+                all_on_target = True
+                for stack_id, display_id in placements:
+                    if display_id == vid:
+                        continue
+                    all_on_target = False
+                    stable = 0
+                    resp = self.alasaos_shell(f'am display move-stack {stack_id} {vid}')
+                    if resp.get('ok'):
+                        moved = True
+                        logger.attr('AlasAos', f'game stack {stack_id} pinned to display {vid}')
+                    else:
+                        logger.warning(
+                            f'AlasAos pin stack {stack_id} failed: '
+                            f'{resp.get("error") or resp.get("stderr") or resp}')
+                if all_on_target:
+                    stable += 1
+            if stable >= 5 and (moved or time.time() - start >= 3.0):
+                break
+            time.sleep(interval)
+        placements = _game_task_placements(
+            self.alasaos_shell_output('dumpsys window windows'), package)
+        ok = bool(placements) and all(display_id == vid for _, display_id in placements)
+        logger.attr('AlasAos', f'game pinned={ok} placements={placements}')
+        return ok
+
     # ---------------------------------------------------------------- App 控制
 
     def app_start_alasaos(self, package=None, activity=None, wait=True):
@@ -189,6 +261,7 @@ class AlasAos:
             f'am start --display {self.alasaos_display_id} -n {package}/{activity}')
         if wait:
             time.sleep(1)
+        self.alasaos_pin_game_to_display(package)
 
     def app_stop_alasaos(self, package=None):
         self.alasaos_shell_output(f'am force-stop {package or self.package}')
