@@ -134,7 +134,7 @@ chroot_run apt-get install -y --no-install-recommends \
   python3 python3-pip python3-venv git ca-certificates \
   libglib2.0-0t64 libgomp1 curl xz-utils binutils \
   libopenblas0-pthread libopencv-core406t64 libopencv-imgproc406t64 libopencv-imgcodecs406t64
-chroot_run /bin/bash -c 'rm -rf /var/lib/apt/lists/*'
+chroot_run /bin/bash -c 'apt-get clean; rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/cache/apt/*.bin'
 
 # deploy.yaml 里 PythonExecutable: python；ubuntu-base 只有 python3，补软链对齐
 chroot_run ln -sf /usr/bin/python3 /usr/local/bin/python
@@ -247,6 +247,15 @@ if [[ -n "$MXNET_SO" ]]; then
 else
   echo "::warning::libmxnet.so 未找到，跳过 strip"
 fi
+
+# 瘦身诊断（只记录、不改动）：查 mxnet 到底链哪些 opencv/blas 库（决定能否砍 imgcodecs→gdal→mesa/LLVM），
+# 以及镜像里最占地的 apt 包 top20。据此在后续迭代精准裁剪。
+if [[ -n "$MXNET_SO" ]]; then
+  log "libmxnet.so DT_NEEDED (opencv/blas/gfortran/lapack):"
+  chroot_run bash -c "readelf -d '${MXNET_SO#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | grep -iE 'opencv|blas|gfortran|gomp|lapack' | sed 's/^/  /' || echo '  (none matched)'"
+fi
+log "最大的 20 个已装 apt 包（Installed-Size KB）:"
+chroot_run bash -c "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' 2>/dev/null | sort -rn | head -20 | sed 's/^/  /'"
 
 # ---------- 7. wrapper / runner（并行任务产物，fail-fast 已在开头验过） ----------
 cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ROOTFS_DIR/opt/alas/"
