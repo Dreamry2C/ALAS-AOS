@@ -10,6 +10,7 @@ import com.aliothmoon.maafw.constant.DisplayMode
 import com.aliothmoon.maafw.remote.internal.ActivityUtils
 import com.aliothmoon.maafw.remote.internal.AppWatchdog
 import com.aliothmoon.maafw.remote.internal.BridgeServer
+import com.aliothmoon.maafw.remote.internal.DisplayTarget
 import com.aliothmoon.maafw.remote.internal.PermissionGrantHelper
 import com.aliothmoon.maafw.service.AccessibilityHelperService
 import com.aliothmoon.maafw.remote.internal.PowerController
@@ -118,12 +119,14 @@ class RemoteServiceImpl : RemoteService.Stub() {
         DisplayMode.PRIMARY -> {
             VirtualDisplayManager.stop()
             virtualDisplayMode.set(mode)
+            DisplayTarget.mode = mode
             true
         }
 
         DisplayMode.BACKGROUND -> {
             PrimaryDisplayManager.stop()
             virtualDisplayMode.set(mode)
+            DisplayTarget.mode = mode
             true
         }
 
