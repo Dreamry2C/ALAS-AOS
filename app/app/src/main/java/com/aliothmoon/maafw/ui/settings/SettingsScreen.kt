@@ -43,6 +43,15 @@ import com.aliothmoon.maafw.ui.components.MaaLabeledControlRow
 import com.aliothmoon.maafw.ui.components.MaaNavigationRow
 import com.aliothmoon.maafw.ui.components.MaaSingleChoiceFlow
 import com.aliothmoon.maafw.ui.components.MaaSwitch
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import com.aliothmoon.maafw.ui.components.ITextField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +98,7 @@ fun SettingsScreen(
             DisplayCard(state, onIntent)
             LogCard(state, onIntent, onOpenAppLog, onOpenAlasLog, onExportAlasLogs, onExportLauncherLogs)
             OtherCard(state, onIntent)
+            UpdateCard(state, onIntent)
             AboutCard()
         }
     }
@@ -271,5 +281,78 @@ private fun AboutCard() {
     MaaCard(title = stringResource(R.string.settings_about), collapsible = true) {
         MaaInfoRow(stringResource(R.string.settings_version), BuildConfig.VERSION_NAME)
         MaaInfoRow(stringResource(R.string.settings_build), BuildConfig.VERSION_CODE.toString())
+    }
+}
+
+/**
+ * ALAS 更新源 / 分支：用户填自己的源就从那里 `git fetch + reset --hard` 拉取（与 ALAS 更新
+ * 同语义），留空 = 默认源 git://git.lyoko.io/AzurLaneAutoScript。源是敏感配置，默认打码，
+ * 点尾部小眼睛切换明文。
+ */
+@Composable
+private fun UpdateCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
+    MaaCard(title = stringResource(R.string.settings_section_update), collapsible = true) {
+        MaaFieldLabel(stringResource(R.string.settings_update_source))
+        var sourceDraft by remember(state.updateSource) { mutableStateOf(state.updateSource) }
+        var sourceVisible by remember { mutableStateOf(false) }
+        ITextField(
+            value = sourceDraft,
+            onValueChange = { sourceDraft = it },
+            placeholder = stringResource(R.string.settings_update_source_placeholder),
+            visualTransformation = if (sourceVisible) {
+                VisualTransformation.None
+            } else {
+                PasswordVisualTransformation()
+            },
+            trailingIcon = {
+                IconButton(onClick = { sourceVisible = !sourceVisible }) {
+                    Icon(
+                        imageVector = if (sourceVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = stringResource(R.string.settings_update_source_toggle),
+                    )
+                }
+            },
+        )
+        Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+        Text(
+            text = stringResource(R.string.settings_update_source_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
+        MaaFieldLabel(stringResource(R.string.settings_update_branch))
+        var branchDraft by remember(state.updateBranch) { mutableStateOf(state.updateBranch) }
+        val isCustomBranch = state.updateBranch != "master"
+        MaaSingleChoiceFlow(
+            options = listOf(
+                false to "master",
+                true to stringResource(R.string.settings_update_branch_custom),
+            ),
+            selected = isCustomBranch,
+            onSelect = { custom ->
+                if (custom) {
+                    branchDraft = if (state.updateBranch == "master") "" else state.updateBranch
+                } else {
+                    branchDraft = "master"
+                    onIntent(SettingsIntent.SetUpdateBranch("master"))
+                }
+            },
+        )
+        if (isCustomBranch) {
+            Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+            ITextField(
+                value = branchDraft,
+                onValueChange = { branchDraft = it },
+                placeholder = stringResource(R.string.settings_update_branch_custom),
+                singleLine = true,
+            )
+        }
+        Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
+        TextButton(onClick = {
+            onIntent(SettingsIntent.SetUpdateSource(sourceDraft))
+            onIntent(SettingsIntent.SetUpdateBranch(branchDraft.ifBlank { "master" }))
+        }) {
+            Text(stringResource(R.string.settings_update_save))
+        }
     }
 }
