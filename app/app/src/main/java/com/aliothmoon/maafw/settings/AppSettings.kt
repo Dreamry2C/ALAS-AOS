@@ -49,4 +49,12 @@ data class AppSettings(
     @PrefKey(default = "DEFAULT")
     val themeStyle: String = "DEFAULT",
 
+    /** ALAS 热更新源（git URL）；留空=默认源 git://git.lyoko.io/AzurLaneAutoScript */
+    @PrefKey(default = "")
+    val updateSource: String = "",
+
+    /** ALAS 热更新分支；默认 master，用户可自定义（如自己发布的分支） */
+    @PrefKey(default = "master")
+    val updateBranch: String = "master",
+
 )
