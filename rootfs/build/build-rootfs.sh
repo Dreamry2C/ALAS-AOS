@@ -173,10 +173,11 @@ pip_install \
 # ALAS 原版 OCR 引擎：mxnet aarch64 轮子（仓库内置，需先拷进 chroot 才能 pip 装）+ cnocr 1.2.2。
 # cnocr 用 --no-deps：其声明依赖会拉 mxnet1.6/gluoncv/matplotlib/pandas 一大坨老死链，
 # 而 AlOcr 推理路径只用 mxnet+numpy（66 实测 INFER_OK），gluoncv 等一概不需要。
-install -D -m 0644 "$MXNET_WHL" "$ROOTFS_DIR/tmp/mxnet.whl"
-pip_install /tmp/mxnet.whl
+WHL_BASE="$(basename "$MXNET_WHL")"   # 必须保留合法 wheel 文件名，否则 pip 报 "not a valid wheel filename"
+install -D -m 0644 "$MXNET_WHL" "$ROOTFS_DIR/tmp/$WHL_BASE"
+pip_install "/tmp/$WHL_BASE"
 pip_install --no-deps cnocr==1.2.2
-rm -f "$ROOTFS_DIR/tmp/mxnet.whl"
+rm -f "$ROOTFS_DIR/tmp/$WHL_BASE"
 
 # ---------- 6. 应用本仓资产（宿主侧拷入 $ROOTFS_DIR/opt/alas） ----------
 # m0 补丁集：module/ 与 assets/ 子树整层覆盖上游同名文件
