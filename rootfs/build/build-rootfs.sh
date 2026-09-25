@@ -257,6 +257,17 @@ fi
 log "最大的 20 个已装 apt 包（Installed-Size KB）:"
 chroot_run bash -c "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' 2>/dev/null | sort -rn | head -20 | sed 's/^/  /'"
 
+# 依赖链诊断（定瘦身手术方案）：谁硬依赖 gdal/mesa/llvm/openblas；模拟移除会连带删什么；imgcodecs 直链什么。
+log "谁硬依赖 gdal/mesa/llvm/openblas（rdepends --installed）:"
+chroot_run bash -c "for p in libgdal34t64 mesa-libgallium libllvm20 libopenblas0-pthread; do echo \"  [\$p] <- \$(apt-cache rdepends --installed --no-recommends \$p 2>/dev/null | tail -n +3 | tr -d ' ' | tr '\n' ',')\"; done"
+log "模拟移除 gdal/mesa/llvm（--simulate 不真删），看是否连带 opencv:"
+chroot_run bash -c "apt-get remove --purge --auto-remove --simulate libgdal34t64 mesa-libgallium libllvm20 2>&1 | grep -iE 'Remv|opencv|mxnet|imgcodecs' | sed 's/^/  /' | head -40 || echo '  (simulate 无输出)'"
+IMGC="$(find "$ROOTFS_DIR" -name 'libopencv_imgcodecs.so.406' | head -1)"
+if [[ -n "$IMGC" ]]; then
+  log "libopencv_imgcodecs.so.406 DT_NEEDED（是否直链 gdal）:"
+  chroot_run bash -c "readelf -d '${IMGC#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | grep -iE 'gdal|jpeg|png|tiff|webp|jp2|openjp|Imath|gomp' | sed 's/^/  /' || echo '  (none matched)'"
+fi
+
 # ---------- 7. wrapper / runner（并行任务产物，fail-fast 已在开头验过） ----------
 cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ROOTFS_DIR/opt/alas/"
 
