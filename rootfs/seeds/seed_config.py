@@ -17,13 +17,11 @@ SRC = os.path.join(ALAS, 'config', 'template.json')
 DST = os.path.join(ALAS, 'config', 'alas.json')
 
 OVERRIDES = {
-    # Alas.Emulator
+    # 只注入「桥接必需」项；PackageName / ScreenshotDedithering 交给 ALAS 自己管理：
+    # template 默认 PackageName='auto'（自动识别游戏包名，含渠道服），Dedithering 默认 False。
     ('Alas', 'Emulator', 'Serial'): 'alasaos',
-    ('Alas', 'Emulator', 'PackageName'): 'com.bilibili.azurlane',
     ('Alas', 'Emulator', 'ScreenshotMethod'): 'alasaos',
     ('Alas', 'Emulator', 'ControlMethod'): 'alasaos',
-    # 省电与稳定：截图去抖动关闭（虚拟屏无噪点）
-    ('Alas', 'Emulator', 'ScreenshotDedithering'): False,
 }
 
 
