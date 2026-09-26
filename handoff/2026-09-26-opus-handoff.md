@@ -51,7 +51,8 @@
 - mimov 阶段 66 曾跑通 AlasToFox 全栈（Login success、原版 cnocr OCR 加载、PRIMARY 全屏模式）。
 
 ## 六、接下来要做（按序）
-1. **编精简版 release APK**：`cp .tmp/rootfs-slim/rootfs.tar.xz app/app/src/main/assets/rootfs/rootfs.tar.xz` → 用 Moontier JDK17(`E:\GitRepository\Moontier\.build-tools\jdk17\jdk-17.0.16+8`)+`.tmp/gradle-dist/gradle-9.4.1`(`GRADLE_USER_HOME=.tmp/gradle-home`) 跑 `:app:assembleDebug` → `apksigner verify` 核 debug 签名。产物 `app/app/build/outputs/apk/debug/app-debug.apk`（估 ~310MB）。
+> 进度（opus 续做）：**步骤 1 完成**——精简 APK vC94（361,962,262 B/~345MB，debug 签名，sha256 `52986d97c7a9565c964598dcfbfd756d4eff01f22fe5c1d4aad6eae9c814f0b6`）；app 内 BUILD_MANIFEST 更到 0.2.0-ocr（cdc0f19）。**seed_config 已改**（1dc514c）：去掉 PackageName/Dedithering 强制→PackageName 用 template 默认 `'auto'`，**ALAS 自动识别包名（含渠道服）→ 步骤 4「设渠道服包名」不再需要**。**步骤 2 进行中**——推送子代理正推 vC94 到 66 卸旧装新。步骤 3/5 待推送完成。
+1. **编精简版 release APK**：`cp .tmp/rootfs-slim/rootfs.tar.xz app/app/src/main/assets/rootfs/rootfs.tar.xz` → 用 Moontier JDK17(`E:\GitRepository\Moontier\.build-tools\jdk17\jdk-17.0.16+8`)+`.tmp/gradle-dist/gradle-9.4.1`(`GRADLE_USER_HOME=.tmp/gradle-home`) 跑 `:app:assembleDebug` → `apksigner verify` 核 debug 签名。产物 `app/app/build/outputs/apk/debug/app-debug.apk`（~345MB）。
 2. **推 66 装**：先查/卸旧包，`adb push` 到 /data/local/tmp 再 `pm install -r -d`（~30min 慢链；66 连接时好时坏，broken pipe 就重连重试）。
 3. **激活**：开 AOS→选 root 模式→杀后台→重启（见 §五）。
 4. **设渠道服包名**：把游戏包名设为 `com.bilibili.blhx.qihoo`（66=360 渠道服；seed_config 默认是 com.bilibili.azurlane，需覆盖——查 `rootfs/seeds/seed_config.py` 或 AOS/ALAS 配置页）。
