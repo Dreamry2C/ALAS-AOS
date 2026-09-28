@@ -14,7 +14,6 @@ import com.aliothmoon.maafw.remote.internal.DisplayTarget
 import com.aliothmoon.maafw.remote.internal.PermissionGrantHelper
 import com.aliothmoon.maafw.service.AccessibilityHelperService
 import com.aliothmoon.maafw.remote.internal.PowerController
-import com.aliothmoon.maafw.remote.internal.PrimaryDisplayManager
 import com.aliothmoon.maafw.remote.internal.ScreenManager
 import com.aliothmoon.maafw.constant.PrivilegedGrant
 import com.aliothmoon.maafw.remote.internal.VirtualDisplayManager
@@ -116,15 +115,7 @@ class RemoteServiceImpl : RemoteService.Stub() {
     // ── 显示 ──
 
     override fun setVirtualDisplayMode(mode: Int): Boolean = when (mode) {
-        DisplayMode.PRIMARY -> {
-            VirtualDisplayManager.stop()
-            virtualDisplayMode.set(mode)
-            DisplayTarget.mode = mode
-            true
-        }
-
         DisplayMode.BACKGROUND -> {
-            PrimaryDisplayManager.stop()
             virtualDisplayMode.set(mode)
             DisplayTarget.mode = mode
             true
@@ -138,7 +129,6 @@ class RemoteServiceImpl : RemoteService.Stub() {
     }
 
     override fun startVirtualDisplay(): Int = when (virtualDisplayMode.get()) {
-        DisplayMode.PRIMARY -> PrimaryDisplayManager.start()
         DisplayMode.BACKGROUND -> VirtualDisplayManager.start().also { displayId ->
             if (displayId != DefaultDisplayConfig.DISPLAY_NONE) {
                 PowerController.startUserActivityKeepAlive(displayId)
@@ -151,7 +141,6 @@ class RemoteServiceImpl : RemoteService.Stub() {
     override fun stopVirtualDisplay() {
         AppWatchdog.stopWatching()
         when (virtualDisplayMode.get()) {
-            DisplayMode.PRIMARY -> PrimaryDisplayManager.stop()
             DisplayMode.BACKGROUND -> {
                 PowerController.stopUserActivityKeepAlive()
                 VirtualDisplayManager.stop()
@@ -222,7 +211,6 @@ class RemoteServiceImpl : RemoteService.Stub() {
     override fun touchUp(x: Int, y: Int) = withVirtualDisplay { InputControlUtils.up(x, y, 0, it) }
 
     private inline fun withVirtualDisplay(action: (Int) -> Unit) {
-        if (virtualDisplayMode.get() == DisplayMode.PRIMARY) return
         val displayId = VirtualDisplayManager.getDisplayId()
         if (displayId != DefaultDisplayConfig.DISPLAY_NONE) action(displayId)
     }
@@ -302,7 +290,6 @@ class RemoteServiceImpl : RemoteService.Stub() {
         step("bridge server") { BridgeServer.stop() }
         step("screen size") { ScreenManager.destroy() }
         step("power") { PowerController.destroy() }
-        step("primary display") { PrimaryDisplayManager.stop() }
         step("virtual display") { VirtualDisplayManager.stop() }
     }
 
