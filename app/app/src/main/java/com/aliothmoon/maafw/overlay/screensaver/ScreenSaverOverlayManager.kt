@@ -55,14 +55,9 @@ class ScreenSaverOverlayManager(
 
     fun setup() {
         scope.launch {
-            appSettings.runMode.collect { mode ->
-                when (mode) {
-                    RunMode.BACKGROUND -> observeHost()
-                    RunMode.FOREGROUND -> {
-                        stopObservingHost()
-                        hide()
-                    }
-                }
+            appSettings.runMode.collect {
+                // 只有后台模式，前台已移除
+                observeHost()
             }
         }
     }

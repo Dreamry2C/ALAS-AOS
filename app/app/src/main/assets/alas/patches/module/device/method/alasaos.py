@@ -76,6 +76,17 @@ def _game_task_placements(output: str, package: str):
     return placements
 
 
+def _known_azurlane_packages(pm_output: str, valid) -> list:
+    """从 `pm list packages` 输出里抽出属于 ALAS 已知碧蓝包名的项（去重后排序）。
+
+    Args:
+        pm_output: `pm list packages` 原始输出（每行形如 `package:<name>`）。
+        valid: 已知包名集合（VALID_PACKAGE | VALID_CHANNEL_PACKAGE）。
+    """
+    packages = re.findall(r'package:([^\s]+)', pm_output)
+    return sorted({p for p in packages if p in valid})
+
+
 class AlasAosBridgeError(Exception):
     pass
 
@@ -264,6 +275,27 @@ class AlasAos:
 
     # ---------------------------------------------------------------- App 控制
 
+    def alasaos_detect_package(self):
+        """桥接模式下自动识别游戏包名（替代原生 detect_package——它走真 adb，桥接下无设备）。
+
+        走桥 shell `pm list packages`，按 ALAS 已知碧蓝包名（含渠道服）过滤：
+        只装一个已知包时返回它；0 个或多个（无法判定）返回 None，由调用方回落默认包。
+        任何桥/shell 异常都吞掉回落，不让包名识别阻断初始化（等价于旧「写死默认包」的兜底）。
+        """
+        from module.config.server import VALID_CHANNEL_PACKAGE, VALID_PACKAGE
+        try:
+            output = self.alasaos_shell_output('pm list packages')
+        except Exception as e:
+            logger.warning(f'AlasAos auto package: shell failed ({e}), fallback to default')
+            return None
+        known = _known_azurlane_packages(output, set(VALID_PACKAGE) | set(VALID_CHANNEL_PACKAGE))
+        if len(known) == 1:
+            logger.info(f'AlasAos auto package detected: {known[0]}')
+            return known[0]
+        logger.warning(
+            f'AlasAos auto package: cannot decide (found {known or "none"}), fallback to default')
+        return None
+
     def app_start_alasaos(self, package=None, activity=None, wait=True):
         from module.config.server import DICT_PACKAGE_TO_ACTIVITY
         package = package or self.package
@@ -272,8 +304,7 @@ class AlasAos:
             if activity is None:
                 raise ScriptError(f'No known activity for package: {package}')
         vid = self.alasaos_display_id
-        display = f'--display {vid} ' if vid else ''
-        self.alasaos_shell_output(f'am start {display}-n {package}/{activity}')
+        self.alasaos_shell_output(f'am start --display {vid} -n {package}/{activity}')
         if wait:
             time.sleep(1)
         self.alasaos_pin_game_to_display(package)
