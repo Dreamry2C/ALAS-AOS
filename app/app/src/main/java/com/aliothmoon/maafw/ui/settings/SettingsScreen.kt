@@ -255,17 +255,6 @@ private fun LogCard(
 @Composable
 private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
     MaaCard(title = stringResource(R.string.settings_section_other), collapsible = true) {
-        MaaFieldLabel(stringResource(R.string.settings_run_mode))
-        val runModes = listOf(
-            com.aliothmoon.maafw.domain.RunMode.BACKGROUND to stringResource(R.string.settings_run_mode_background),
-            com.aliothmoon.maafw.domain.RunMode.FOREGROUND to stringResource(R.string.settings_run_mode_foreground),
-        )
-        MaaSingleChoiceFlow(
-            options = runModes,
-            selected = state.runMode,
-            onSelect = { onIntent(SettingsIntent.SetRunMode(it)) },
-        )
-        Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
         MaaFieldLabel(stringResource(R.string.permission_backend))
         MaaSingleChoiceFlow(
             // 对齐 MaaMeow：只列后端名，不展示「可用/不可用」——选哪个都行，可用性交给连接流程判
@@ -322,14 +311,18 @@ private fun UpdateCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Uni
         Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
         MaaFieldLabel(stringResource(R.string.settings_update_branch))
         var branchDraft by remember(state.updateBranch) { mutableStateOf(state.updateBranch) }
-        val isCustomBranch = state.updateBranch != "master"
+        // 「自定义」是否选中用本地 UI 态，不能直接拿持久化的 updateBranch 判：
+        // 点「自定义」时只改草稿、还没保存（updateBranch 仍是 master），
+        // 若用 updateBranch!=master 当判据，输入框永远不出现（点了没反应）——就是这个 bug
+        var branchIsCustom by remember(state.updateBranch) { mutableStateOf(state.updateBranch != "master") }
         MaaSingleChoiceFlow(
             options = listOf(
                 false to "master",
                 true to stringResource(R.string.settings_update_branch_custom),
             ),
-            selected = isCustomBranch,
+            selected = branchIsCustom,
             onSelect = { custom ->
+                branchIsCustom = custom
                 if (custom) {
                     branchDraft = if (state.updateBranch == "master") "" else state.updateBranch
                 } else {
@@ -338,7 +331,7 @@ private fun UpdateCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Uni
                 }
             },
         )
-        if (isCustomBranch) {
+        if (branchIsCustom) {
             Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
             ITextField(
                 value = branchDraft,
