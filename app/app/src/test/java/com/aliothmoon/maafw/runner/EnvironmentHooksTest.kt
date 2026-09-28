@@ -121,15 +121,6 @@ class EnvironmentHooksTest {
 
     // ── 屏保 ────────────────────────────────────────────────────────
 
-    @Test
-    fun `screen saver stays off in foreground mode`() = runTest {
-        val saver = RecordingScreenSaver()
-        val settings = FakeAppSettingsGateway().apply { screenSaverEnabled.value = true }
-
-        assertTrue(ScreenSaverHook(settings, saver).engage(context(RunMode.FOREGROUND)) is EngageResult.Skipped)
-        assertEquals(0, saver.shown)
-    }
-
     /** 没盖上就不该登记撤销——否则会去掀用户自己手动盖的那份 */
     @Test
     fun `a screen saver that failed to show registers no release`() = runTest {
@@ -318,18 +309,6 @@ class EnvironmentHooksTest {
         assertTrue(
             CloseTargetAppHook(port, FakeAppSettingsGateway())
                 .engage(scheduleContext(ScheduleRunOptions(closeAppAfterTask = false)))
-                is EngageResult.Skipped,
-        )
-    }
-
-    /** 前台模式没有虚拟屏，看门狗从不起来，全局开着也没有目标可关 */
-    @Test
-    fun `foreground mode ignores the global switch`() = runTest {
-        val port = FakePrivilegedServicePort(FakePrivilegedService())
-        val settings = FakeAppSettingsGateway().apply { closeAppAfterTask.value = true }
-
-        assertTrue(
-            CloseTargetAppHook(port, settings).engage(context(RunMode.FOREGROUND))
                 is EngageResult.Skipped,
         )
     }

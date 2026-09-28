@@ -118,8 +118,7 @@ class HostState(
             }
             runCatching { service.setup(null, null, BuildConfig.DEBUG) }
                 .onFailure { Timber.w(it, "setup failed") }
-            // 用户选择的运行模式：BACKGROUND=虚拟屏承载游戏，PRIMARY=主屏全屏（虚拟屏不被
-            // ROM 放行时的回退），由 setVirtualDisplayMode 决定 startVirtualDisplay 起哪套
+            // 只有后台（虚拟屏）模式；前台/主屏 PRIMARY 已移除
             val displayMode = settings.runMode.value.displayMode
             runCatching { service.setVirtualDisplayMode(displayMode) }
                 .onFailure { Timber.w(it, "setVirtualDisplayMode(%s) failed", displayMode) }
