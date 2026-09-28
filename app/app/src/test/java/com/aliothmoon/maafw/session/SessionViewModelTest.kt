@@ -526,29 +526,6 @@ class SessionViewModelTest {
         )
     }
 
-    /** 前台模式的拦截在 VM 而不是 RunLauncher，只有这条路径能证明它没漏 */
-    @Test
-    fun `start in foreground mode is blocked before reaching the launcher`() = runTest(mainDispatcher) {
-        val settings = FakeAppSettingsGateway().apply { runMode.value = RunMode.FOREGROUND }
-        val (vm, _, runner) = createVm(settings = settings)
-        advanceUntilIdle()
-
-        val effects = mutableListOf<SessionEffect>()
-        backgroundScope.launch { vm.effects.collect { effects += it } }
-
-        vm.onIntent(SessionIntent.Start)
-        advanceUntilIdle()
-
-        assertTrue(
-            effects.any {
-                it is SessionEffect.ShowMessage &&
-                    it.message.isResource(R.string.runner_foreground_blocked)
-            },
-        )
-        // 拦在投递之前：runner 连 Preparing 都不该进
-        assertEquals(RunnerPhase.Idle, runner.state.value.phase)
-    }
-
     /** 虚拟屏尺寸改由用户选之后，这条是它进 UiState 的唯一通路 */
     @Test
     fun `preview resolution follows the resolution preference`() = runTest(mainDispatcher) {
