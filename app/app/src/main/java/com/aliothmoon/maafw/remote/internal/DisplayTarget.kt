@@ -1,6 +1,5 @@
 package com.aliothmoon.maafw.remote.internal
 
-import android.view.Display
 import com.aliothmoon.maafw.constant.DisplayMode
 
 /**
@@ -18,20 +17,12 @@ object DisplayTarget {
     var mode: Int = DisplayMode.BACKGROUND
 
     /** 触摸注入目标 displayId；虚拟屏未起返回 [VirtualDisplayManager.DISPLAY_NONE] */
-    fun injectDisplayId(): Int = when (mode) {
-        DisplayMode.PRIMARY -> Display.DEFAULT_DISPLAY
-        else -> VirtualDisplayManager.getDisplayId()
-    }
+    fun injectDisplayId(): Int = VirtualDisplayManager.getDisplayId()
 
     /** 采集帧尺寸校验基准（width, height）；未就绪返回 null */
-    fun captureSize(): Pair<Int, Int>? = when (mode) {
-        DisplayMode.PRIMARY -> PrimaryDisplayManager.getCaptureSize()
-        else -> VirtualDisplayManager.getConfig().let { it.width to it.height }
-    }
+    fun captureSize(): Pair<Int, Int>? =
+        VirtualDisplayManager.getConfig().let { it.width to it.height }
 
-    /** 协议侧回报的模式名，供 ALAS 客户端决定启动语义（--display 与否） */
-    fun modeName(): String = when (mode) {
-        DisplayMode.PRIMARY -> "PRIMARY"
-        else -> "BACKGROUND"
-    }
+    /** 协议侧回报的模式名，供 ALAS 客户端决定启动语义 */
+    fun modeName(): String = "BACKGROUND"
 }

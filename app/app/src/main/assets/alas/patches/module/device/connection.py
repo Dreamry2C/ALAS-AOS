@@ -115,12 +115,13 @@ class Connection(ConnectionAttr):
         """
         super().__init__(config)
         # AlasAos BEGIN: 桥接模式（serial 以 alasaos 开头）无本地 adb 设备，
-        # 跳过 detect_device/adb_connect/detect_package/check_mumu_app_keep_alive，
-        # 包名直接取配置（auto 时落 CN 默认包名），set_server 保持资源服务器正确。
+        # 跳过 detect_device/adb_connect/check_mumu_app_keep_alive（原生 detect_package
+        # 也走真 adb，桥接下跑不了）。auto 时改走桥 shell 枚举已装包来识别（含渠道服），
+        # 识别不到再回落 CN 默认包；set_server 保持资源服务器正确。
         if str(self.serial).startswith('alasaos'):
             self.package = self.config.Emulator_PackageName
             if self.package == 'auto':
-                self.package = 'com.bilibili.azurlane'
+                self.package = self.alasaos_detect_package() or 'com.bilibili.azurlane'
             set_server(self.package)
             logger.attr('PackageName', self.package)
             logger.attr('Server', self.config.SERVER)
