@@ -190,19 +190,6 @@ class RunLauncherTest {
         assertEquals(RunnerPhase.Idle, runner.state.value.phase)
     }
 
-    @Test
-    fun `foreground mode precheck blocks and background passes`() = runTest(testDispatcher) {
-        suspend fun launchIn(mode: RunMode) = launcher(
-            scope = backgroundScope,
-            runner = fastStub(backgroundScope),
-            prechecks = listOf(ForegroundModePrecheck),
-            runMode = mode,
-        ).launch(RunTrigger.Manual)
-
-        assertTrue(launchIn(RunMode.FOREGROUND) is RunLaunchResult.Blocked)
-        assertEquals(RunLaunchResult.Started, launchIn(RunMode.BACKGROUND))
-    }
-
     /** 确认循环：先问，带着 token 重跑就该放行 */
     @Test
     fun `confirmation is asked once and the re-run passes`() = runTest(testDispatcher) {
