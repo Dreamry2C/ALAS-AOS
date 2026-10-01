@@ -220,6 +220,16 @@ class Connection(ConnectionAttr):
             bytes if stream=True and recvall=True
             socket if stream=True and recvall=False
         """
+        if str(self.serial).startswith('alasaos'):
+            import shlex
+            if stream and not recvall:
+                raise NotImplementedError('AOS bridge does not provide an interactive shell socket')
+            command = cmd if isinstance(cmd, str) else shlex.join(map(str, cmd))
+            result = self.alasaos_shell_output(command, timeout=timeout)
+            if stream:
+                return result.encode('utf-8')
+            return result.rstrip() if rstrip else result
+
         if not isinstance(cmd, str):
             cmd = list(map(str, cmd))
 

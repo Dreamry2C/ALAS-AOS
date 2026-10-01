@@ -87,5 +87,29 @@ class SharedControlTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.control.start(config)
         self.assertEqual(self.native.starts,0)
 
+class BridgeShellTests(unittest.TestCase):
+    def setUp(self):
+        tree=ast.parse((ROOT/'rootfs/patches/module/device/connection.py').read_text(encoding='utf-8'))
+        cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Connection')
+        func=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='adb_shell')
+        func.decorator_list=[]
+        scope={'remove_shell_warning':lambda v:v}
+        exec(compile(ast.Module(body=[func],type_ignores=[]),'bridge-shell','exec'),scope)
+        self.call=scope['adb_shell']; self.seen=[]
+        def bridge(cmd, timeout): self.seen.append((cmd,timeout)); return 'aarch64\n'
+        self.device=SimpleNamespace(serial='alasaos',alasaos_shell_output=bridge)
+    def test_text_shell_uses_bridge_and_preserves_strip_contract(self):
+        self.assertEqual(self.call(self.device,'uname -m'),'aarch64')
+        self.assertEqual(self.call(self.device,'uname -m',rstrip=False),'aarch64\n')
+        self.assertEqual(self.seen[0],('uname -m',10))
+    def test_argument_quoting_and_completed_stream(self):
+        self.assertEqual(self.call(self.device,['echo','a b'],stream=True),b'aarch64\n')
+        self.assertEqual(self.seen[0][0],"echo 'a b'")
+        with self.assertRaises(NotImplementedError): self.call(self.device,'x',stream=True,recvall=False)
+    def test_non_bridge_device_retains_native_adb(self):
+        self.device.serial='normal'
+        self.device.adb=SimpleNamespace(shell=lambda *a,**k:'native')
+        self.assertEqual(self.call(self.device,'uname -m'),'native')
+        self.assertFalse(self.seen)
 
 if __name__=='__main__': unittest.main()

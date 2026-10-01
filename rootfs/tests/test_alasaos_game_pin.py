@@ -47,6 +47,30 @@ class GameTaskPlacementTests(unittest.TestCase):
         self.assertEqual(placements(DUMP, HOST), [])
         self.assertEqual(placements(DUMP, 'com.android.settings'), [])
 
+    def test_launcher_referencing_game_window_is_not_game(self):
+        dump = f"""
+  Window #0 Window{{launcher u0 com.android.launcher3/.Launcher}}:
+    mDisplayId=0 stackId=41
+    mObscuringWindow=Window{{game u0 {GAME}/{MAIN}}}
+  Window #1 Window{{game u0 {GAME}/{MAIN}}}:
+    mDisplayId=20 stackId=44
+"""
+        self.assertEqual(placements(dump, GAME), [(44, 20)])
+
+    def test_global_footer_reference_does_not_reclassify_last_window(self):
+        dump = f"""
+  Window #0 Window{{launcher u0 com.android.launcher3/.Launcher}}:
+    mDisplayId=0 stackId=41
+  mLastWakeLockHoldingWindow=Window{{game u0 {GAME}/{MAIN}}}
+"""
+        self.assertEqual(placements(dump, GAME), [])
+
+    def test_preamble_reference_is_not_a_window(self):
+        dump = f"""mCurrentFocus=Window{{game u0 {GAME}/{MAIN}}}
+    mDisplayId=0 stackId=41
+"""
+        self.assertEqual(placements(dump, GAME), [])
+
     def test_missing_package(self):
         self.assertEqual(placements(DUMP, 'com.not.installed'), [])
 
