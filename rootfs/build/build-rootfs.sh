@@ -62,6 +62,7 @@ require_file() {
   fi
 }
 require_file "$ASSETS/overlays/wrapper.py"
+require_file "$ASSETS/overlays/alasaos_gui.py"
 require_file "$ASSETS/overlays/runner.py"
 require_file "$ASSETS/patches/assets_fix.py"
 require_file "$ASSETS/seeds/deploy.yaml"
@@ -214,12 +215,21 @@ install -D -m 0644 "$ASSETS/shims/jellyfish.py" "$ROOTFS_DIR$PY_PURELIB/jellyfis
 install -D -m 0644 "$ASSETS/shims/numpy_shim.py" "$ROOTFS_DIR$PY_PURELIB/numpy_shim.py"
 install -D -m 0644 "$ASSETS/shims/zzz_alas_shim.pth" "$ROOTFS_DIR$PY_PURELIB/zzz_alas_shim.pth"
 
-# deploy.yaml：更新器七键全锁（AutoUpdate:false 是保住钉版 commit 的唯一闸门，详见文件头注释）
+# deploy.yaml：AutoUpdate:false 是保住钉版 commit 的唯一闸门（详见文件头注释）；
+# EnableReload:true 放开 WebUI「Force restart」（2026-10-01 opus5）。运行期策略键由
+# seeds/seed_deploy.py 幂等校正（改策略键不必重烘焙 rootfs），Repository/Branch 跟随
+# 用户换源由 seeds/sync_deploy.py 维护。
 install -D -m 0644 "$ASSETS/seeds/deploy.yaml" "$ROOTFS_DIR/opt/alas/config/deploy.yaml"
 
 # 实例配置生成器：运行时实例播种由阶段三调用（ALAS CWD=仓库根；脚本内 ALAS 根取
 # ALASAOS_ALAS_ROOT 环境变量，调用方需 export ALASAOS_ALAS_ROOT=/opt/alas）
 install -D -m 0644 "$ASSETS/seeds/seed_config.py" "$ROOTFS_DIR/opt/alas/seeds/seed_config.py"
+
+# deploy.yaml 校正器：seed_deploy 每次启动幂等校正静态策略键(EnableReload 等)；
+# sync_deploy 由 alasaos_update.sh 调用、把 Repository/Branch 同步成当前更新源。
+# 两者亦随 overlay 资产每次启动刷新（改它们不必重烘焙 rootfs），这里 install 保 rootfs 自洽。
+install -D -m 0644 "$ASSETS/seeds/seed_deploy.py" "$ROOTFS_DIR/opt/alas/seeds/seed_deploy.py"
+install -D -m 0644 "$ASSETS/seeds/sync_deploy.py" "$ROOTFS_DIR/opt/alas/seeds/sync_deploy.py"
 
 # ALAS 热更新脚本：设备端唯一更新通道（内置更新器已被 AutoUpdate:false 锁死），
 # 阶段三 App 侧 AlasUpdater 经 proot 拉起；协议见脚本头注释
@@ -284,7 +294,7 @@ chroot_run ldconfig 2>/dev/null || true
 log "瘦身手术：删 LLVM+mesa GL 软栈（约 -182MB 解压）；gdal/proj/gdcm/openexr 编解码依赖全保留"
 
 # ---------- 7. wrapper / runner（并行任务产物，fail-fast 已在开头验过） ----------
-cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ROOTFS_DIR/opt/alas/"
+cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ASSETS/overlays/alasaos_gui.py" "$ROOTFS_DIR/opt/alas/"
 
 # ---------- 8. import 硬门禁 + BUILD_MANIFEST（决策 #10：App 要可读） ----------
 PY_VER="$(chroot_run python3 -c 'import platform; print(platform.python_version())')"
