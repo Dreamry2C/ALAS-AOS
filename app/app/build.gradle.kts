@@ -48,7 +48,6 @@ dependencies {
 
     implementation(project(":annotation-api"))
     ksp(project(":ksp-processor"))
-    implementation(project(":semi-icons"))
 
     // MIUI 上系统权限页的跳转差异大，自己拼 Intent 覆盖不全
     implementation(libs.xx.permissions)
@@ -65,14 +64,12 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore)
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.window)
 
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)

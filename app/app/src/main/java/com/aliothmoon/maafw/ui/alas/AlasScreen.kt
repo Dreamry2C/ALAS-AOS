@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import com.aliothmoon.maafw.ui.components.MaaButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -249,7 +249,7 @@ fun AlasScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Spacer(Modifier.height(MaaDesignTokens.Spacing.lg))
-                    Button(
+                    MaaButton(
                         onClick = {
                             loadFailed = false
                             if (prootState.phase == ProotPhase.FAILED || prootState.phase == ProotPhase.IDLE) {
