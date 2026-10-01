@@ -20,13 +20,13 @@ private fun Project.versionGitWorkingDir(): File {
     }
 }
 
-/** versionCode counts commits in the selected version repo; the build fails without a git checkout */
+/** Installation versions are explicit: rewriting Git history must not downgrade an APK. */
 internal fun Project.gitVersionCode(): Int {
-    val gitWorkingDir = versionGitWorkingDir()
-    return providers.exec {
-        workingDir(gitWorkingDir)
-        commandLine("git", "rev-list", "--count", "HEAD")
-    }.standardOutput.asText.get().trim().toInt()
+    val code = providers.gradleProperty("app.versionCode").orNull?.toIntOrNull()
+    require(code != null && code in 1..2_100_000_000) {
+        "Set app.versionCode in gradle.properties to a positive Android version code"
+    }
+    return code
 }
 
 /**
