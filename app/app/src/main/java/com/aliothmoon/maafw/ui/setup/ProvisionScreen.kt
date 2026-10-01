@@ -21,6 +21,7 @@ import com.aliothmoon.maafw.provision.ProvisionState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.MaaButton
+import com.aliothmoon.maafw.ui.alas.formatTransferBytes
 
 /**
  * 首启 rootfs 部署页：未完成时整屏接管（AppRoot 的门）
@@ -78,6 +79,10 @@ fun ProvisionScreen(
                             state.doneBytes / 1_000_000,
                             state.totalBytes / 1_000_000,
                         )
+                    )
+                    Text(
+                        stringResource(R.string.provision_throughput, formatTransferBytes(state.bytesPerSecond)),
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
 
