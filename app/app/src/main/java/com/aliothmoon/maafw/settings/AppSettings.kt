@@ -49,11 +49,11 @@ data class AppSettings(
     @PrefKey(default = "DEFAULT")
     val themeStyle: String = "DEFAULT",
 
-    /** ALAS 热更新源（git URL）；留空=默认源 git://git.lyoko.io/AzurLaneAutoScript */
+    /** Legacy migration input only. Runtime source of truth is config/deploy.yaml. */
     @PrefKey(default = "")
     val updateSource: String = "",
 
-    /** ALAS 热更新分支；默认 master，用户可自定义（如自己发布的分支） */
+    /** Legacy migration input only; new saves atomically update deploy Repository and Branch. */
     @PrefKey(default = "master")
     val updateBranch: String = "master",
 

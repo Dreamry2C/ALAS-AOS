@@ -111,6 +111,13 @@
     <string name="settings_update_branch">更新分支</string>
     <string name="settings_update_branch_custom">自定义</string>
     <string name="settings_update_save">保存更新设置</string>
+    <string name="settings_source_domestic">国内</string>
+    <string name="settings_source_deploy_hint">直接保存至 ALAS deploy.yaml；源与分支一起保存，下次 AOS 环境启动时更新。不改变依赖源或证书校验。自定义地址默认隐藏，可手动显示。</string>
+    <string name="settings_source_saved">已保存。ALAS 页面若仍显示旧值，请刷新页面。</string>
+    <string name="settings_source_conflict">配置已在别处修改，未覆盖。请重新读取后再保存。</string>
+    <string name="settings_source_invalid">仓库地址或分支格式无效，请检查输入。</string>
+    <string name="settings_source_unavailable">无法读取或保存 deploy.yaml。请先完成环境部署，再重新读取。</string>
+    <string name="settings_source_reload">重新读取（放弃草稿）</string>
     <string name="settings_resource">服务器选择</string>
     <string name="settings_no_resources">项目未提供可选服务器</string>
     <string name="settings_current_resource">当前资源</string>
