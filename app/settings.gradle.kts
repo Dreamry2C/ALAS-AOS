@@ -1,6 +1,14 @@
 pluginManagement {
     // 构建约定插件（maafw.*）在这个独立构建里，模块脚本只按 id 应用
     includeBuild("build-logic")
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "com.google.devtools.ksp") {
+                // KSP 2.x is published to Central; avoid stale/missing Google plugin markers.
+                useModule("com.google.devtools.ksp:symbol-processing-gradle-plugin:${requested.version}")
+            }
+        }
+    }
     repositories {
         mavenLocal()
         // 大陆网络环境 dl.google.com 偶发握手中断，Aliyun 镜像优先、官方源兜底
@@ -11,6 +19,7 @@ pluginManagement {
                 includeGroupByRegex("com\\.android.*")
                 includeGroupByRegex("com\\.google.*")
                 includeGroupByRegex("androidx.*")
+                excludeGroupByRegex("com\\.google\\.devtools.*")
             }
         }
         google {
@@ -18,6 +27,7 @@ pluginManagement {
                 includeGroupByRegex("com\\.android.*")
                 includeGroupByRegex("com\\.google.*")
                 includeGroupByRegex("androidx.*")
+                excludeGroupByRegex("com\\.google\\.devtools.*")
             }
         }
         maven {
@@ -37,8 +47,11 @@ dependencyResolutionManagement {
         maven {
             name = "AliyunGoogle"
             url = uri("https://maven.aliyun.com/repository/google")
+            content { excludeGroupByRegex("com\\.google\\.devtools.*") }
         }
-        google()
+        google {
+            content { excludeGroupByRegex("com\\.google\\.devtools.*") }
+        }
         maven {
             name = "AliyunCentral"
             url = uri("https://maven.aliyun.com/repository/central")
