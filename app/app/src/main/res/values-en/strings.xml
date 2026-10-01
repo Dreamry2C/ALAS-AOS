@@ -115,6 +115,13 @@
     <string name="settings_update_branch">Update branch</string>
     <string name="settings_update_branch_custom">Custom</string>
     <string name="settings_update_save">Save update settings</string>
+    <string name="settings_source_domestic">Domestic</string>
+    <string name="settings_source_deploy_hint">Saves repository and branch together in ALAS deploy.yaml for the next environment start. Dependency sources and TLS settings are unchanged. Custom URLs are hidden until you choose to show them.</string>
+    <string name="settings_source_saved">Saved. Refresh the ALAS page if it still shows old values.</string>
+    <string name="settings_source_conflict">Configuration changed elsewhere; nothing was overwritten. Reload before saving.</string>
+    <string name="settings_source_invalid">Invalid repository URL or branch. Check your input.</string>
+    <string name="settings_source_unavailable">Cannot read or save deploy.yaml. Complete environment setup, then reload.</string>
+    <string name="settings_source_reload">Reload (discard draft)</string>
     <string name="settings_resource">Server selection</string>
     <string name="settings_no_resources">The project provides no selectable servers</string>
     <string name="settings_current_resource">Current resource</string>
