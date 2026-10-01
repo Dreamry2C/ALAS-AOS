@@ -11,6 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -43,14 +48,20 @@ import com.aliothmoon.maafw.ui.components.MaaLabeledControlRow
 import com.aliothmoon.maafw.ui.components.MaaNavigationRow
 import com.aliothmoon.maafw.ui.components.MaaSingleChoiceFlow
 import com.aliothmoon.maafw.ui.components.MaaSwitch
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.ui.res.vectorResource
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.aliothmoon.maafw.MaaDispatchers
+import com.aliothmoon.maafw.settings.AlasSource
+import com.aliothmoon.maafw.settings.AlasSourceRepository
+import com.aliothmoon.maafw.settings.AppSettingsManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.compose.koinInject
+import java.io.File
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import com.aliothmoon.maafw.ui.components.ITextField
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,7 +109,7 @@ fun SettingsScreen(
             DisplayCard(state, onIntent)
             LogCard(state, onIntent, onOpenAppLog, onOpenAlasLog, onExportAlasLogs, onExportLauncherLogs)
             OtherCard(state, onIntent)
-            UpdateCard(state, onIntent)
+            UpdateCard()
             AboutCard()
         }
     }
@@ -273,79 +284,120 @@ private fun AboutCard() {
     }
 }
 
-/**
- * ALAS 更新源 / 分支：用户填自己的源就从那里 `git fetch + reset --hard` 拉取（与 ALAS 更新
- * 同语义），留空 = 默认源 git://git.lyoko.io/AzurLaneAutoScript。源是敏感配置，默认打码，
- * 点尾部小眼睛切换明文。
- */
+/** Deploy is the source of truth. Drafts are saved as one revision-checked transaction. */
 @Composable
-private fun UpdateCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
+private fun UpdateCard() {
+    val context = LocalContext.current.applicationContext
+    val legacySettings = koinInject<AppSettingsManager>()
+    val repository = remember(context) { AlasSourceRepository(File(context.filesDir, "rootfs/opt/alas")) }
+    val scope = rememberCoroutineScope()
+    var snapshot by remember { mutableStateOf<AlasSourceRepository.Snapshot?>(null) }
+    var sourceDraft by remember { mutableStateOf("") }
+    var branchDraft by remember { mutableStateOf("master") }
+    var customDraft by remember { mutableStateOf("") }
+    var sourceVisible by remember { mutableStateOf(false) }
+    var preset by remember { mutableStateOf("custom") }
+    var busy by remember { mutableStateOf(true) }
+    var message by remember { mutableStateOf<Int?>(null) }
+
+    fun display(value: AlasSourceRepository.Snapshot) {
+        snapshot = value
+        sourceVisible = false
+        sourceDraft = value.source.repository
+        branchDraft = value.source.branch
+        preset = when (sourceDraft) {
+            AlasSource.DOMESTIC -> "domestic"
+            AlasSource.GITHUB -> "github"
+            else -> "custom"
+        }
+        if (preset == "custom") customDraft = sourceDraft
+    }
+
+    suspend fun reload() {
+        busy = true
+        try {
+            // One DataStore emission is an atomic legacy pair; never read two StateFlows separately.
+            val legacy = legacySettings.settings.first()
+            display(withContext(MaaDispatchers.IO) { repository.migrateLegacy(legacy.updateSource, legacy.updateBranch) })
+            message = null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            snapshot = null
+            message = R.string.settings_source_unavailable
+        } finally { busy = false }
+    }
+    LaunchedEffect(repository) { reload() }
+
     MaaCard(title = stringResource(R.string.settings_section_update), collapsible = true) {
         MaaFieldLabel(stringResource(R.string.settings_update_source))
-        var sourceDraft by remember(state.updateSource) { mutableStateOf(state.updateSource) }
-        var sourceVisible by remember { mutableStateOf(false) }
-        ITextField(
-            value = sourceDraft,
-            onValueChange = { sourceDraft = it },
-            placeholder = stringResource(R.string.settings_update_source_placeholder),
-            visualTransformation = if (sourceVisible) {
-                VisualTransformation.None
-            } else {
-                PasswordVisualTransformation()
-            },
-            trailingIcon = {
-                IconButton(onClick = { sourceVisible = !sourceVisible }) {
-                    Icon(
-                        imageVector = if (sourceVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = stringResource(R.string.settings_update_source_toggle),
-                    )
-                }
-            },
-        )
-        Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
-        Text(
-            text = stringResource(R.string.settings_update_source_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
-        MaaFieldLabel(stringResource(R.string.settings_update_branch))
-        var branchDraft by remember(state.updateBranch) { mutableStateOf(state.updateBranch) }
-        // 「自定义」是否选中用本地 UI 态，不能直接拿持久化的 updateBranch 判：
-        // 点「自定义」时只改草稿、还没保存（updateBranch 仍是 master），
-        // 若用 updateBranch!=master 当判据，输入框永远不出现（点了没反应）——就是这个 bug
-        var branchIsCustom by remember(state.updateBranch) { mutableStateOf(state.updateBranch != "master") }
         MaaSingleChoiceFlow(
             options = listOf(
-                false to "master",
-                true to stringResource(R.string.settings_update_branch_custom),
+                "domestic" to stringResource(R.string.settings_source_domestic),
+                "github" to "GitHub",
+                "custom" to stringResource(R.string.settings_update_branch_custom),
             ),
-            selected = branchIsCustom,
-            onSelect = { custom ->
-                branchIsCustom = custom
-                if (custom) {
-                    branchDraft = if (state.updateBranch == "master") "" else state.updateBranch
-                } else {
-                    branchDraft = "master"
-                    onIntent(SettingsIntent.SetUpdateBranch("master"))
+            selected = preset,
+            enabled = !busy,
+            onSelect = { selected ->
+                if (!busy) {
+                    if (preset == "custom") customDraft = sourceDraft
+                    preset = selected
+                    sourceDraft = when (selected) {
+                        "domestic" -> AlasSource.DOMESTIC
+                        "github" -> AlasSource.GITHUB
+                        else -> customDraft
+                    }
                 }
             },
         )
-        if (branchIsCustom) {
-            Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+        if (preset == "custom") {
             ITextField(
-                value = branchDraft,
-                onValueChange = { branchDraft = it },
-                placeholder = stringResource(R.string.settings_update_branch_custom),
+                value = sourceDraft,
+                onValueChange = { if (!busy) { sourceDraft = it; customDraft = it } },
+                placeholder = stringResource(R.string.settings_update_source_placeholder),
+                visualTransformation = if (sourceVisible) androidx.compose.ui.text.input.VisualTransformation.None
+                    else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { sourceVisible = !sourceVisible }) {
+                        Icon(
+                            imageVector = if (sourceVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = stringResource(R.string.settings_update_source_toggle),
+                        )
+                    }
+                },
                 singleLine = true,
             )
         }
+        Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+        Text(stringResource(R.string.settings_source_deploy_hint), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
-        TextButton(onClick = {
-            onIntent(SettingsIntent.SetUpdateSource(sourceDraft))
-            onIntent(SettingsIntent.SetUpdateBranch(branchDraft.ifBlank { "master" }))
-        }) {
-            Text(stringResource(R.string.settings_update_save))
+        MaaFieldLabel(stringResource(R.string.settings_update_branch))
+        ITextField(value = branchDraft, onValueChange = { if (!busy) branchDraft = it },
+            placeholder = "master / cloud", singleLine = true)
+        TextButton(enabled = !busy && snapshot != null, onClick = {
+            val expected = snapshot ?: return@TextButton
+            busy = true
+            scope.launch {
+                try {
+                    val source = AlasSource.fromInput(sourceDraft, branchDraft)
+                    display(withContext(MaaDispatchers.IO) { repository.save(expected, source) })
+                    message = R.string.settings_source_saved
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: AlasSourceRepository.Conflict) {
+                    message = R.string.settings_source_conflict
+                } catch (_: IllegalArgumentException) {
+                    message = R.string.settings_source_invalid
+                } catch (_: Exception) {
+                    message = R.string.settings_source_unavailable
+                } finally { busy = false }
+            }
+        }) { Text(stringResource(R.string.settings_update_save)) }
+        TextButton(enabled = !busy, onClick = { scope.launch { reload() } }) {
+            Text(stringResource(R.string.settings_source_reload))
         }
+        message?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall) }
     }
 }

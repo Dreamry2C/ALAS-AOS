@@ -3,6 +3,7 @@
 Run with Python unittest; on Windows set ALASAOS_TEST_BASH to Git Bash.
 All test files live under the project .tmp directory. No remote network is used.
 """
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -56,8 +57,7 @@ class UpdateTests(unittest.TestCase):
             'if [[ "$1" == ls-remote && -n "${FAIL_PROBE:-}" ]]; then exit 1; fi\n'
             'if [[ "$1" == fetch && -n "${FAIL_FETCH:-}" ]]; then echo "fatal: test failure" >&2; exit 1; fi\n'
             f'exec "{real_git}" "$@"\n', newline='\n')
-        # Native Windows Python cannot execute the extensionless Git Bash fault stub.
-        # Keep the real progress wrapper, but run its child through Bash on Windows.
+        # Keep the real progress wrapper; Windows requires Bash to execute our Git fault stub.
         progress_child = (
             'if [[ "$1" == seeds/update_progress.py ]]; then\n'
             '  shift 2\n'
@@ -77,10 +77,23 @@ class UpdateTests(unittest.TestCase):
         return p.stdout.strip()
 
     def update(self, source=None, branch='zenko', **env):
+        # Simulate one settings save. The updater must consume deploy, not old argv/env.
+        repo = (source or shell_path(self.origin)).replace("'", "''")
+        deploy = self.alas / 'config/deploy.yaml'
+        deploy.write_bytes((f"# retain\r\nDeploy:\r\n  Git:\r\n    Repository: '{repo}'  # private\r\n"
+                            f"    Branch: '{branch}'  # branch\r\n  Update:\r\n    EnableReload: true\r\n").encode())
+        before = deploy.read_bytes()
+        p = self.run_update(**env)
+        self.assertEqual(deploy.read_bytes(), before, 'Updater must never rewrite deploy')
+        return p
+
+    def run_update(self, **env):
         bash = os.environ.get('ALASAOS_TEST_BASH', shutil.which('bash') or '/bin/bash')
         script = f'export PATH="{shell_path(self.bin)}:$PATH"; exec /bin/bash "$1" "$2" "$3"'
         return subprocess.run([bash, '-c', script, 'updater-test', shell_path(self.alas / 'seeds/alasaos_update.sh'),
-                               source or shell_path(self.origin), branch], env=dict(self.env, **env),
+                               'https://stale:FAKE_STALE_SECRET@example.invalid/old', 'stale-branch'],
+                              env=dict(self.env, ALASAOS_UPDATE_REPO='https://stale.invalid/old',
+                                       ALASAOS_UPDATE_BRANCH='stale-branch', **env),
                               capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=25)
 
     def test_first_install_matching_manifest_still_populates_git(self):
@@ -132,6 +145,79 @@ class UpdateTests(unittest.TestCase):
         (self.alas / '.alasaos_alas_commit').write_text(new)
         self.assertEqual(self.update().returncode, 0)
         self.assertEqual(self.git(self.alas, 'rev-parse', 'HEAD'), new)
+
+    def test_same_sha_source_switch_retains_origin_refs_and_git_directory(self):
+        self.assertEqual(self.update(branch='master').returncode, 0)
+        sentinel = self.alas / '.git/aos-test-sentinel'
+        sentinel.write_text('do not rebuild git')
+        # A second local URL is enough to prove source fingerprint changes at the same SHA.
+        second = self.root / 'second-origin'
+        self.git(self.root, 'clone', '-q', str(self.origin), str(second))
+        p = self.update(source=shell_path(second), branch='master')
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.assertIn('UPDATED ' + self.sha, p.stdout)
+        self.assertEqual(shell_path(self.git(self.alas, 'remote', 'get-url', 'origin')), shell_path(second))
+        self.assertEqual(self.git(self.alas, 'rev-parse', 'origin/master'), self.sha)
+        self.assertTrue(sentinel.is_file())
+
+    def test_cloud_and_master_round_trip_at_same_sha(self):
+        self.git(self.origin, 'branch', 'cloud')
+        for branch in ('master', 'cloud', 'master'):
+            p = self.update(branch=branch)
+            self.assertEqual(p.returncode, 0, p.stdout)
+            self.assertEqual(self.git(self.alas, 'symbolic-ref', '--short', 'HEAD'), branch)
+            self.assertEqual(self.git(self.alas, 'rev-parse', 'origin/' + branch), self.sha)
+            self.assertNotIn('FAKE_STALE_SECRET', p.stdout + p.stderr)
+
+    def test_missing_or_invalid_deploy_fails_without_git_or_backoff(self):
+        deploy = self.alas / 'config/deploy.yaml'
+        deploy.unlink()
+        p = self.run_update()
+        self.assertEqual(p.returncode, 1)
+        self.assertEqual(p.stdout.strip(), 'FAILED deploy-config')
+        deploy.write_text('Repository: https://test:FAKE_SECRET@example.invalid/r\nBranch: bad..branch\n')
+        p = self.run_update()
+        self.assertEqual(p.returncode, 1)
+        self.assertEqual(p.stdout.strip(), 'FAILED deploy-config')
+        self.assertEqual(p.stderr, '')
+        self.assertFalse((self.alas / '.git').exists())
+        self.assertFalse((self.alas / '.alasaos_update_fail_date').exists())
+
+    def test_proxy_env_reaches_git_only_for_this_process_and_no_proxy_survives(self):
+        real_git = shell_path(shutil.which('git'))
+        marker = self.root / 'proxy-observed'
+        # Fixed marker only; never dump environment values to logs.
+        (self.bin / 'git').write_text(
+            '#!/bin/bash\n'
+            'if [[ "$1" == fetch ]]; then\n'
+            ' [[ "$http_proxy" == "http://proxy.invalid:8080" && "$https_proxy" == "$http_proxy" ]] || exit 1\n'
+            ' [[ "$NO_PROXY" == "localhost,127.0.0.1,keep.invalid" ]] || exit 1\n'
+            f' printf ok > "{shell_path(marker)}"\n'
+            'fi\n'
+            f'exec "{real_git}" "$@"\n', newline='\n')
+        parent = dict(os.environ)
+        p = self.update(http_proxy='http://proxy.invalid:8080', https_proxy='http://proxy.invalid:8080',
+                        NO_PROXY='localhost,127.0.0.1,keep.invalid')
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.assertEqual(marker.read_text(), 'ok')
+        self.assertNotIn('proxy.invalid', p.stdout + p.stderr)
+        self.assertEqual(dict(os.environ), parent)
+
+    def test_cdn_raw_output_and_invalid_verdict_are_never_printed(self):
+        self.assertEqual(self.update(branch='master').returncode, 0)
+        domestic = 'git://git.lyoko.io/AzurLaneAutoScript'
+        # Map the official URL to a local fixture: absolutely no network/CDN access.
+        self.git(self.alas, 'config', f'url.{shell_path(self.origin)}.insteadOf', domestic)
+        (self.alas / '.alasaos_update_source').write_text(
+            hashlib.sha256((domestic + '\nmaster').encode()).hexdigest())
+        (self.alas / 'seeds/cdn_update.py').write_text(
+            'print("raw https://user:FAKE_CDN_SECRET@example.invalid/repo")\n'
+            'print("PACK_READY FAKE_CDN_SECRET")\n')
+        p = self.update(source=domestic, branch='master', ALASAOS_UPDATE_NO_CDN='')
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.assertIn('PHASE cdn-fallback', p.stdout)
+        self.assertNotIn('FAKE_CDN_SECRET', p.stdout + p.stderr)
+        self.assertIn('UNCHANGED ' + self.sha, p.stdout)
 
     def test_env_fix_restores_retired_webui_overlay_from_current_fork(self):
         rel = 'module/webui/utils.py'
