@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
-import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -209,9 +208,7 @@ fun FullscreenPreview(
     // 虚拟屏是横的，竖着看只有中间一条；退出时还原用户原本的方向设置
     DisposableEffect(activity) {
         val original = activity?.requestedOrientation
-        if (activity?.resources?.configuration?.orientation != Configuration.ORIENTATION_LANDSCAPE) {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        }
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         onDispose { if (original != null) activity.requestedOrientation = original }
     }
 

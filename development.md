@@ -2,13 +2,13 @@
 
 ## 当前阶段
 
-v3 主线已完成阶段三、阶段四应用内实现，阶段五验证进行中。当前任务及未完成项以 `handoff/2026-10-01-astra-handoff.md` 为准，历史进度查 `devlog.md`，本文件不重复维护任务流水。
+v3 主线已完成阶段三、阶段四应用内实现，阶段五验证进行中。当前任务及未完成项以 `.local/dev/handoff/2026-10-01-astra-handoff.md` 为准，历史进度查 `.local/dev/devlog.md`，本文件不重复维护任务流水。
 
 运行期采用原版 cnocr 1.2.2 + mxnet 1.9.1 + azur_lane 模型，后台虚拟屏模式。旧路线图中的 PP-OCR/前台说明属于历史决策，下列结构与技术栈按现状维护。
 
 - 开发宪法：`docs/roadmap-v3.md`（13 项决策、阶段〇–五、风险登记）。
 - 阶段二工作底稿：`docs/stage2-maafwapp-inventory.md`（减法三栏清单 / 新桥设计 / VD flag 核查）。
-- 任何不清楚之处：先读 roadmap，再读 `handoff/` 最新文件（当前 `2026-10-01-astra-handoff.md`）；详细动作与任务计划查交接所指的单份 live.md。
+- 任何不清楚之处：先读 roadmap，再读 `.local/dev/handoff/` 最新文件（当前 `2026-10-01-astra-handoff.md`）；详细动作与任务计划查交接所指的单份 live.md。
 
 ## 仓库结构（现状）
 
@@ -28,8 +28,9 @@ v3 主线已完成阶段三、阶段四应用内实现，阶段五验证进行�
 - `docs/` — `roadmap-v3.md`、`stage2-maafwapp-inventory.md`、`spike-d-wrapper-surface.md`。
 - `spike/` — 阶段〇交付：`a-proot-exec/`（Spike A/C 工程+报告）、`e-adb-virtual-display/`（Spike E/B′）。
 - `m0-archive/`（gitignore，本地只读）— m0 全部成果归档：MaaFwApp fork、termux 补丁/种子、桥代理、OCR 模型、m0 devlog。
-- 账册（根目录）：`devlog.md`（倒序流水）、`debug.md`（坑与解法）、`development.md`（本文件）、`handoff/`（跨对话接力，取最新）。
-- `.tmp/`（gitignore）— 构建缓存（`gradle-home`）、实验物、rootfs artifact、ALAS 部分克隆；每项连续任务只保留一份含目标、计划、断点与即时结果的 live.md；原始输出另存 txt/log。中断恢复材料不能与普通缓存一起清理。devlog 只记概要，handoff 只记接力摘要，debug 只记可复用坑点。
+- 本地账册（`.local/dev/`，不入 Git）：`.local/dev/devlog.md`（倒序流水）、`.local/dev/debug.md`（坑与解法）、`.local/dev/handoff/`（跨对话接力，取最新）。
+- `.local/dev/`（gitignore）— devlog/debug/handoff/live/TODO，保存本机开发记录；不作为可删除缓存。每项连续任务只用一份含目标、计划、断点与即时结果的 live.md。缺少本地记录的新克隆从本文件/roadmap/Git 历史恢复项目结构。
+- `.tmp/`（gitignore）— 构建缓存、测试原始输出和历史证据包；清理前保留 live 所引用的必要恢复证据。历史临时脚本可能硬编码旧日志路径，复用前改成 `.local/dev/live/`。
 
 ## 技术栈（现状）
 
@@ -54,7 +55,7 @@ New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
 
 - 2026-10-01 本机验证的 SDK：`app/local.properties`（gitignored）指向 `E:/GitRepository/Moontier/.build-tools/android-sdk`；复用现有 JDK/SDK，不修改外部工具链。旧机器的 da270 SDK / shizku-m 便携工具链是备用历史路径，使用前确认存在。
 - versionCode 按 Git 提交计数，versionName 按 tag 距离生成。同一未提交工作区可多次构建出相同版本号，调试安装以 APK SHA256 区分，不用旧版本号推断已安装哪份代码。
-- 坑：dl.google.com 间歇握手断 → settings 已加 Aliyun 镜像（官方源兜底）；floatingx 的 compose 包必须显式声明 `floatingx-compose`（两坑详见 debug.md 2026-09-16 条目）。
+- 坑：dl.google.com 间歇握手断 → settings 已加 Aliyun 镜像（官方源兜底）；floatingx 的 compose 包必须显式声明 `floatingx-compose`（两坑详见 .local/dev/debug.md 2026-09-16 条目）。
 
 ### rootfs（阶段一）
 
@@ -77,4 +78,8 @@ bash run-device-ladder.sh AVAY025422002864     # Spike A：exec 阶梯（自动�
 bash run-phantom-ab.sh A 600                   # Spike C：幻影查杀 A/B 轮（A|B|A2|B1|B2|L|final）
 ```
 
-前置：`adb` 可达真机、`export MSYS_NO_PATHCONV=1`（细节与坑点见 `debug.md`）。
+前置：`adb` 可达真机、`export MSYS_NO_PATHCONV=1`（细节与坑点见 `.local/dev/debug.md`）。
+
+## Git 分支与本地记录
+
+`main` 仅同步 `upstream/main`（Shinarin/ALAS-AOS），开发在 `alas-aos`，推送到 Dreamry2C/ALAS-AOS 的同名分支。开发日志/坑点/交接/现场记录集中在 `.local/dev/`，不随仓库克隆传播；后续功能清单见本地 `.local/dev/TODO.md`。公共结构与发布文档仍正常版本管理。

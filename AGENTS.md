@@ -2,7 +2,7 @@
 
 ## 当前阶段：v3 · 阶段三（管道穿透与生命周期）
 
-- **开发宪法 = `docs/roadmap-v3.md`**（2026-09-15 定稿，13 项已确认决策）。新阶段账册：结构查 `development.md`，交接查 `handoff/`（取最新），流水查 `devlog.md`，坑点查 `debug.md`——均按下方「通用 Agent 约束」维护。
+- **开发宪法 = `docs/roadmap-v3.md`**（2026-09-15 定稿，13 项已确认决策）。新阶段账册：结构查 `development.md`，交接查 `.local/dev/handoff/`（取最新），流水查 `.local/dev/devlog.md`，坑点查 `.local/dev/debug.md`——均按下方「通用 Agent 约束」维护。
 - m0 历史归档在 `m0-archive/`（其 `docs/` 为历史资料，只读）；v3 对 m0 的复用清单见 roadmap-v3 附录 A。
 - 外部依赖源码：`D:\VSCodeCache\shizku-m\`（shizuku-m fork + 便携 Android 工具链 build-env，可**只读**复用，禁止修改）。
 
@@ -18,21 +18,25 @@
 
 ## 二、现场记录与进度交接
 
-- 每次连续任务只维护一份 `.tmp/YYYY-MM-DD-主题-live.md`：开头写目标、授权范围、勾选计划和当前断点，下方按时间追加简短动作记录。跨对话继续同一任务时沿用该文件。
+- 本地开发记录统一存放 `.local/dev/`，整个目录 Git 忽略，禁止强制加入版本控制；旧记录迁移后保留本地并取消跟踪，不清除 Git 历史。
+- 路径：`.local/dev/devlog.md`（改动概要）、`.local/dev/debug.md`（坑点）、`.local/dev/handoff/`（接力摘要）、`.local/dev/live/`（单任务即时记录）、`.local/dev/TODO.md`（后续工作）。原始测试输出/构建缓存仍放 `.tmp/`。
+- `development.md`、`docs/roadmap-v3.md`、`README.md`、`CHANGELOG.md` 和本文件继续入库。新克隆若没有本地记录，先读 development/roadmap 与 Git 历史，再按需初始化本地账册；不可假设已恢复旧机器记录。
+
+- 每次连续任务只维护一份 `.local/dev/live/YYYY-MM-DD-主题-live.md`：开头写目标、授权范围、勾选计划和当前断点，下方按时间追加简短动作记录。跨对话继续同一任务时沿用该文件。
 - 动一点记一点：每个有副作用的操作前写“计划/涉及文件”，返回后立即写“结果/验证证据/下一步”，再做下一项；通常每条 1–3 行。不逐命令抄流水，不等阶段结束补写。
 - 异步构建/安装在同一日志写启动标识及结果；中断时标为未知，恢复先查持久日志/实际状态，不盲目重做。
 - 禁止每一步另建 MD。原始输出另存 `.tmp/` 的 txt/log 并从 live 链接；恢复材料不得当普通缓存清理。
-- 任务计划、逐步记录、最新断点合在 live；`handoff/` 仅保留精简接力摘要（目标/完成/待办/授权/指向 live 的路径），不复制整个过程。旧交接只作历史证据。
-- `development.md` 只维护现状结构与运行说明；`devlog.md` 只写改动概要；`debug.md` 只沉淀现象/根因/解法。不要互抄实时进度；README/CHANGELOG 仍按发版规则维护。
+- 任务计划、逐步记录、最新断点合在 live；`.local/dev/handoff/` 仅保留精简接力摘要（目标/完成/待办/授权/指向 live 的路径），不复制整个过程。旧交接只作历史证据。
+- `development.md` 只维护现状结构与运行说明；`.local/dev/devlog.md` 只写改动概要；`.local/dev/debug.md` 只沉淀现象/根因/解法。不要互抄实时进度；README/CHANGELOG 仍按发版规则维护。
 
 
-- 项目根目录需创建 `handoff/` 文件夹。
-- 每个阶段任务结束后，将当前进度写入 `handoff/`（含：已完成内容、进行中事项、下一步计划、关键决策与注意事项）。
+- 项目内需创建 `.local/dev/handoff/` 文件夹。
+- 每个阶段任务结束后，将当前进度写入 `.local/dev/handoff/`（含：已完成内容、进行中事项、下一步计划、关键决策与注意事项）。
 - ****新建对话或上下文被压缩后****，Agent 必须先读取最新的 handoff 文件，了解进度后再开始执行任务。
 
-## 三、开发日志（devlog.md）
+## 三、开发日志（.local/dev/devlog.md）
 
-- 用户每次提出修改或优化后，将修改优化内容写入 `devlog.md`。
+- 用户每次提出修改或优化后，将修改优化内容写入 `.local/dev/devlog.md`。
 - 按****倒序****排列：最新内容在最上方。
 - 以每次发版的****版本号****为界，将不同版本的日志内容分段隔开。
 
@@ -41,7 +45,7 @@
 - 维护 `CHANGELOG.md`，按****倒序****排列（最新在上），以每次发版的版本号分段隔开。
 - 内容来源：
 1. 用户明确输入、需要填写的内容；
-2. `devlog.md` 中自上一版发版之后到当前版本的所有改动。
+2. `.local/dev/devlog.md` 中自上一版发版之后到当前版本的所有改动。
 - 将以上两部分****全部汇总后重新梳理****，产出****面向用户****的更新说明：
 - 语言通俗易懂，避免内部实现细节和晦涩术语；
 - 可适当使用表情符号，提升可读性。
@@ -71,15 +75,15 @@
 2. ****系统没有的环境****：在****项目内****配置（项目级依赖、虚拟环境、本地配置等）。
 - ****禁止私自在系统层面安装软件或修改全局配置。**** 如确需系统级变更，须先征得用户同意。
 
-## 九、坑点记录（debug.md）
+## 九、坑点记录（.local/dev/debug.md）
 
-- 项目根目录需创建并维护 `debug.md`，用于记录开发过程中踩过的坑。
+- 项目内需创建并维护 `.local/dev/debug.md`，用于记录开发过程中踩过的坑。
 - 满足以下任一条件的问题，****必须记录****：
 1. ****容易忽视****的隐性问题；
 2. ****反复出现****的问题；
 3. ****花了很长时间或很多次尝试才解决****的问题。
 - 每条记录应包含：****现象描述、根本原因、解决方案****（可附关键代码或命令），方便后续快速对照。
-- 遇到相似报错或异常行为时，Agent 应先翻阅 `debug.md`，确认是否为已知问题，避免重复排查。
+- 遇到相似报错或异常行为时，Agent 应先翻阅 `.local/dev/debug.md`，确认是否为已知问题，避免重复排查。
 
 ## 十、虚拟环境与调试环境
 
@@ -99,13 +103,15 @@
 | ---------------- | ------------ | ----------------- | --------- |
 | 文件               | 面向对象         | 更新时机              | 排序        |
 | `development.md` | 开发者 / Agent  | 初次完成、大阶段结束且结构有改动时 | —         |
-| `handoff/`       | Agent（跨对话接力） | 每个阶段任务结束后         | 按时间，取最新   |
-| `devlog.md`      | 开发者          | 每次修改优化后           | 倒序，按版本号分段 |
+| `.local/dev/handoff/`       | Agent（跨对话接力） | 每个阶段任务结束后         | 按时间，取最新   |
+| `.local/dev/devlog.md`      | 开发者          | 每次修改优化后           | 倒序，按版本号分段 |
 | `CHANGELOG.md`   | 用户           | 每次发版时             | 倒序，按版本号分段 |
 | `README.md`      | 用户           | 每次发版前             | —         |
-| `debug.md`       | 开发者 / Agent  | 遇到坑点并解决后          | 按时间，可检索   |
+| `.local/dev/debug.md`       | 开发者 / Agent  | 遇到坑点并解决后          | 按时间，可检索   |
 
 ## 工程约定
+
+- 分支：`main` 只跟踪 Shinarin 的 `upstream/main`；功能开发在 `alas-aos`，跟踪自己的 `origin/alas-aos`。相关改动、测试和文档按共同目标归并提交，不逐个小改动拆分；提交/push/发版仍需用户授权。
 
 - **ALAS 上游代码红线（2026-09-18 用户指令）**：没有用户明确指令，不得改动 ALAS 上游源代码（rootfs 内 `/opt/alas` 的上游跟踪文件，含「临时改一下再改回」）。ALAS-AOS 的职责是为 ALAS 构筑可跑通的环境，修复一律走 ALAS-AOS 自有机制（overlay / patches / seeds / 环境钉版），不越俎代庖改上游；桌面 ALAS（`C:\other\AzurLaneAutoScript`）只读。
 - 临时文件一律放 `.tmp/`（已 gitignore），不入系统临时目录。
@@ -114,4 +120,4 @@
 - 本机工具链：系统 SDK/adb 在 `C:\Users\da270\AppData\Local\Android\Sdk`；便携工具链（JDK17/21、SDK 含 ndk/build-tools、gradle 缓存）在 `D:\VSCodeCache\shizku-m\build-env\`（**只读**复用，构建时 GRADLE_USER_HOME 等写目录指向本仓 `.tmp/`）。
 - 真机调试闭环：设备 `AVAY025422002864`，adb shell 命令前必须 `export MSYS_NO_PATHCONV=1`；Windows 侧 adb/python 只吃 Windows 路径。
 - **真机调试纪律（2026-09-15 用户指令）**：禁止私自做锁屏/息屏测验；凡涉及改变屏幕状态的实验（锁屏、息屏、亮屏时长类）必须先经用户确认后再做。
-- **虚拟屏实验纪律（2026-09-15 手势劫持事件后立，不能再有第二次）**：凡创建虚拟屏的实验或代码：① **禁止** `FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS`（AOSP 语义：不设此 flag 的 VD 才不显示 home/导航栏/壁纸；设了 SystemUI 会在 VD 上建手势导航窗口，主屏手势即被劫持，事件详见 `debug.md` 同日条目）；② 实验前后各查一次手势窗口归属（`dumpsys window windows | grep -E 'GestureNav|GestureSilde|NavigationBar'` 必须在 display 0）；③ VD 属主进程必须可一键杀死；实验结束必须清场（杀属主 → `cmd display get-displays -i` 只剩 0）。
+- **虚拟屏实验纪律（2026-09-15 手势劫持事件后立，不能再有第二次）**：凡创建虚拟屏的实验或代码：① **禁止** `FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS`（AOSP 语义：不设此 flag 的 VD 才不显示 home/导航栏/壁纸；设了 SystemUI 会在 VD 上建手势导航窗口，主屏手势即被劫持，事件详见 `.local/dev/debug.md` 同日条目）；② 实验前后各查一次手势窗口归属（`dumpsys window windows | grep -E 'GestureNav|GestureSilde|NavigationBar'` 必须在 display 0）；③ VD 属主进程必须可一键杀死；实验结束必须清场（杀属主 → `cmd display get-displays -i` 只剩 0）。
