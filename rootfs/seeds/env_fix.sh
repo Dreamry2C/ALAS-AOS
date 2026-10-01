@@ -57,5 +57,16 @@ if [ -d .git ]; then
   fi
 fi
 mark "template.py $tstate"
+# GPT-6 ALAS-AOS: retire the old whole-file WebUI overlay. It removes new
+# upstream fields such as Icon.STOP after switching forks. Restore pristine
+# source; the sole TaskHandler compatibility guard now lives in alasaos_gui.py.
+webui_file="module/webui/utils.py"
+if [ -d .git ] && git cat-file -e "HEAD:$webui_file" 2>/dev/null; then
+  if ! git diff --quiet HEAD -- "$webui_file" 2>/dev/null; then
+    git checkout HEAD -- "$webui_file" 2>/dev/null \
+      && mark "webui/utils.py retired overlay restored" \
+      || mark "WARN webui/utils.py restore failed"
+  fi
+fi
 mark "done imageio=${now:-?} template=$tstate"
 exit 0

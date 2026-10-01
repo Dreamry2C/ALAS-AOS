@@ -62,6 +62,10 @@ class ProotHost(
     private val rootfsDir: File get() = File(app.filesDir, "rootfs")
     private val alasDir: File get() = File(rootfsDir, "opt/alas")
     private val prootTmpDir: File get() = File(app.filesDir, "proot-tmp")
+    // Android /dev has no /dev/shm. Python multiprocessing.Event (GUI reload)
+    // needs named POSIX semaphores here; bind app-private storage after /dev.
+    // GPT-6 Astra, 2026-10-01: keep it under the existing session temp cleanup.
+    private val prootShmDir: File get() = File(prootTmpDir, "shm")
     private val sessionLog: File get() = File(AppPaths.LOG_DIR, "proot/session.log")
     private val nativeLibDir: String get() = app.applicationInfo.nativeLibraryDir
 
@@ -129,6 +133,18 @@ class ProotHost(
             if (r.exit != 0) Timber.w("seed_config exit=%s out=%s", r.exit, r.output.take(300))
         }
 
+        // deploy.yaml 静态策略键校正（EnableReload 等）：deploy.yaml 构建期烘焙、运行期无
+        // 覆盖，改它不必重烘焙 rootfs（本机烘不了）——seed_deploy 随 overlay 走、每次启动
+        // 幂等校正。Repository/Branch 不在此（跟随用户换源，由 alasaos_update.sh 维护）。
+        runGuest(
+            listOf("/usr/bin/python3", "seeds/seed_deploy.py"),
+            SHORT_EXEC_MS,
+            mapOf("ALASAOS_ALAS_ROOT" to GUEST_ALAS_ROOT),
+        )?.let { r ->
+            r.output.lineSequence().filter { it.isNotBlank() }.forEach { Timber.i("seed_deploy| %s", it) }
+            if (r.exit != 0) Timber.w("seed_deploy exit=%s out=%s", r.exit, r.output.take(300))
+        }
+
         if (!updateAttempted) {
             updateAttempted = true
             setState(ProotPhase.UPDATING, "检查 ALAS 热更新")
@@ -194,12 +210,14 @@ class ProotHost(
     /** 拉起长跑会话；调用方持有返回的 Process（stdin 保持敞开，见类头约定） */
     private fun spawnSession(): Process {
         prootTmpDir.mkdirs()
+        check(prootShmDir.isDirectory || prootShmDir.mkdirs()) { "Cannot prepare proot shared memory" }
         sessionLog.parentFile?.mkdirs()
         val cmd = listOf(
             File(nativeLibDir, "libproot.so").absolutePath,
             "-w", GUEST_ALAS_ROOT,
             "-r", rootfsDir.absolutePath,
             "-b", "/dev:/dev", "-b", "/proc:/proc", "-b", "/sys:/sys",
+            "-b", "${prootShmDir.absolutePath}:/dev/shm",
             "/usr/bin/python3", "wrapper.py",
         )
         Timber.i("proot session spawn: %s", cmd.joinToString(" "))
@@ -339,11 +357,13 @@ class ProotHost(
         extraEnv: Map<String, String> = emptyMap(),
     ): ExecResult = withContext(MaaDispatchers.IO) {
         prootTmpDir.mkdirs()
+        check(prootShmDir.isDirectory || prootShmDir.mkdirs()) { "Cannot prepare proot shared memory" }
         val cmd = listOf(
             File(nativeLibDir, "libproot.so").absolutePath,
             "-w", GUEST_ALAS_ROOT,
             "-r", rootfsDir.absolutePath,
             "-b", "/dev:/dev", "-b", "/proc:/proc", "-b", "/sys:/sys",
+            "-b", "${prootShmDir.absolutePath}:/dev/shm",
         ) + guestCmd
         val proc = ProcessBuilder(cmd)
             .directory(alasDir)
