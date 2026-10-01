@@ -30,11 +30,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 4s 轮询；wrapper 不可达不视为错误（proot 会话没起/正在起，reachable=false 即可）。
  * 运行配置选择持久化在 SharedPreferences，/start 时透传给 runner；
  * 调度器在跑时 /status 回报的 config 才是生效配置，下拉选择下次启动生效。
- * 双头管理注意：WebUI 的启停按钮已被锁定补丁封死（只记 warning），本通道是唯一控制面。
+ * 两端共同调用 ALAS 原生 ProcessManager；AOS 不另建任务或自动重拉。
  */
 data class AlasRunState(
     val reachable: Boolean = false,
     val runnerAlive: Boolean = false,
+    val runnerFailed: Boolean = false,
     val pid: Int? = null,
     val guiAlive: Boolean = false,
     val logLines: Int = 0,
@@ -128,13 +129,13 @@ class AlasRunController(
         }
     }
 
-    /** 可达即拉日志尾：loopback 读文件尾部开销可忽略，空闲时 gui 启动日志恰是排障现场 */
+    /** 读取 ALAS 实例日志；停止或失败后保留错误，不切换为 GUI 诊断输出 */
     private fun refreshLocked() {
         val body = get("$BASE/status", HTTP_TIMEOUT_MS)
         if (body == null) {
             _state.update {
                 it.copy(
-                    reachable = false, runnerAlive = false, pid = null,
+                    reachable = false, runnerAlive = false, runnerFailed = false, pid = null,
                     guiAlive = false, logLines = 0, logTail = emptyList(),
                     configs = emptyList(), runningConfig = null,
                     toolAlive = false, toolName = null,
@@ -166,7 +167,7 @@ class AlasRunController(
             ?: _state.value.logTail
         _state.update {
             it.copy(
-                reachable = true, runnerAlive = runnerAlive, pid = pid,
+                reachable = true, runnerAlive = runnerAlive, runnerFailed = j.optInt("runner_state") == 3, pid = pid,
                 guiAlive = guiAlive, logLines = logLines, logTail = tail,
                 configs = configs, runningConfig = runningConfig,
                 toolAlive = toolAlive, toolName = toolName,

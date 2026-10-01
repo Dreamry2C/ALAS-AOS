@@ -28,4 +28,6 @@ TaskHandler.stop = _stop_task_handler
 
 
 if __name__ == '__main__':
+    from alasaos_control import install
+    install()
     runpy.run_path(str(Path(__file__).with_name('gui.py')), run_name='__main__')

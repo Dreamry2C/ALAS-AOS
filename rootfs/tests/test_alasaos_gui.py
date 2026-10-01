@@ -17,6 +17,7 @@ class GuiBootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=base) as tmp:
             target = Path(tmp)
             shutil.copyfile(ROOT / 'rootfs/overlays/alasaos_gui.py', target / 'alasaos_gui.py')
+            (target / 'alasaos_control.py').write_text('def install(): pass\n')
             (target / 'PIL.py').write_text('class UnidentifiedImageError(Exception): pass\n')
             (target / 'adbutils.py').write_text('from PIL import UnidentifiedImageError\n')
             utils = target / 'module/webui'
