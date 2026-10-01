@@ -325,7 +325,7 @@ def _start_gui_once():
     os.makedirs(LOG_DIR, exist_ok=True)
     out = open(os.path.join(LOG_DIR, 'gui.out'), 'ab')
     _gui = subprocess.Popen(
-        [sys.executable, os.path.join(BASE_DIR, 'gui.py')],
+        [sys.executable, os.path.join(BASE_DIR, 'alasaos_gui.py')],
         cwd=BASE_DIR,
         preexec_fn=os.setsid,  # 独立进程组，清理走 os.killpg
         stdin=subprocess.DEVNULL,

@@ -2,11 +2,13 @@
 
 ## 当前阶段
 
-**阶段四应用内侧全落地**：M4-a ✅（悬浮窗直连 wrapper 薄 HTTP：调度器状态行 + 开始/停止挂机 + 半透明日志板；双头管理定案=悬浮窗唯一控制面）→ M4-b ✅（官方版 Shizuku 冲突引导：flavor 检测 + OfficialConflict 档 + 去卸载闭环；冲突分支真机未演留阶段五）→ M4-c ✅（开屏 `pageReady` 载入层淡出不再闪错误脸 + 面板分工 caption）→ M4-d ✅（M2-b 遗留②③④⑤核销：死 pref×7、分辨率安慰剂连根拔、runner/ 包删、okhttp/tracing/baselineprofile/toml 死账清）。**阶段四 DoD 只剩「开始挂机」端到端演示（真拉起 ALAS 操作游戏，必须用户在场）**，演示前置体检全绿（游戏在装/guest 配置一致/VD+桥+wrapper 通），过后进阶段五（多 ROM/长稳/Release/README）。**阶段五已开锣**：-3 断网容灾 ✅（审计 + PC 七场景 + 真机三态实证）、-4 桥截图定档 ✅（screencap p50=30ms，对照 >1s 不可用线富余 33 倍）；剩 -1 多 ROM 矩阵、-2 长稳挂机（依赖演示）、-5 shizuku-m 产品化、-6 Release/三仓库公开 + README。**阶段三已收官**（M3-a/b/c 全 ✅，重启恢复机制+文案落地、真机重启验证待用户授权）。阶段一 M1 已交付：rootfs 构建链 GHA 四连迭代至绿，v4 artifact 为交付基准；M1-d 真机复验 WebUI/MANIFEST 已过，**油数验收改走生产链（待用户把游戏点到出击菜单页）**。
+v3 主线已完成阶段三、阶段四应用内实现，阶段五验证进行中。当前任务及未完成项以 `handoff/2026-10-01-astra-handoff.md` 为准，历史进度查 `devlog.md`，本文件不重复维护任务流水。
+
+运行期采用原版 cnocr 1.2.2 + mxnet 1.9.1 + azur_lane 模型，后台虚拟屏模式。旧路线图中的 PP-OCR/前台说明属于历史决策，下列结构与技术栈按现状维护。
 
 - 开发宪法：`docs/roadmap-v3.md`（13 项决策、阶段〇–五、风险登记）。
 - 阶段二工作底稿：`docs/stage2-maafwapp-inventory.md`（减法三栏清单 / 新桥设计 / VD flag 核查）。
-- 任何不清楚之处：先读 roadmap，再读 `handoff/` 最新文件（当前 `2026-09-16-m5a.md`）。
+- 任何不清楚之处：先读 roadmap，再读 `handoff/` 最新文件（当前 `2026-10-01-astra-handoff.md`）；详细动作与任务计划查交接所指的单份 live.md。
 
 ## 仓库结构（现状）
 
@@ -14,33 +16,40 @@
   - `app/src/main/java/.../provision/`（首启 rootfs 解压，M3-a）与 `.../proot/`（ProotHost 会话宿主 / AlasOverlay 资产覆盖 / AlasUpdater 热更新，M3-b）。
   - `app/src/main/prootLibs/arm64-v8a/`（proot 九件套，Spike A 钉版入库）+ `app/src/main/assets/alas/`（wrapper/runner/seed/alasaos_update.sh/rpc.py + patches 全量，运行时幂等铺 /opt/alas）。
   - `app/src/main/assets/rootfs/`（rootfs.tar.xz 随包，gitignore 不入库；BUILD_MANIFEST 入库）。
-- `rootfs/` — 阶段一资产：`build/build-rootfs.sh`（GHA ARM64 构建脚本）、`patches/`（ALAS 补丁集，含 `module/device/method/alasaos.py` 桥客户端）、`overlays/`（wrapper.py 监管 WebUI 版 / runner.py / rpc.py）、`seeds/`（deploy.yaml 七锁 / seed_config.py / alasaos_update.sh 热更新脚本）。
+- `rootfs/` — `build/build-rootfs.sh`（GHA ARM64 构建脚本）、`patches/`（ALAS 适配补丁，含桥客户端）、`overlays/`（wrapper.py / runner.py / alasaos_gui.py）、`seeds/`（deploy.yaml / seed_config.py / seed_deploy.py / sync_deploy.py / alasaos_update.sh 等）。运行资产在 `app/app/src/main/assets/alas/` 有对应副本，修改须同步。
+- `alasaos_gui.py` — AOS 自有入口，预加载 adbutils 后运行原版 gui.py，规避换源后 fake PIL 导入顺序冲突；原 TaskHandler.stop 保护也在入口内存适配。退役的 utils.py 整文件覆盖由 env_fix 恢复当前源原版，避免冻结新分支图标和接口；不修改上游业务逻辑。EnableReload=true 时 wrapper 管 GUI 父进程，父进程管理实际 WebUI 子进程，WebUI 另有 multiprocessing.Manager 共享状态进程；它们并非多套挂机。独立挂机 runner 由 wrapper 另行管理。
+- `seed_deploy.py` 每次启动校正 EnableReload；`sync_deploy.py` 在更新成功/最新时同步 Repository/Branch。更新器按源/分支散列记录尝试，保留远端引用，以真实 HEAD 验证本地代码；Force restart 只重启 WebUI，AOS 重启才执行换源和 overlay 铺设。
+- ProotHost 的长会话和短命令均把 app 私有 `files/proot-tmp/shm` 绑定为 guest `/dev/shm`，支持 Python multiprocessing 信号量；会话清理沿用 proot-tmp。
 - `.github/workflows/` — rootfs 构建 workflow（手动触发；`ALAS_REF` 默认 master 浮动，manifest 记录解析后 commit）。
 - `docs/` — `roadmap-v3.md`、`stage2-maafwapp-inventory.md`、`spike-d-wrapper-surface.md`。
 - `spike/` — 阶段〇交付：`a-proot-exec/`（Spike A/C 工程+报告）、`e-adb-virtual-display/`（Spike E/B′）。
 - `m0-archive/`（gitignore，本地只读）— m0 全部成果归档：MaaFwApp fork、termux 补丁/种子、桥代理、OCR 模型、m0 devlog。
 - 账册（根目录）：`devlog.md`（倒序流水）、`debug.md`（坑与解法）、`development.md`（本文件）、`handoff/`（跨对话接力，取最新）。
-- `.tmp/`（gitignore）— 构建缓存（`gradle-home`）、实验物、rootfs artifact、ALAS 部分克隆。
+- `.tmp/`（gitignore）— 构建缓存（`gradle-home`）、实验物、rootfs artifact、ALAS 部分克隆；每项连续任务只保留一份含目标、计划、断点与即时结果的 live.md；原始输出另存 txt/log。中断恢复材料不能与普通缓存一起清理。devlog 只记概要，handoff 只记接力摘要，debug 只记可复用坑点。
 
-## 技术栈（规划，源自 v3）
+## 技术栈（现状）
 
 - **Android App**：MaaFwApp fork 减法整理（Kotlin，Gradle，AGPL-3.0）——保留特权进程（虚拟屏+截屏注入）、TCP 22300 桥（五端点，Kotlin 重写）、WebView 容器、Shizuku 辅助。
-- **rootfs**：Ubuntu 24.04 ARM64 + Python 3.12 + opencv-headless + onnxruntime + ALAS 官方 master（GitHub，BUILD_MANIFEST 钉 commit）+ m0 补丁集 + PP-OCR 模型——GitHub Actions ARM64 runner 构建。
+- **rootfs**：Ubuntu 24.04 ARM64 + Python 3.12 + numpy 1.26.4 + opencv-headless 4.10.0.84 + cnocr 1.2.2 / mxnet 1.9.1，原版 azur_lane 模型；ALAS 官方 master 烘焙，运行时可在设置中换源/分支。由 GitHub Actions ARM64 runner 构建，精简产物约283MB。
 - **提权**：shizuku-m（官方 v13.6.0 fork，用户自装，不内置）。
-- **控制面/OCR**：桥代理五端点（ping/screencap/click/swipe/shell）；in-proc PP-OCR + rpc.py shim。
+- **控制面/OCR**：桥代理五端点（ping/screencap/click/swipe/shell）；原版 cnocr 特调模型，UseOcrServer=false；PP-OCR 已退役。
 
 ## 运行与构建
 
 ### 主 App（`app/`，阶段二起）
 
-```bash
-export JAVA_HOME='D:\VSCodeCache\shizku-m\build-env\jdk-17.0.2'
-export GRADLE_USER_HOME='D:\VSCodeCache\maa-alas\.tmp\gradle-home'
-cd app && cmd //c 'gradlew.bat assembleDebug --console=plain'
+```powershell
+$env:JAVA_HOME='E:/GitRepository/Moontier/.build-tools/jdk17/jdk-17.0.16+8'
+$env:GRADLE_USER_HOME='E:/GitRepository/ALAS-AOS/.tmp/gradle-home'
+$env:TEMP='E:/GitRepository/ALAS-AOS/.tmp/build-tmp'
+$env:TMP=$env:TEMP
+New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
+& '.tmp/gradle-dist/gradle-9.4.1/bin/gradle.bat' -p app :app:assembleDebug --offline --no-daemon --console=plain
 # APK → app/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-- SDK 由 `app/local.properties`（gitignored）指向 `C:\Users\da270\AppData\Local\Android\Sdk`（cmake 3.22.1 + ndk 28.2 齐）。
+- 2026-10-01 本机验证的 SDK：`app/local.properties`（gitignored）指向 `E:/GitRepository/Moontier/.build-tools/android-sdk`；复用现有 JDK/SDK，不修改外部工具链。旧机器的 da270 SDK / shizku-m 便携工具链是备用历史路径，使用前确认存在。
+- versionCode 按 Git 提交计数，versionName 按 tag 距离生成。同一未提交工作区可多次构建出相同版本号，调试安装以 APK SHA256 区分，不用旧版本号推断已安装哪份代码。
 - 坑：dl.google.com 间歇握手断 → settings 已加 Aliyun 镜像（官方源兜底）；floatingx 的 compose 包必须显式声明 `floatingx-compose`（两坑详见 debug.md 2026-09-16 条目）。
 
 ### rootfs（阶段一）

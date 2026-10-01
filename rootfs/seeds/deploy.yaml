@@ -40,8 +40,12 @@ Deploy:
     OcrClientAddress: 127.0.0.1:22300
 
   Update:
-    # 锁定⑤⑥⑦：禁用内置更新器重载、定时检查与定时重启
-    EnableReload: false
+    # EnableReload:true（2026-10-01 opus5）——用户需要 WebUI「Force restart」强制重启
+    # 来刷新重新加载 ALAS 代码（换源后尤其有用）。开启后 gui.py 走父子进程守护模式，
+    # Force restart 按钮 kill 子进程并重启（重新 import module.webui.app）；已核实与
+    # wrapper 的 gui.py 进程监管兼容（wrapper 管父进程，重启只换子进程，supervisor 不受影响）。
+    # 仍锁定⑥⑦：定时检查与定时重启（CheckUpdateInterval:0 / AutoRestartTime:null）。
+    EnableReload: true
     CheckUpdateInterval: 0
     AutoRestartTime: null
 
