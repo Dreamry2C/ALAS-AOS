@@ -106,11 +106,15 @@
     <string name="settings_theme_style_semi">Semi Design</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_hint">Switching language reloads the project; unavailable while running</string>
-    <string name="settings_run_mode">Run mode</string>
-    <string name="settings_run_mode_background">Background mode</string>
-    <string name="settings_run_mode_foreground">Foreground mode</string>
-    <string name="settings_run_mode_hint_background">Runs on a separate virtual display so the phone stays usable; resolution derived from the project declaration</string>
     <string name="settings_run_mode_hint_foreground">Drives the current screen directly, occupying the phone while running; the target app is not restarted and preview touch is disabled</string>
+    <string name="settings_section_update">Update settings</string>
+    <string name="settings_update_source">Update repository</string>
+    <string name="settings_update_source_placeholder">git://git.lyoko.io/AzurLaneAutoScript</string>
+    <string name="settings_update_source_hint">ALAS Git repository URL; leave empty for the default. Updates use git fetch + reset --hard</string>
+    <string name="settings_update_source_toggle">Show or hide update repository</string>
+    <string name="settings_update_branch">Update branch</string>
+    <string name="settings_update_branch_custom">Custom</string>
+    <string name="settings_update_save">Save update settings</string>
     <string name="settings_resource">Server selection</string>
     <string name="settings_no_resources">The project provides no selectable servers</string>
     <string name="settings_current_resource">Current resource</string>
@@ -156,6 +160,7 @@
     <string name="overlay_alas_status">ALAS scheduler: %1$s</string>
     <string name="overlay_alas_running">Running · pid %1$d</string>
     <string name="overlay_alas_stopped">Stopped</string>
+    <string name="overlay_alas_task_failed">Run failed; check the task log below</string>
     <string name="overlay_alas_unreachable">Environment not ready</string>
     <string name="overlay_alas_preparing">Preparing environment · %1$s</string>
     <string name="overlay_alas_preparing_generic">Preparing environment…</string>
