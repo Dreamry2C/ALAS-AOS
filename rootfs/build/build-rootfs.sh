@@ -64,6 +64,7 @@ require_file() {
 require_file "$ASSETS/overlays/wrapper.py"
 require_file "$ASSETS/overlays/alasaos_gui.py"
 require_file "$ASSETS/overlays/alasaos_control.py"
+require_file "$ASSETS/overlays/alasaos_u2.py"
 require_file "$ASSETS/overlays/runner.py"
 require_file "$ASSETS/patches/assets_fix.py"
 require_file "$ASSETS/seeds/deploy.yaml"
@@ -295,7 +296,7 @@ chroot_run ldconfig 2>/dev/null || true
 log "瘦身手术：删 LLVM+mesa GL 软栈（约 -182MB 解压）；gdal/proj/gdcm/openexr 编解码依赖全保留"
 
 # ---------- 7. wrapper / runner（并行任务产物，fail-fast 已在开头验过） ----------
-cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ASSETS/overlays/alasaos_gui.py" "$ASSETS/overlays/alasaos_control.py" "$ROOTFS_DIR/opt/alas/"
+cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ASSETS/overlays/alasaos_gui.py" "$ASSETS/overlays/alasaos_control.py" "$ASSETS/overlays/alasaos_u2.py" "$ROOTFS_DIR/opt/alas/"
 
 # ---------- 8. import 硬门禁 + BUILD_MANIFEST（决策 #10：App 要可读） ----------
 PY_VER="$(chroot_run python3 -c 'import platform; print(platform.python_version())')"
