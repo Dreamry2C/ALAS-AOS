@@ -3,12 +3,27 @@
 dependencyResolutionManagement {
     repositories {
         mavenLocal()
+        maven {
+            name = "AliyunGoogle"
+            url = uri("https://maven.aliyun.com/repository/google")
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+                excludeGroupByRegex("com\\.google\\.devtools.*")
+            }
+        }
         google {
             content {
                 includeGroupByRegex("com\\.android.*")
                 includeGroupByRegex("com\\.google.*")
                 includeGroupByRegex("androidx.*")
+                excludeGroupByRegex("com\\.google\\.devtools.*")
             }
+        }
+        maven {
+            name = "AliyunCentral"
+            url = uri("https://maven.aliyun.com/repository/central")
         }
         mavenCentral()
         gradlePluginPortal()

@@ -1,0 +1,77 @@
+name: app
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'app/**'
+      - 'rootfs/**'
+      - '.github/workflows/app.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'rootfs/**'
+      - '.github/workflows/app.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare project-local temporary directory
+        run: mkdir -p .tmp/ci
+      - name: Python regressions (bridge, native control, updater and seeds)
+        env:
+          TMPDIR: ${{ github.workspace }}/.tmp/ci
+        run: python -m unittest discover -s rootfs/tests -v
+      - name: Runtime asset consistency (overlay, patches and seeds)
+        run: python app/scripts/check_asset_sync.py
+      - name: Translation consistency
+        run: python app/scripts/check_i18n_strings.py
+
+  build:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # versionName still uses tags; versionCode is explicit in gradle.properties.
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare project-local temporary directory
+        run: mkdir -p .tmp/ci
+      - name: Unit tests and debug compilation
+        env:
+          TMPDIR: ${{ github.workspace }}/.tmp/ci
+        run: bash app/gradlew -p app :app:testDebugUnitTest :app:assembleDebug --no-daemon --console=plain
+      # This compilation gate does not bundle the ignored rootfs.tar.xz. Do not distribute its APK.
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-test-reports
+          path: |
+            app/app/build/test-results/
+            app/app/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 14
