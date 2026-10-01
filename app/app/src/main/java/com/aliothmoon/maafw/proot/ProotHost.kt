@@ -5,6 +5,7 @@ import com.aliothmoon.maafw.MaaDispatchers
 import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.service.RunForegroundService
 import com.aliothmoon.maafw.settings.AppSettingsManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +37,7 @@ import java.util.concurrent.TimeUnit
  * 生命周期约定：
  * - **stdin 管道必须保持敞开**：wrapper 挂 stdin 监控线程，App 进程一死管道 EOF，
  *   wrapper 杀 runner/gui 进程组后自尽（防孤儿主链路；stop() 也是先关 stdin）
- * - 重拉走 supervisor 协程，退避 3s 翻倍至 60s；热更新每个 App 进程只跑一次
+ * - 重拉走 supervisor 协程，退避 3s 翻倍至 60s；显式启停重查更新，崩溃重拉不重复
  * - FGS 保活：会话活跃期间 RunForegroundService 钉住 app 进程（其退出判据已并入本会话状态）
  */
 class ProotHost(
@@ -52,11 +53,12 @@ class ProotHost(
     @Volatile
     private var session: Process? = null
     private var supervisorJob: kotlinx.coroutines.Job? = null
+    private var lateReadinessJob: kotlinx.coroutines.Job? = null
 
     @Volatile
     private var wantRunning = false
 
-    /** 热更新每个 App 进程只跑一次（开屏那次）；崩溃重拉不再重复 */
+    /** 显式停止后重查更新；supervisor 崩溃重拉不重复更新。 */
     @Volatile
     private var updateAttempted = false
 
@@ -81,18 +83,23 @@ class ProotHost(
     /** 停会话：关 stdin 让 wrapper 自尽，超时兜底 destroyForcibly */
     fun stop() {
         wantRunning = false
+        supervisorJob?.cancel()
+        lateReadinessJob?.cancel()
         scope.launch(MaaDispatchers.IO) {
             startMutex.withLock {
-                val proc = session ?: return@withLock
-                Timber.i("proot session: stopping")
-                runCatching { proc.outputStream.close() }
-                withTimeoutOrNull(STOP_GRACE_MS) { runInterruptible { proc.waitFor() } }
-                if (proc.isAlive) {
-                    Timber.w("proot session: still alive after stdin close, destroyForcibly")
-                    proc.destroyForcibly()
+                val proc = session
+                if (proc != null) {
+                    Timber.i("proot session: stopping")
+                    runCatching { proc.outputStream.close() }
+                    withTimeoutOrNull(STOP_GRACE_MS) { runInterruptible { proc.waitFor() } }
+                    if (proc.isAlive) {
+                        Timber.w("proot session: still alive after stdin close, destroyForcibly")
+                        proc.destroyForcibly()
+                    }
                 }
                 session = null
-                _state.update { it.copy(phase = ProotPhase.IDLE, detail = "") }
+                updateAttempted = false
+                _state.update { it.copy(phase = ProotPhase.IDLE, detail = "", transfer = null) }
             }
         }
     }
@@ -100,93 +107,104 @@ class ProotHost(
     // ------------------------------------------------------------------ 启动链
 
     private suspend fun startLocked() = startMutex.withLock {
-        if (session?.isAlive == true) return@withLock
+        if (!wantRunning || session?.isAlive == true) return@withLock
+        _state.update { it.copy(startup = StartupChecklistState(), transfer = null) }
+        beginStep(StartupStep.RUNTIME, ProotPhase.PREPARING, "检查运行环境")
         if (!sanityCheck()) return@withLock
 
-        setState(ProotPhase.PREPARING, "清理残留")
+        beginStep(StartupStep.CLEANUP, ProotPhase.PREPARING, "清理残留")
         cleanupStale()
         writeResolvConf()
 
-        setState(ProotPhase.PREPARING, "同步运行文件")
+        beginStep(StartupStep.OVERLAY, ProotPhase.PREPARING, "同步运行文件")
         val overlay = AlasOverlay(app).apply(alasDir)
         if (overlay.failed > 0) {
             fail("运行文件覆盖失败（${overlay.failed} 项）")
             return@withLock
         }
 
-        setState(ProotPhase.PREPARING, "环境自检修复")
-        // 幂等：imageio 钉回上游 2.27.0（T2 崩溃根因=环境未钉版）+ git 还原旧补丁遗留；
-        // 断网/git 不可用一律降级为日志警告，不阻塞启动（对齐 seed_config 哲学）。
-        // proot 下 pip 比原生慢一个量级（首次降级实测 >60s），给独立长超时
-        runGuest(listOf("/bin/bash", "seeds/env_fix.sh"), ENV_FIX_TIMEOUT_MS)?.let { r ->
-            r.output.lineSequence().filter { it.isNotBlank() }.forEach { Timber.i("env_fix| %s", it) }
-            // 失败时输出必须落盘：FileLogTree 只收 W+，i 级逐行在 release 包不可见
-            if (r.exit != 0) Timber.w("env_fix exit=%s out=%s", r.exit, r.output.takeLast(500))
-        }
+        beginStep(StartupStep.ENVIRONMENT, ProotPhase.PREPARING, "环境自检修复")
+        // Optional repair failures remain visible, without leaking raw pip/Git diagnostics.
+        recordGuestResult(runGuest(listOf("/bin/bash", "seeds/env_fix.sh"), ENV_FIX_TIMEOUT_MS))
 
-        setState(ProotPhase.PREPARING, "播种实例配置")
-        // 幂等（config/alas.json 已存在即跳过）；失败不阻塞——WebUI 也能救
-        runGuest(
-            listOf("/usr/bin/python3", "seeds/seed_config.py"),
-            SHORT_EXEC_MS,
+        beginStep(StartupStep.CONFIG, ProotPhase.PREPARING, "播种实例配置")
+        val config = runGuest(
+            listOf("/usr/bin/python3", "seeds/seed_config.py"), SHORT_EXEC_MS,
             mapOf("ALASAOS_ALAS_ROOT" to GUEST_ALAS_ROOT),
-        )?.let { r ->
-            if (r.exit != 0) Timber.w("seed_config exit=%s out=%s", r.exit, r.output.take(300))
-        }
-
-        // deploy.yaml 静态策略键校正（EnableReload 等）：deploy.yaml 构建期烘焙、运行期无
-        // 覆盖，改它不必重烘焙 rootfs（本机烘不了）——seed_deploy 随 overlay 走、每次启动
-        // 幂等校正。Repository/Branch 不在此（跟随用户换源，由 alasaos_update.sh 维护）。
-        runGuest(
-            listOf("/usr/bin/python3", "seeds/seed_deploy.py"),
-            SHORT_EXEC_MS,
+        )
+        val deploy = runGuest(
+            listOf("/usr/bin/python3", "seeds/seed_deploy.py"), SHORT_EXEC_MS,
             mapOf("ALASAOS_ALAS_ROOT" to GUEST_ALAS_ROOT),
-        )?.let { r ->
-            r.output.lineSequence().filter { it.isNotBlank() }.forEach { Timber.i("seed_deploy| %s", it) }
-            if (r.exit != 0) Timber.w("seed_deploy exit=%s out=%s", r.exit, r.output.take(300))
-        }
+        )
+        recordGuestResult(if (config?.exit == 0 && !config.timedOut) deploy else config)
 
+        beginStep(StartupStep.UPDATE, ProotPhase.UPDATING, "检查 ALAS 热更新")
+        var updated = false
         if (!updateAttempted) {
             updateAttempted = true
-            setState(ProotPhase.UPDATING, "检查 ALAS 热更新")
-            val update = AlasUpdater { cmd, timeout -> runGuestRaw(cmd, timeout) }
-                .update(settings.updateSource.value, settings.updateBranch.value)
+            val update = updateWithProgress()
+            updated = update.updated
             _state.update { it.copy(updateResult = update.summary) }
-            if (update.updated) {
-                // reset --hard 打回了上游跟踪文件：重放补丁；assets_fix 失败=漂移，记警告不阻塞
-                setState(ProotPhase.PREPARING, "重放本地补丁")
-                AlasOverlay(app).apply(alasDir)
-                runAssetsFix()
-            }
+            finishStep(if (update.summary.startsWith("SKIPPED")) StepStatus.WARNING else StepStatus.DONE)
         } else {
-            // 每启动一次跑一回当漂移自检（幂等）；失败只记警告
-            runAssetsFix()
+            finishStep(StepStatus.SKIPPED)
         }
 
-        // args.json/argument.yaml 已不再是补丁（整文件覆盖曾把活动列表冻回烘焙日）：
-        // 每次启动现场再生 args（活动列表随 campaign/Readme.md 走）并补回 alasaos 桥选项。
-        // 失败降级为警告——args.json 仍是上游 git 版，可启动，但 alasaos 选项可能缺失。
-        setState(ProotPhase.PREPARING, "再生 args 配置")
-        runGuest(listOf("/usr/bin/python3", "seeds/regen_args.py"), REGEN_ARGS_TIMEOUT_MS)?.let { r ->
-            if (r.exit != 0) Timber.w("regen_args exit=%s out=%s", r.exit, r.output.takeLast(500))
+        beginStep(StartupStep.PATCHES, ProotPhase.PREPARING, "应用本地补丁")
+        if (updated && AlasOverlay(app).apply(alasDir).failed > 0) {
+            fail("更新后运行文件覆盖失败，请重试")
+            return@withLock
         }
+        if (!runAssetsFix()) finishStep(StepStatus.WARNING)
 
-        setState(ProotPhase.STARTING, "拉起 proot 会话")
+        beginStep(StartupStep.ARGUMENTS, ProotPhase.PREPARING, "再生 args 配置")
+        recordGuestResult(runGuest(listOf("/usr/bin/python3", "seeds/regen_args.py"), REGEN_ARGS_TIMEOUT_MS))
+        if (!wantRunning) return@withLock
+
+        beginStep(StartupStep.SESSION, ProotPhase.STARTING, "拉起 proot 会话")
         val proc = runCatching { spawnSession() }.getOrElse {
-            fail("exec proot: ${it.message}")
+            fail("无法启动 proot（${it.javaClass.simpleName}），请查看运行环境")
             return@withLock
         }
         session = proc
         RunForegroundService.start(app)
         supervise(proc)
 
-        if (awaitServices(SERVICES_UP_MS)) {
+        beginStep(StartupStep.SERVICES, ProotPhase.STARTING, "等待控制服务与 WebUI 就绪")
+        if (awaitServices(SERVICES_UP_MS, proc)) {
             setState(ProotPhase.RUNNING)
             Timber.i("proot session up: wrapper ready on %d", WRAPPER_PORT)
-        } else {
-            // wrapper 还没就绪：可能首次 import 慢，也可能马上退出——交给 supervisor 兜底
+        } else if (wantRunning && session === proc && proc.isAlive) {
             fail("ALAS 控制服务启动超时，正在等待恢复")
             watchLateReadiness(proc)
+        }
+    }
+
+    private suspend fun updateWithProgress(): AlasUpdater.Result = kotlinx.coroutines.coroutineScope {
+        val progressFile = File(alasDir, ".alasaos_update_progress")
+        val canTrack = !progressFile.exists() || progressFile.delete()
+        val poller = launch(MaaDispatchers.IO) {
+            while (canTrack) {
+                val progress = TransferProgress.read(progressFile)
+                if (progress != null) _state.update {
+                    if (it.phase == ProotPhase.UPDATING) it.copy(transfer = progress) else it
+                }
+                delay(500)
+            }
+        }
+        try {
+            AlasUpdater { cmd, timeout -> runGuestRaw(cmd, timeout) }
+                .update(settings.updateSource.value, settings.updateBranch.value)
+        } finally {
+            poller.cancel()
+            poller.join()
+        }
+    }
+
+    private fun recordGuestResult(result: ExecResult?) {
+        if (result == null || result.exit != 0 || result.timedOut) {
+            Timber.w("startup step=%s failed exit=%s timeout=%s", _state.value.startup.current, result?.exit, result?.timedOut)
+            finishStep(StepStatus.WARNING)
         }
     }
 
@@ -276,7 +294,12 @@ class ProotHost(
             var rapidDeaths = 0
             var spawnedAt = System.currentTimeMillis()
             while (true) {
-                val code = runCatching { runInterruptible { proc.waitFor() } }.getOrDefault(-1)
+                val code = try {
+                    runInterruptible { proc.waitFor() }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                }
+                if (session !== proc) break
                 val livedMs = System.currentTimeMillis() - spawnedAt
                 Timber.w("proot session exited code=%s lived=%dms", code, livedMs)
                 session = null
@@ -286,7 +309,7 @@ class ProotHost(
                     fail("会话连续 $MAX_RAPID_DEATHS 次秒退（端口被占用？），已停止重拉")
                     break
                 }
-                setState(ProotPhase.STARTING, "会话退出($code)，${backoff / 1000}s 后重拉")
+                beginStep(StartupStep.SESSION, ProotPhase.STARTING, "会话退出($code)，${backoff / 1000}s 后重拉")
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(RESTART_BACKOFF_MAX_MS)
                 if (!wantRunning) break
@@ -297,7 +320,8 @@ class ProotHost(
                 session = next
                 proc = next
                 spawnedAt = System.currentTimeMillis()
-                if (awaitServices(SERVICES_UP_MS)) {
+                beginStep(StartupStep.SERVICES, ProotPhase.STARTING, "等待控制服务与 WebUI 就绪")
+                if (awaitServices(SERVICES_UP_MS, next)) {
                     backoff = RESTART_BACKOFF_INIT_MS
                     setState(ProotPhase.RUNNING)
                     Timber.i("proot session respawned, wrapper ready")
@@ -317,9 +341,10 @@ class ProotHost(
      * import 的几秒里，WebView 自动重载会吃 connection refused 卡进错误页
      */
     private fun watchLateReadiness(proc: Process) {
-        scope.launch(MaaDispatchers.IO) {
+        lateReadinessJob?.cancel()
+        lateReadinessJob = scope.launch(MaaDispatchers.IO) {
             while (wantRunning && session === proc && proc.isAlive) {
-                if (awaitServices(5_000L)) {
+                if (awaitServices(5_000L, proc)) {
                     if (wantRunning && session === proc && proc.isAlive) {
                         setState(ProotPhase.RUNNING)
                     }
@@ -330,13 +355,14 @@ class ProotHost(
         }
     }
 
-    private suspend fun awaitServices(timeoutMs: Long): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
+    private suspend fun awaitServices(timeoutMs: Long, proc: Process): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        while (System.nanoTime() < deadline) {
+            if (!wantRunning || session !== proc || !proc.isAlive) return false
             if (httpOk("http://127.0.0.1:$WRAPPER_PORT/status") &&
                 httpOk("http://127.0.0.1:$WEBUI_PORT/")
             ) {
-                return true
+                return wantRunning && session === proc && proc.isAlive
             }
             delay(1_000)
         }
@@ -344,11 +370,14 @@ class ProotHost(
     }
 
     private fun httpOk(url: String): Boolean = runCatching {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 800
-        conn.readTimeout = 800
-        conn.inputStream.use { it.readBytes() }
-        conn.responseCode == 200
+        val conn = URL(url).openConnection(java.net.Proxy.NO_PROXY) as HttpURLConnection
+        try {
+            conn.connectTimeout = 800
+            conn.readTimeout = 800
+            conn.responseCode == 200
+        } finally {
+            conn.disconnect()
+        }
     }.getOrDefault(false)
 
     // ------------------------------------------------------------------ 一次性 proot 执行
@@ -364,9 +393,14 @@ class ProotHost(
         guestCmd: List<String>,
         timeoutMs: Long,
         extraEnv: Map<String, String> = emptyMap(),
-    ): ExecResult? = runCatching { runGuestRaw(guestCmd, timeoutMs, extraEnv) }
-        .onFailure { Timber.w(it, "guest exec failed: %s", guestCmd.joinToString(" ")) }
-        .getOrNull()
+    ): ExecResult? = try {
+        runGuestRaw(guestCmd, timeoutMs, extraEnv)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        Timber.w("guest exec failed: %s", error.javaClass.simpleName)
+        null
+    }
 
     /** 一次性 proot 执行：合并 stderr，限时强杀；输出整体回收（更新脚本的 verdict 在里面） */
     private suspend fun runGuestRaw(
@@ -388,30 +422,44 @@ class ProotHost(
             .redirectErrorStream(true)
             .apply { environment().remove("LD_PRELOAD"); environment().putAll(baseEnv()); environment().putAll(extraEnv) }
             .start()
-        val out = StringBuilder()
+        val out = BoundedOutput()
         val reader = Thread {
-            runCatching { proc.inputStream.bufferedReader().forEachLine { out.append(it).append('\n') } }
+            runCatching {
+                proc.inputStream.reader().use { input ->
+                    val chars = CharArray(4096)
+                    while (true) {
+                        val count = input.read(chars)
+                        if (count < 0) break
+                        out.append(chars, count)
+                    }
+                }
+            }
         }.apply { isDaemon = true; name = "proot-exec-reader" }
         reader.start()
-        val finished = proc.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-        if (!finished) proc.destroyForcibly()
-        reader.join(2_000)
-        ExecResult(if (finished) proc.exitValue() else null, out.toString(), !finished)
+        try {
+            val finished = runInterruptible { proc.waitFor(timeoutMs, TimeUnit.MILLISECONDS) }
+            if (!finished) proc.destroyForcibly()
+            reader.join(2_000)
+            ExecResult(if (finished) proc.exitValue() else null, out.snapshot(), !finished)
+        } finally {
+            if (proc.isAlive) proc.destroyForcibly()
+            runCatching { proc.inputStream.close() }
+        }
     }
 
     /** assets_fix：幂等 + 漂移自检（Button 找不到会非零退出），失败只记警告 */
-    private suspend fun runAssetsFix() {
+    private suspend fun runAssetsFix(): Boolean {
         val r = runGuest(listOf("/usr/bin/python3", "seeds/assets_fix.py", GUEST_ALAS_ROOT), SHORT_EXEC_MS)
-            ?: return
-        if (r.exit == 0) {
+            ?: return false
+        if (r.exit == 0 && !r.timedOut) {
             Timber.d("assets_fix OK")
-        } else {
-            // 漂移=上游改版对不上补丁：roadmap 预定的稀有事件，提示重下整包（不阻塞本次启动）
-            Timber.w("assets_fix drift detected exit=%s: %s", r.exit, r.output.takeLast(500))
-            _state.update {
-                it.copy(updateResult = (it.updateResult ?: "") + " | assets_fix 漂移，建议重下整包")
-            }
+            return true
         }
+        Timber.w("assets_fix drift detected exit=%s", r.exit)
+        _state.update {
+            it.copy(updateResult = (it.updateResult ?: "") + " | assets_fix 漂移，建议重下整包")
+        }
+        return false
     }
 
     // ------------------------------------------------------------------ 自愈清理与 DNS
@@ -495,8 +543,20 @@ class ProotHost(
     private val sessionLogLock = Any()
     private val phaseTs = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
 
+    private fun beginStep(step: StartupStep, phase: ProotPhase, detail: String) {
+        _state.update { it.copy(phase = phase, detail = detail, startup = it.startup.begin(step), transfer = null) }
+        logPhase(step.name, detail)
+    }
+
+    private fun finishStep(status: StepStatus) {
+        _state.update { it.copy(startup = it.startup.finish(status)) }
+    }
+
     private fun setState(phase: ProotPhase, detail: String = "") {
-        _state.update { it.copy(phase = phase, detail = detail) }
+        _state.update {
+            it.copy(phase = phase, detail = detail,
+                startup = if (phase == ProotPhase.RUNNING) it.startup.finish(StepStatus.DONE) else it.startup)
+        }
         logPhase(phase.name, detail)
     }
 
@@ -520,7 +580,7 @@ class ProotHost(
 
     private fun fail(reason: String) {
         Timber.e("ProotHost failed: %s", reason)
-        _state.update { it.copy(phase = ProotPhase.FAILED, detail = reason) }
+        _state.update { it.copy(phase = ProotPhase.FAILED, detail = reason, startup = it.startup.finish(StepStatus.FAILED)) }
         logPhase("FAILED", reason)
     }
 

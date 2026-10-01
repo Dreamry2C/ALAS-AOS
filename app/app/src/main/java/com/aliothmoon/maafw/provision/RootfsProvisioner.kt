@@ -31,7 +31,7 @@ sealed interface ProvisionState {
     data class LowDisk(val freeBytes: Long) : ProvisionState
 
     /** 解压中；进度按压缩字节读数 / 资产总长（流式解压拿不到的解压后总量不用） */
-    data class Extracting(val doneBytes: Long, val totalBytes: Long) : ProvisionState
+    data class Extracting(val doneBytes: Long, val totalBytes: Long, val bytesPerSecond: Long = 0) : ProvisionState
 
     data object Ready : ProvisionState
 
@@ -143,8 +143,10 @@ class RootfsProvisioner(
         // openFd 拿未压缩资产的真实长度做进度分母（noCompress "xz" 已配）
         val afd = app.assets.openFd(ASSET_ARCHIVE)
         val total = afd.length
+        val startedAt = System.nanoTime()
         val counting = CountingInputStream(afd.createInputStream().buffered(BUFFER_SIZE)) { read ->
-            _state.value = ProvisionState.Extracting(read, total)
+            val seconds = ((System.nanoTime() - startedAt) / 1_000_000_000.0).coerceAtLeast(0.001)
+            _state.value = ProvisionState.Extracting(read, total, (read / seconds).toLong())
         }
         val extracted = mutableMapOf<String, File>()
         val deferredLinks = mutableListOf<Pair<String, String>>()

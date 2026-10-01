@@ -151,7 +151,7 @@ if [[ ! -f .git/FETCH_HEAD && ! -f .git/shallow ]]; then
 fi
 
 # Git may echo the credential-bearing URL even on failure; report only the phase.
-timeout "$TIMEOUT" git fetch --depth "$DEPTH" origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" >/dev/null 2>&1 || fail "fetch"
+timeout "$TIMEOUT" python3 seeds/update_progress.py -- git fetch --progress --depth "$DEPTH" origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" >/dev/null 2>&1 || fail "fetch"
 new="$(git rev-parse FETCH_HEAD)" || fail "rev-parse FETCH_HEAD"
 
 if [[ "$new" == "$current" && "$source_changed" -eq 0 && "$current_branch" == "$BRANCH" ]]; then

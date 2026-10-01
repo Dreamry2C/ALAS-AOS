@@ -29,6 +29,8 @@ data class ProotSnapshot(
 
     /** 最近一次热更新结果摘要（UPDATED/UNCHANGED/SKIPPED + 说明），未跑过为 null */
     val updateResult: String? = null,
+    val startup: StartupChecklistState = StartupChecklistState(),
+    val transfer: TransferProgress? = null,
 ) {
     /** FGS 保活判据：会话在任一活跃阶段都需要 app 进程钉前台 */
     val sessionActive: Boolean

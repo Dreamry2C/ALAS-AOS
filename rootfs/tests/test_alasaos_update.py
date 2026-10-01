@@ -46,7 +46,7 @@ class UpdateTests(unittest.TestCase):
         self.git(self.origin, 'branch', 'zenko')
         (self.alas / 'seeds').mkdir()
         (self.alas / 'config').mkdir()
-        for name in ['alasaos_update.sh', 'sync_deploy.py']:
+        for name in ['alasaos_update.sh', 'sync_deploy.py', 'update_progress.py']:
             (self.alas / 'seeds' / name).write_bytes((SEEDS / name).read_bytes().replace(b'\r\n', b'\n'))
         (self.alas / 'config/deploy.yaml').write_text('Deploy:\n  Git:\n    Repository: old\n    Branch: master\n  Update:\n    EnableReload: true\n')
         # Deterministic faults, real git for everything else. No private credentials.
@@ -56,7 +56,16 @@ class UpdateTests(unittest.TestCase):
             'if [[ "$1" == ls-remote && -n "${FAIL_PROBE:-}" ]]; then exit 1; fi\n'
             'if [[ "$1" == fetch && -n "${FAIL_FETCH:-}" ]]; then echo "fatal: test failure" >&2; exit 1; fi\n'
             f'exec "{real_git}" "$@"\n', newline='\n')
-        (self.bin / 'python3').write_text(f'#!/bin/bash\nexec "{shell_path(sys.executable)}" "$@"\n', newline='\n')
+        # Native Windows Python cannot execute the extensionless Git Bash fault stub.
+        # Keep the real progress wrapper, but run its child through Bash on Windows.
+        progress_child = (
+            'if [[ "$1" == seeds/update_progress.py ]]; then\n'
+            '  shift 2\n'
+            f'  exec "{shell_path(sys.executable)}" seeds/update_progress.py -- "$ALASAOS_TEST_BASH" "{shell_path(self.bin / "git")}" "${{@:2}}"\n'
+            'fi\n'
+        ) if os.name == 'nt' else ''
+        (self.bin / 'python3').write_text(
+            '#!/bin/bash\n' + progress_child + f'exec "{shell_path(sys.executable)}" "$@"\n', newline='\n')
         for p in self.bin.iterdir():
             p.chmod(0o755)
 

@@ -661,4 +661,25 @@
     <string name="provision_failed">Setup failed: %1$s</string>
     <string name="provision_retry">Retry</string>
     <string name="provision_skip">Skip (debug only)</string>
+    <string name="startup_checklist">ALAS startup checklist</string>
+    <string name="startup_waiting">Pending</string>
+    <string name="startup_active">In progress</string>
+    <string name="startup_done">Done</string>
+    <string name="startup_warning">Warning, continuing</string>
+    <string name="startup_failed">Failed</string>
+    <string name="startup_skipped">Skipped</string>
+    <string name="startup_runtime">Check runtime</string>
+    <string name="startup_cleanup">Clean up and prepare network</string>
+    <string name="startup_overlay">Sync runtime files</string>
+    <string name="startup_environment">Check and repair environment</string>
+    <string name="startup_config">Prepare instance configuration</string>
+    <string name="startup_update">Check and download ALAS updates</string>
+    <string name="startup_patches">Apply local patches</string>
+    <string name="startup_arguments">Generate configuration options</string>
+    <string name="startup_session">Start runtime session</string>
+    <string name="startup_services">Wait for control service and WebUI</string>
+    <string name="transfer_unpacking">Unpacking update…</string>
+    <string name="transfer_unknown">Downloaded %1$s · %2$s/s</string>
+    <string name="transfer_known">%1$s / %2$s · %3$d%% · %4$s/s</string>
+    <string name="provision_throughput">Archive read speed: %1$s/s</string>
 </resources>

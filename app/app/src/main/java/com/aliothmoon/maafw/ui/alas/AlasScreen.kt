@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import com.aliothmoon.maafw.ui.components.MaaButton
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -228,10 +227,10 @@ fun AlasScreen(
 
                     else -> null
                 }
+                StartupChecklist(prootState)
+                Spacer(Modifier.height(MaaDesignTokens.Spacing.md))
                 if (failureText == null) {
                     // 载入开屏：首次 loadUrl 撞上服务未起是必然事件，不给用户看错误脸
-                    CircularProgressIndicator()
-                    Spacer(Modifier.height(MaaDesignTokens.Spacing.lg))
                     Text(
                         text = when (prootState.phase) {
                             ProotPhase.PREPARING -> stringResource(R.string.proot_phase_preparing)

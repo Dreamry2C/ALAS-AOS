@@ -69,6 +69,8 @@ require_file "$ASSETS/overlays/runner.py"
 require_file "$ASSETS/patches/assets_fix.py"
 require_file "$ASSETS/seeds/deploy.yaml"
 require_file "$ASSETS/seeds/alasaos_update.sh"
+require_file "$ASSETS/seeds/update_progress.py"
+require_file "$ASSETS/seeds/cdn_update.py"
 require_file "$ASSETS/seeds/regen_args.py"
 require_file "$ASSETS/shims/jellyfish.py"
 require_file "$ASSETS/shims/numpy_shim.py"
@@ -236,6 +238,8 @@ install -D -m 0644 "$ASSETS/seeds/sync_deploy.py" "$ROOTFS_DIR/opt/alas/seeds/sy
 # ALAS 热更新脚本：设备端唯一更新通道（内置更新器已被 AutoUpdate:false 锁死），
 # 阶段三 App 侧 AlasUpdater 经 proot 拉起；协议见脚本头注释
 install -D -m 0755 "$ASSETS/seeds/alasaos_update.sh" "$ROOTFS_DIR/opt/alas/seeds/alasaos_update.sh"
+install -D -m 0755 "$ASSETS/seeds/update_progress.py" "$ROOTFS_DIR/opt/alas/seeds/update_progress.py"
+install -D -m 0755 "$ASSETS/seeds/cdn_update.py" "$ROOTFS_DIR/opt/alas/seeds/cdn_update.py"
 
 # args 现场再生器：args.json/argument.yaml 不补丁化，每次启动重跑 ALAS 生成链
 # 并补回 alasaos 桥选项（活动列表永不冻结）；App 侧 ProotHost 经 proot 拉起
