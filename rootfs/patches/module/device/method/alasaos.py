@@ -61,15 +61,22 @@ def _game_task_placements(output: str, package: str):
     """
     placements = []
     seen = set()
-    blocks = re.split(r'(?=^\s*Window #\d+ )', output, flags=re.MULTILINE)
+    blocks = re.split(r'(?=^[ \t]*Window #\d+ )', output, flags=re.MULTILINE)
     for block in blocks:
-        if not re.search(r'Window\{[^}\n]*\s' + re.escape(package) + r'/[\w.$]+\}', block):
+        # Other windows and the dump footer can reference the game's Window.
+        # Only the owning Window #N header may identify a movable game stack.
+        owner = re.match(
+            r'[ \t]*Window #\d+ Window\{[^}\r\n]*\s' + re.escape(package)
+            + r'/[\w.$]+\}:?[ \t]*(?:\r?\n|$)', block)
+        if owner is None:
             continue
-        display = re.search(r'mDisplayId=(\d+)', block)
-        stack = re.search(r'stackId=(\d+)', block)
-        if not display or not stack:
+        placement = re.search(
+            r'^[ \t]+mDisplayId=(\d+)[ \t]+stackId=(\d+)\b',
+            block, re.MULTILINE)
+        if placement is None:
             continue
-        key = (int(stack.group(1)), int(display.group(1)))
+        display_id, stack_id = map(int, placement.groups())
+        key = (stack_id, display_id)
         if key not in seen:
             seen.add(key)
             placements.append(key)
