@@ -5,6 +5,7 @@ import com.aliothmoon.maafw.MaaDispatchers
 import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.service.RunForegroundService
 import com.aliothmoon.maafw.settings.AppSettingsManager
+import com.aliothmoon.maafw.settings.AlasSourceRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -193,8 +194,16 @@ class ProotHost(
             }
         }
         try {
-            AlasUpdater { cmd, timeout -> runGuestRaw(cmd, timeout) }
-                .update(settings.updateSource.value, settings.updateBranch.value)
+            val legacy = settings.settings.first()
+            try {
+                AlasSourceRepository(alasDir).migrateLegacy(legacy.updateSource, legacy.updateBranch)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                return@coroutineScope AlasUpdater.Result(false, "SKIPPED deploy-config")
+            }
+            val updateEnv = AlasUpdateProxy.environment(app)
+            AlasUpdater { cmd, timeout -> runGuestRaw(cmd, timeout, updateEnv) }.update()
         } finally {
             poller.cancel()
             poller.join()

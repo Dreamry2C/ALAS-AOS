@@ -222,7 +222,7 @@ install -D -m 0644 "$ASSETS/shims/zzz_alas_shim.pth" "$ROOTFS_DIR$PY_PURELIB/zzz
 # deploy.yaml：AutoUpdate:false 是保住钉版 commit 的唯一闸门（详见文件头注释）；
 # EnableReload:true 放开 WebUI「Force restart」（2026-10-01 opus5）。运行期策略键由
 # seeds/seed_deploy.py 幂等校正（改策略键不必重烘焙 rootfs），Repository/Branch 跟随
-# 用户换源由 seeds/sync_deploy.py 维护。
+# 用户换源由宿主 AlasSourceRepository 原子维护，sync_deploy.py 只读。
 install -D -m 0644 "$ASSETS/seeds/deploy.yaml" "$ROOTFS_DIR/opt/alas/config/deploy.yaml"
 
 # 实例配置生成器：运行时实例播种由阶段三调用（ALAS CWD=仓库根；脚本内 ALAS 根取
@@ -230,7 +230,7 @@ install -D -m 0644 "$ASSETS/seeds/deploy.yaml" "$ROOTFS_DIR/opt/alas/config/depl
 install -D -m 0644 "$ASSETS/seeds/seed_config.py" "$ROOTFS_DIR/opt/alas/seeds/seed_config.py"
 
 # deploy.yaml 校正器：seed_deploy 每次启动幂等校正静态策略键(EnableReload 等)；
-# sync_deploy 由 alasaos_update.sh 调用、把 Repository/Branch 同步成当前更新源。
+# sync_deploy 由 alasaos_update.sh 调用，只读 Repository/Branch，不回写用户配置。
 # 两者亦随 overlay 资产每次启动刷新（改它们不必重烘焙 rootfs），这里 install 保 rootfs 自洽。
 install -D -m 0644 "$ASSETS/seeds/seed_deploy.py" "$ROOTFS_DIR/opt/alas/seeds/seed_deploy.py"
 install -D -m 0644 "$ASSETS/seeds/sync_deploy.py" "$ROOTFS_DIR/opt/alas/seeds/sync_deploy.py"

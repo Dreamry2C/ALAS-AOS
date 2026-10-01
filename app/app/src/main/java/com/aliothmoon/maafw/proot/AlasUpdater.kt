@@ -1,76 +1,45 @@
 package com.aliothmoon.maafw.proot
 
+import kotlinx.coroutines.CancellationException
 import timber.log.Timber
 
-/**
- * ALAS 热更新（roadmap 阶段三第 3 条）：proot 内跑 `seeds/alasaos_update.sh`，
- * 只拉 ALAS 源码不动依赖；断网/超时/镜像不可达一律降级为跳过，不阻塞启动
- *
- * 与脚本的协议：最后一行 `UPDATED <sha> | UNCHANGED <sha> | FAILED <reason>`。
- * UPDATED 之后上游跟踪文件已被 reset 打回原版，调用方负责重放 overlay + assets_fix
- */
+/** Runs the deploy-selected source update; dependency sources and TLS are untouched. */
 class AlasUpdater(
     private val exec: suspend (guestCmd: List<String>, timeoutMs: Long) -> ProotHost.ExecResult,
 ) {
+    data class Result(val updated: Boolean, val summary: String)
 
-    data class Result(
-        /** 是否真的 checkout 了新 commit（需要重放补丁） */
-        val updated: Boolean,
-        /** 给人看的摘要：UPDATED <sha> / UNCHANGED <sha> / SKIPPED <reason> */
-        val summary: String,
-    )
-
-    /**
-     * 跑一次更新；永不抛异常——任何失败都折叠成 SKIPPED
-     * 超时给足脚本内部 `timeout 240` 之外的余量
-     */
-    suspend fun update(repo: String = "", branch: String = ""): Result {
-        // repo/branch 作为脚本首两参覆盖 ALASAOS_UPDATE_REPO/_BRANCH；
-        // 源留空=默认 git://git.lyoko.io/AzurLaneAutoScript，分支留空=master
-        val result = runCatching {
-            exec(listOf("/bin/bash", "seeds/alasaos_update.sh", repo, branch), TIMEOUT_MS)
-        }.getOrElse {
-            if (it is kotlinx.coroutines.CancellationException) throw it
+    suspend fun update(): Result {
+        val result = try {
+            exec(listOf("/bin/bash", "seeds/alasaos_update.sh"), TIMEOUT_MS)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Exceptions can contain command arguments, proxy credentials and URLs.
             Timber.w("hot update exec failed")
             return Result(false, "SKIPPED exec")
         }
-        if (result.timedOut) {
-            Timber.w("hot update timed out after %dms", TIMEOUT_MS)
-            return Result(false, "SKIPPED timeout")
-        }
-        val verdict = result.output.lineSequence()
-            .map { it.trim() }
-            .lastOrNull { it.startsWith("UPDATED") || it.startsWith("UNCHANGED") || it.startsWith("FAILED") }
-        if (verdict?.startsWith("UNCHANGED backoff-until-tomorrow") == true) {
-            return Result(false, "SKIPPED backoff-until-tomorrow")
-        }
-        val validRevision = result.exit == 0 && verdict != null &&
-            Regex("""(?:UPDATED|UNCHANGED) [0-9a-f]{40}(?: \(cdn\))?""").matches(verdict)
-        return when {
-            verdict == null -> {
-                Timber.w("hot update: no verdict line (exit=%s)", result.exit)
-                Result(false, "SKIPPED no-verdict(exit=${result.exit})")
-            }
-
-            validRevision && verdict.startsWith("UPDATED") -> {
-                Timber.i("hot update: %s", verdict)
-                Result(true, verdict)
-            }
-
-            validRevision && verdict.startsWith("UNCHANGED") -> {
-                Timber.i("hot update: %s", verdict)
-                Result(false, verdict)
-            }
-
-            else -> {
-                Timber.w("hot update degraded (exit=%s)", result.exit)
-                Result(false, "SKIPPED update-failed")
-            }
-        }
+        val safe = summarize(result)
+        Timber.i("hot update: %s", safe.summary)
+        return safe
     }
 
-    private companion object {
-        /** 脚本内部 timeout 默认 240s；这里留 60s 余量做兜底杀 */
-        const val TIMEOUT_MS = 300_000L
+    companion object {
+        // The probe can take 60s in addition to the bounded 240s fetch.
+        const val TIMEOUT_MS = 360_000L
+        private val commit = Regex("(UPDATED|UNCHANGED) ([0-9a-f]{40}|[0-9a-f]{64})( \\(cdn\\))?")
+        private val failed = Regex("FAILED (deploy-config|workdir|invalid-branch|source-marker|git-init|remote|remote-ref|fetch|revision|checkout|reset|cdn-reset)")
+        private val backoff = Regex("UNCHANGED backoff-until-tomorrow current=(unknown|[0-9a-f]{40}|[0-9a-f]{64})")
+
+        internal fun summarize(result: ProotHost.ExecResult): Result {
+            if (result.timedOut) return Result(false, "SKIPPED timeout")
+            // Last nonempty line only, bounded. Never print even a prefix-matching raw line.
+            val line = result.output.takeLast(256).lineSequence().lastOrNull { it.isNotBlank() }
+                ?: return Result(false, "SKIPPED no-verdict")
+            if (result.exit == 0 && commit.matches(line)) return Result(line.startsWith("UPDATED "), line)
+            if (result.exit == 0 && backoff.matches(line)) return Result(false, "SKIPPED backoff-until-tomorrow")
+            if (result.exit != 0 && failed.matches(line)) return Result(false, "SKIPPED $line")
+            return Result(false, "SKIPPED invalid-verdict")
+        }
     }
 }
