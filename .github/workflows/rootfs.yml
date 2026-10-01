@@ -32,6 +32,9 @@ jobs:
       # 顺带验 openblas/opencv apt 库 + numpy_shim；构建期 chroot 内执行）。
       # 原 Spike F PP-OCR 门禁随 PP-OCR 退役一并移除。
 
+      - name: Measure rootfs and native dependency footprint
+        run: python3 rootfs/build/profile_bundle.py --rootfs dist/rootfs.tar.xz --compress-groups --output dist/SIZE_REPORT.json
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -39,4 +42,5 @@ jobs:
           path: |
             dist/rootfs.tar.xz
             dist/BUILD_MANIFEST
+            dist/SIZE_REPORT.json
           retention-days: 14
