@@ -30,36 +30,41 @@ class AlasUpdater(
         val result = runCatching {
             exec(listOf("/bin/bash", "seeds/alasaos_update.sh", repo, branch), TIMEOUT_MS)
         }.getOrElse {
-            Timber.w(it, "hot update exec failed")
-            return Result(false, "SKIPPED exec: ${it.message}")
+            if (it is kotlinx.coroutines.CancellationException) throw it
+            Timber.w("hot update exec failed")
+            return Result(false, "SKIPPED exec")
         }
         if (result.timedOut) {
             Timber.w("hot update timed out after %dms", TIMEOUT_MS)
             return Result(false, "SKIPPED timeout")
         }
-        result.output.lineSequence().forEach { Timber.d("alasaos_update| %s", it) }
         val verdict = result.output.lineSequence()
             .map { it.trim() }
             .lastOrNull { it.startsWith("UPDATED") || it.startsWith("UNCHANGED") || it.startsWith("FAILED") }
+        if (verdict?.startsWith("UNCHANGED backoff-until-tomorrow") == true) {
+            return Result(false, "SKIPPED backoff-until-tomorrow")
+        }
+        val validRevision = result.exit == 0 && verdict != null &&
+            Regex("""(?:UPDATED|UNCHANGED) [0-9a-f]{40}(?: \(cdn\))?""").matches(verdict)
         return when {
             verdict == null -> {
                 Timber.w("hot update: no verdict line (exit=%s)", result.exit)
                 Result(false, "SKIPPED no-verdict(exit=${result.exit})")
             }
 
-            verdict.startsWith("UPDATED") -> {
+            validRevision && verdict.startsWith("UPDATED") -> {
                 Timber.i("hot update: %s", verdict)
                 Result(true, verdict)
             }
 
-            verdict.startsWith("UNCHANGED") -> {
+            validRevision && verdict.startsWith("UNCHANGED") -> {
                 Timber.i("hot update: %s", verdict)
                 Result(false, verdict)
             }
 
             else -> {
-                Timber.w("hot update degraded: %s", verdict)
-                Result(false, "SKIPPED $verdict")
+                Timber.w("hot update degraded (exit=%s)", result.exit)
+                Result(false, "SKIPPED update-failed")
             }
         }
     }
