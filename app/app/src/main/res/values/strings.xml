@@ -656,4 +656,25 @@
     <string name="provision_failed">部署失败：%1$s</string>
     <string name="provision_retry">重试</string>
     <string name="provision_skip">跳过（仅调试用）</string>
+    <string name="startup_checklist">ALAS 启动检查</string>
+    <string name="startup_waiting">待处理</string>
+    <string name="startup_active">进行中</string>
+    <string name="startup_done">完成</string>
+    <string name="startup_warning">警告，继续启动</string>
+    <string name="startup_failed">失败</string>
+    <string name="startup_skipped">已跳过</string>
+    <string name="startup_runtime">检查运行环境</string>
+    <string name="startup_cleanup">清理残留与网络准备</string>
+    <string name="startup_overlay">同步运行文件</string>
+    <string name="startup_environment">环境自检与修复</string>
+    <string name="startup_config">准备实例配置</string>
+    <string name="startup_update">检查与下载 ALAS 更新</string>
+    <string name="startup_patches">应用本地补丁</string>
+    <string name="startup_arguments">生成配置选项</string>
+    <string name="startup_session">启动运行会话</string>
+    <string name="startup_services">等待控制服务与 WebUI</string>
+    <string name="transfer_unpacking">正在解压更新包…</string>
+    <string name="transfer_unknown">已下载 %1$s · %2$s/s</string>
+    <string name="transfer_known">%1$s / %2$s · %3$d%% · %4$s/s</string>
+    <string name="provision_throughput">压缩包读取速度：%1$s/s</string>
 </resources>
