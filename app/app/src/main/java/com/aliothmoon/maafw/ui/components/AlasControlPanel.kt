@@ -99,6 +99,7 @@ fun AlasControlPanel(
                         stringResource(R.string.overlay_alas_preparing_generic)
                     !alas.reachable -> stringResource(R.string.overlay_alas_unreachable)
                     alas.runnerAlive -> stringResource(R.string.overlay_alas_running, alas.pid ?: 0)
+                    alas.runnerFailed -> stringResource(R.string.overlay_alas_task_failed)
                     else -> stringResource(R.string.overlay_alas_stopped)
                 },
             )

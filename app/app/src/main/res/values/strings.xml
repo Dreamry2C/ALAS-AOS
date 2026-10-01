@@ -161,6 +161,7 @@
     <string name="overlay_alas_preparing_generic">环境准备中…</string>
     <string name="overlay_alas_start_failed">启动失败：%1$s</string>
     <string name="overlay_alas_start">开始挂机</string>
+    <string name="overlay_alas_task_failed">运行失败，请查看下方任务日志</string>
     <string name="overlay_alas_stop">停止挂机</string>
     <string name="overlay_alas_log_empty">暂无日志</string>
     <string name="overlay_alas_hint">高频操作在此面板；完整配置请回应用内的 ALAS 控制台</string>

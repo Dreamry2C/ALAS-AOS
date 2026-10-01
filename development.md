@@ -16,8 +16,12 @@ v3 主线已完成阶段三、阶段四应用内实现，阶段五验证进行�
   - `app/src/main/java/.../provision/`（首启 rootfs 解压，M3-a）与 `.../proot/`（ProotHost 会话宿主 / AlasOverlay 资产覆盖 / AlasUpdater 热更新，M3-b）。
   - `app/src/main/prootLibs/arm64-v8a/`（proot 九件套，Spike A 钉版入库）+ `app/src/main/assets/alas/`（wrapper/runner/seed/alasaos_update.sh/rpc.py + patches 全量，运行时幂等铺 /opt/alas）。
   - `app/src/main/assets/rootfs/`（rootfs.tar.xz 随包，gitignore 不入库；BUILD_MANIFEST 入库）。
-- `rootfs/` — `build/build-rootfs.sh`（GHA ARM64 构建脚本）、`patches/`（ALAS 适配补丁，含桥客户端）、`overlays/`（wrapper.py / runner.py / alasaos_gui.py）、`seeds/`（deploy.yaml / seed_config.py / seed_deploy.py / sync_deploy.py / alasaos_update.sh 等）。运行资产在 `app/app/src/main/assets/alas/` 有对应副本，修改须同步。
-- `alasaos_gui.py` — AOS 自有入口，预加载 adbutils 后运行原版 gui.py，规避换源后 fake PIL 导入顺序冲突；原 TaskHandler.stop 保护也在入口内存适配。退役的 utils.py 整文件覆盖由 env_fix 恢复当前源原版，避免冻结新分支图标和接口；不修改上游业务逻辑。EnableReload=true 时 wrapper 管 GUI 父进程，父进程管理实际 WebUI 子进程，WebUI 另有 multiprocessing.Manager 共享状态进程；它们并非多套挂机。独立挂机 runner 由 wrapper 另行管理。
+- `rootfs/` — `build/build-rootfs.sh`（GHA ARM64 构建脚本）、`patches/`（ALAS 适配补丁，含桥客户端）、`overlays/`（wrapper.py / alasaos_gui.py / alasaos_control.py / alasaos_u2.py；runner.py 为旧入口，当前不使用）、`seeds/`（deploy.yaml / seed_config.py / seed_deploy.py / sync_deploy.py / alasaos_update.sh 等）。运行资产在 `app/app/src/main/assets/alas/` 有对应副本，修改须同步。
+- `alasaos_gui.py` — AOS 自有入口，预加载 adbutils 后运行原版 gui.py，规避换源后 fake PIL 导入顺序冲突；原 TaskHandler.stop 保护也在入口内存适配。退役的 utils.py 整文件覆盖由 env_fix 恢复当前源原版，避免冻结新分支图标和接口；不修改上游业务逻辑。EnableReload=true 时 wrapper 管 GUI 父进程，父进程管理实际 WebUI 子进程，WebUI 另有 multiprocessing.Manager 共享状态进程；它们并非多套挂机。任务由 ALAS 原生 ProcessManager 创建，AOS 不再启动独立 runner 或强制重拉任务。
+- `alasaos_control.py` — GUI子进程内的loopback控制适配（22401）；AOS 22400转发到它，两端共用原版ProcessManager的启停与状态。日志只取当前实例原生文件，GUI诊断单独保留；Rich15 HTML日志空输出通过公开Console API内存适配。
+- `alasaos_u2.py` — 桥接serial不是ADB transport；允许未使用的可选u2对象构造，实际uiautomator2 RPC明确报不支持，普通serial仍走原库。截图/输入/普通shell走连接桥。
+- 主Activity固定竖屏；点游戏预览时临时横屏，退出恢复竖屏，不修改整台手机的旋转偏好。
+- 就绪检查超时明确显示原因，后台继续检测同一会话；服务迟到恢复后转为RUNNING，避免永久停在“准备中”。
 - `seed_deploy.py` 每次启动校正 EnableReload；`sync_deploy.py` 在更新成功/最新时同步 Repository/Branch。更新器按源/分支散列记录尝试，保留远端引用，以真实 HEAD 验证本地代码；Force restart 只重启 WebUI，AOS 重启才执行换源和 overlay 铺设。
 - ProotHost 的长会话和短命令均把 app 私有 `files/proot-tmp/shm` 绑定为 guest `/dev/shm`，支持 Python multiprocessing 信号量；会话清理沿用 proot-tmp。
 - `.github/workflows/` — rootfs 构建 workflow（手动触发；`ALAS_REF` 默认 master 浮动，manifest 记录解析后 commit）。

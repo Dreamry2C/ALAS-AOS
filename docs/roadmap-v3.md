@@ -1,5 +1,8 @@
 # ALAS Android 一体化 APK · 路线图 v3
 
+> 2026-10-02 用户决策更新：AOS负责可运行环境、虚拟屏和连接桥，任务以ALAS原生ProcessManager为唯一管理者。AOS挂机页与ALAS页共同启停并同步状态，取消旧“WebUI禁用/独立wrapper runner唯一控制”方案；日志跟随当前实例。主界面竖屏，游戏全屏预览横屏。本文旧阶段方案作为历史背景，现状见development.md。
+
+
 > 修订基础：v2（`ALAS-Android-修订版路线图-v2.md`）+ 2026-09-15 三轮设计拷问结论 + m0 归档事实核查 + shizuku-m 实现核查。
 > 与 v2 的根本差异：**后台挂机是硬需求**（m0 用户拍板"手机要正常用"，`m0-archive/docs/devlog/2026-08-29.md:142`）。原依据 m0 §41「adb 无法触达虚拟屏」（`m0-archive/docs/debug.md:281-285`）——2026-09-15 Spike E 已将其推翻（`screencap` 吃 SF physical id、`input` 吃 logical id 后均可达，见 `spike/e-adb-virtual-display/REPORT.md`），但 VD 保活是 shell 域死穴、链路悬在 adb 会话上，**结论不变**：v2 的"adb 自连为主控"降级为探索项，**m0 桥控制面保留**，v2 的 adb 四步流水线整体移出主线。
 

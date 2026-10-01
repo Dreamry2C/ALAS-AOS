@@ -49,6 +49,7 @@ class ProotHost(
     val state: StateFlow<ProotSnapshot> = _state.asStateFlow()
 
     private val startMutex = Mutex()
+    @Volatile
     private var session: Process? = null
     private var supervisorJob: kotlinx.coroutines.Job? = null
 
@@ -184,8 +185,8 @@ class ProotHost(
             Timber.i("proot session up: wrapper ready on %d", WRAPPER_PORT)
         } else {
             // wrapper 还没就绪：可能首次 import 慢，也可能马上退出——交给 supervisor 兜底
-            setState(ProotPhase.STARTING, "等待 wrapper 就绪")
-            Timber.w("wrapper not ready within %dms", SERVICES_UP_MS)
+            fail("ALAS 控制服务启动超时，正在等待恢复")
+            watchLateReadiness(proc)
         }
     }
 
@@ -300,6 +301,9 @@ class ProotHost(
                     backoff = RESTART_BACKOFF_INIT_MS
                     setState(ProotPhase.RUNNING)
                     Timber.i("proot session respawned, wrapper ready")
+                } else {
+                    fail("ALAS 控制服务启动超时，正在等待恢复")
+                    watchLateReadiness(next)
                 }
             }
             Timber.i("proot supervisor exited")
@@ -312,6 +316,20 @@ class ProotHost(
      * RUNNING 的语义必须是「WebUI 真的能服务」：gui.py 进程活着但 uvicorn 还在
      * import 的几秒里，WebView 自动重载会吃 connection refused 卡进错误页
      */
+    private fun watchLateReadiness(proc: Process) {
+        scope.launch(MaaDispatchers.IO) {
+            while (wantRunning && session === proc && proc.isAlive) {
+                if (awaitServices(5_000L)) {
+                    if (wantRunning && session === proc && proc.isAlive) {
+                        setState(ProotPhase.RUNNING)
+                    }
+                    return@launch
+                }
+                delay(1_000L)
+            }
+        }
+    }
+
     private suspend fun awaitServices(timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
