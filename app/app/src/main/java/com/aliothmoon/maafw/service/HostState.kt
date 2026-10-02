@@ -1,6 +1,7 @@
 package com.aliothmoon.maafw.service
 
 import android.content.Context
+import android.os.SystemClock
 import android.view.Surface
 import com.aliothmoon.maafw.BuildConfig
 import com.aliothmoon.maafw.MaaDispatchers
@@ -8,15 +9,22 @@ import com.aliothmoon.maafw.constant.DefaultDisplayConfig
 import com.aliothmoon.maafw.privileged.PrivilegedServicePort
 import com.aliothmoon.maafw.privileged.PrivilegedServiceState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import timber.log.Timber
@@ -25,6 +33,7 @@ import java.io.ByteArrayOutputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -52,10 +61,13 @@ class HostState(
     private val envMutex = Mutex()
     private val pingSeq = AtomicInteger(0)
 
-    /** 桥探测连续失败计数（只被 probeMutex 保护的块读写） */
-    private var probeFailStreak = 0
+    private val started = AtomicBoolean(false)
+
+    /** Both periodic and explicit probes hold probeMutex when touching this throttle. */
+    private val probeFailures = PollFailureThrottle()
 
     fun start() {
+        if (!started.compareAndSet(false, true)) return
         scope.launch {
             servicePort.serviceState.collect { state ->
                 _snapshot.update {
@@ -67,26 +79,44 @@ class HostState(
                 }
             }
         }
-        scope.launch(MaaDispatchers.IO) {
-            while (true) {
-                probeBridgeNow()
-                delay(BRIDGE_PROBE_INTERVAL_MS)
+        scope.launch(MaaDispatchers.Default) {
+            combine(
+                BackgroundPolling.foreground,
+                BackgroundPolling.taskActive,
+                snapshot.map { it.vdDisplayId != DefaultDisplayConfig.DISPLAY_NONE }
+                    .distinctUntilChanged(),
+            ) { foreground, taskActive, displayActive ->
+                // Keep the bridge responsive while a VD exists, even between tasks.
+                foreground to (taskActive || displayActive)
+            }.distinctUntilChanged().collectLatest { (foreground, active) ->
+                // Visibility is part of the key even if both intervals are 4s: resume probes now.
+                while (true) {
+                    // Suspend the collector so it can cancel us while socket IO is blocking.
+                    withContext(MaaDispatchers.IO) { probeBridgeNow() }
+                    delay(BackgroundPolling.intervalMs(foreground, active))
+                }
             }
         }
     }
 
     suspend fun probeBridgeNow(): Boolean = probeMutex.withLock {
-        val reachable = runCatching { pingBridge() }
-            .onFailure { Timber.d("bridge probe failed: %s", it.message) }
-            .getOrDefault(false)
+        currentCoroutineContext().ensureActive()
+        val result = runCatching { pingBridge() }
+        // Socket IO is blocking; a cancelled old poll must not publish its late result.
+        currentCoroutineContext().ensureActive()
+        val reachable = result.getOrDefault(false)
         if (reachable) {
-            probeFailStreak = 0
+            val recovered = probeFailures.recovered()
+            if (recovered > 0) Timber.d("bridge probe recovered after %d failures", recovered)
             _snapshot.update { it.copy(bridgeReachable = true) }
         } else {
+            if (probeFailures.failed(SystemClock.elapsedRealtime())) {
+                Timber.d("bridge probe failed (streak=%d): %s", probeFailures.failures,
+                    result.exceptionOrNull()?.message ?: "no pong")
+            }
             // 挂机满负荷（ALAS 每帧 2.7MB 打 screencap）时单次 ping 超时是常态，
             // 连续 BRIDGE_FAIL_THRESHOLD 次失败才判不可达，与 FGS「桥抖动不撤保活」对齐
-            probeFailStreak++
-            if (probeFailStreak >= BRIDGE_FAIL_THRESHOLD) {
+            if (probeFailures.failures >= BRIDGE_FAIL_THRESHOLD) {
                 _snapshot.update { it.copy(bridgeReachable = false) }
             }
         }
@@ -216,7 +246,6 @@ class HostState(
     private companion object {
         const val BRIDGE_HOST = "127.0.0.1"
         const val BRIDGE_PORT = 22300
-        const val BRIDGE_PROBE_INTERVAL_MS = 4_000L
         const val BRIDGE_FAIL_THRESHOLD = 2
         const val BRIDGE_CONNECT_TIMEOUT_MS = 1_500
         const val BRIDGE_READ_TIMEOUT_MS = 2_000
