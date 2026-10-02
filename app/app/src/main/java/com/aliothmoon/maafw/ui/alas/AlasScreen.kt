@@ -67,18 +67,9 @@ private const val SCOPE_HEIGHT_FIX_JS =
     """
 
 /**
- * WebUI 闲置状态环修复。ALAS 把闲置设计成静态完整圆环（fill 态）：
- * `put_loading(color="secondary").style("--loading-border-fill--")` 打内联标记，
- * alas.css 用 `*[style*="--loading-border-fill--"]` 命中后定制尺寸+四边同色 border。
- * 但 pywebio 的 `.style()` 把标记写在 put_html 的**外包装 div** 上（spinner 的父级），
- * fill 规则实际给 wrapper 画了个无圆角静态方框，真正的 `.spinner-border` 完全没被
- * 定制——保持 Bootstrap 默认：0.75s 旋转 + border-right 透明缺口。于是闲置态
- * 呈现「方框 + 转圈」，被误读为卡住/加载中（CDP 实测：marker 在 wrapper、
- * spinner animName=spinner-border、borderRight=transparent）。
- * 此处按类名定点修真正的 spinner：停转 + 补缺口成完整圆（仅 secondary 命中：
- * 闲置/UpToDate/RemoteNotRunning 三个 fill 态；Running/Warning 颜色不同照常旋转），
- * 同时剥掉 fill wrapper 的方框 artifact。改 ALAS 文件会被热更新冲掉且用户明令
- * 禁止，故注入在 WebView 层。
+ * PyWebIO 把 loading 标记挂在外包装，而不是 Bootstrap spinner 上。去掉外框和动画，
+ * 把真正的 spinner 统一到 24px；fill/secondary 静止，运行态保留旋转。
+ * CSS 同时覆盖后来插入的节点，不改 ALAS 上游文件或任务状态。
  */
 private const val IDLE_SPINNER_FIX_JS =
     """
@@ -86,8 +77,35 @@ private const val IDLE_SPINNER_FIX_JS =
       if (document.getElementById('alasaos-idle-spinner-fix')) return;
       const s = document.createElement('style');
       s.id = 'alasaos-idle-spinner-fix';
-      s.textContent = '.spinner-border.text-secondary{animation:none !important;border-right-color:currentColor !important;}'
-        + 'div[style*="--loading-border-fill--"]{border:none !important;width:auto !important;height:auto !important;}';
+      s.textContent = `
+        [style*="--loading-border"]:not(.spinner-border) {
+          border: none !important;
+          animation: none !important;
+          width: 24px !important;
+          height: 24px !important;
+          display: inline-flex !important;
+          align-items: center;
+          justify-content: center;
+          vertical-align: middle;
+        }
+        [style*="--loading-border"] .spinner-border,
+        .spinner-border[style*="--loading-border"],
+        .spinner-border.text-secondary {
+          box-sizing: border-box !important;
+          width: 24px !important;
+          height: 24px !important;
+          flex-shrink: 0;
+          border: 3px solid currentColor !important;
+          border-right-color: transparent !important;
+          border-radius: 50% !important;
+        }
+        [style*="--loading-border-fill--"] .spinner-border,
+        .spinner-border[style*="--loading-border-fill--"],
+        .spinner-border.text-secondary {
+          animation: none !important;
+          border-right-color: currentColor !important;
+        }
+      `;
       document.head.appendChild(s);
     })();
     """
@@ -170,7 +188,7 @@ fun AlasScreen(
                             if (!loadFailed) pageReady = true
                             // 见 SCOPE_HEIGHT_FIX_JS：本机 vh=0，补像素高度
                             view.evaluateJavascript(SCOPE_HEIGHT_FIX_JS, null)
-                            // 见 IDLE_SPINNER_FIX_JS：闲置环停转，fill 态专用
+                            // Fix marked wrapper frames and real spinners; only fill/idle stops rotating.
                             view.evaluateJavascript(IDLE_SPINNER_FIX_JS, null)
                         }
 
@@ -187,10 +205,15 @@ fun AlasScreen(
                         }
                     }
                     webView = this
+                    AlasWebViewHolder.register(this)
                     loadUrl(ALAS_WEBUI_URL)
                 }
             },
-            onRelease = { it.destroy() },
+            onRelease = {
+                AlasWebViewHolder.unregister(it)
+                if (webView === it) webView = null
+                it.destroy()
+            },
             modifier = Modifier.fillMaxSize(),
         )
 
