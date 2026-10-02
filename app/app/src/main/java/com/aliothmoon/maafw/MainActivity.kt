@@ -13,8 +13,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.aliothmoon.maafw.proot.AlasRunController
+import com.aliothmoon.maafw.service.BackgroundPolling
 import com.aliothmoon.maafw.settings.AppSettingsManager
 import com.aliothmoon.maafw.ui.AppRoot
+import com.aliothmoon.maafw.ui.alas.AlasWebViewHolder
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
@@ -44,6 +46,22 @@ class MainActivity : AppCompatActivity() {
         setContent {
             AppRoot(onDarkThemeChanged = ::applyEdgeToEdge)
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AlasWebViewHolder.resumeAll()
+        // StateFlow restarts both polling loops immediately, not after the idle delay.
+        BackgroundPolling.setForeground(true)
+    }
+
+    override fun onStop() {
+        // Language/orientation recreation is not a real trip into the background.
+        if (!isChangingConfigurations) {
+            BackgroundPolling.setForeground(false)
+            AlasWebViewHolder.pauseAll()
+        }
+        super.onStop()
     }
 
     private fun applyEdgeToEdge(darkMode: Boolean) {
