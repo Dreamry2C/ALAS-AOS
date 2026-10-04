@@ -30,7 +30,7 @@ class RootServiceBootstrapProvider : ContentProvider() {
             ?: return null
 
         val appBinder = RootServiceBootstrapRegistry.attach(token, binder) ?: run {
-            Timber.w("Root bootstrap token not found: %s", token)
+            Timber.w("Bootstrap request is no longer pending")
             return null
         }
 
