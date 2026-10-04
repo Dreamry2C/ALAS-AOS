@@ -316,6 +316,10 @@ class RemoteServiceImpl : RemoteService.Stub() {
                     destroy()
                     return@Thread
                 }
+                // A replaced process may hold the bridge port during construction.
+                // The Binder heartbeat only registers the app PID once; this loop
+                // retries after the old owner exits without spawning another worker.
+                if (!destroyed.get()) BridgeServer.start()
             }
         }.apply {
             name = "remote-heartbeat-watchdog"
