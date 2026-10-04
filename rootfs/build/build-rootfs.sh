@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # AlasAos 阶段一 M1 · build-rootfs.sh
-# 烘焙 Ubuntu ARM64 rootfs：ubuntu-base 24.04 + ALAS（钉版）+ PP-OCR（in-proc onnxruntime）+ wrapper
+# 烘焙 Ubuntu ARM64 rootfs：ubuntu-base 24.04 + ALAS（钉版）+ 原版 cnocr/MXNet + wrapper
 #
 # 运行环境：GitHub Actions `ubuntu-24.04-arm` runner（原生 aarch64，chroot 无需 qemu）。
 # 本机（Windows + Git Bash）不可执行：核心动作是 chroot / mount --bind / GNU tar，
@@ -75,6 +75,9 @@ require_file "$ASSETS/seeds/regen_args.py"
 require_file "$ASSETS/shims/jellyfish.py"
 require_file "$ASSETS/shims/numpy_shim.py"
 require_file "$ASSETS/shims/zzz_alas_shim.pth"
+require_file "$ASSETS/build/trim_rootfs.py"
+require_file "$ASSETS/build/validate_trim.py"
+require_file "$ASSETS/build/runtime_smoke.py"
 require_file "$MXNET_WHL"
 
 # chroot 内统一环境：干净 env + 非交互 + C.UTF-8（免 perl locale 警告）
@@ -376,9 +379,14 @@ find "$ROOTFS_DIR" -type d -name __pycache__ -prune -exec rm -rf {} +
 rm -rf "$ROOTFS_DIR/root/.cache" "$ROOTFS_DIR/var/lib/apt/lists"/*
 
 OUT="$DIST_DIR/rootfs.tar.xz"
-# --one-file-system 双保险：即使有残留挂载也不会把宿主文件系统打进包；
-# XZ_OPT=-T0 多线程压缩（单线程 xz 压 ~600MB 要几分钟）
-XZ_OPT=-T0 tar --one-file-system -C "$ROOTFS_DIR" -cJf "$OUT" .
+# 原始tar只作本次构建基线；验证器在独立副本逐组移除文档/构建工具/
+# NumPy SciPy测试/非ARM64缓存，每组核原版OCR与运行依赖，且ALAS整树必须不变。
+# 最后直接从原始tar过滤生成XZ；不修改当前构建rootfs，不把tar→XZ差值当裁剪收益。
+RAW_TAR="$WORK_DIR/rootfs-before-trim.tar"
+tar --one-file-system -C "$ROOTFS_DIR" -cf "$RAW_TAR" .
+RAW_SHA="$(sha256sum "$RAW_TAR" | awk '{print $1}')"
+python3 "$ASSETS/build/validate_trim.py" --input "$RAW_TAR" --expected-sha256 "$RAW_SHA" \
+  --work "$WORK_DIR/trim-validation" --dist "$DIST_DIR"
 SIZE="$(stat -c %s "$OUT")"
 SHA="$(sha256sum "$OUT" | awk '{print $1}')"
 log "rootfs.tar.xz: $SIZE bytes"
