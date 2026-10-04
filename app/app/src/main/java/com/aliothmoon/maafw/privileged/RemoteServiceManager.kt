@@ -147,6 +147,7 @@ object RemoteServiceManager : PrivilegedServicePort {
         ShizukuManager.initSui(context.packageName)
         RemoteAccessCoordinator.initialize(backendProvider)
         RootRemoteServiceConnector.initialize(context)
+        ShizukuShellBootstrap.initialize(context)
     }
 
     private fun onBinderDied(recipient: BindingDeathRecipient) {

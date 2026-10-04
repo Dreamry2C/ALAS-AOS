@@ -45,6 +45,7 @@ object LogExportCollector {
     /**
      * ALAS 日志目录（`rootfs/opt/alas/log`）的近 7 天收集，对应「导出ALAS日志」
      *
+     * GUI 启动失败可能尚未进入 ALAS logger，需同时收集固定文件 gui.out。
      * 判定基准与 `LogCleaner` 一致：txt 按文件名 `yyyy-MM-dd` 前缀（对不上前缀的保留——
      * 导出多带一份无伤，漏掉现场才误事）；error/<毫秒时间戳>/ 按时间戳，留着的整目录全收
      */
@@ -52,7 +53,7 @@ object LogExportCollector {
         val cutoffMillis = now - ROLLING_KEEP_DAYS * MS_PER_DAY
         val cutoffDay = LocalDate.now().minusDays(ROLLING_KEEP_DAYS)
         val dated = alasLogDir.listFiles()
-            ?.filter { it.isFile && it.name.endsWith(".txt") }
+            ?.filter { it.isFile && (it.name.endsWith(".txt") || it.name == "gui.out") }
             ?.filter { file ->
                 val date = datePrefixOf(file.name) ?: return@filter true
                 !date.isBefore(cutoffDay)
