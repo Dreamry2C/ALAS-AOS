@@ -86,4 +86,19 @@ class LogExportCollectorTest {
         // debug/ 压根没建过：没开过特权进程的设备就是这样
         assertEquals(listOf("log/app.log"), collect())
     }
+
+    @Test
+    fun `ALAS export includes early GUI failures without unrelated runtime files`() {
+        write("alas/log/gui.out")
+        write("alas/log/env_fix.txt")
+        write("alas/log/wrapper.lock")
+        write("alas/log/config.json")
+        write("alas/log/other.out")
+        write("alas/log/export/previous.zip")
+
+        val kept = LogExportCollector.collectAlas(File(base, "alas/log"), now)
+            .map { it.name }.toSet()
+
+        assertEquals(setOf("gui.out", "env_fix.txt"), kept)
+    }
 }
