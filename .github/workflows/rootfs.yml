@@ -2,6 +2,17 @@ name: rootfs
 
 on:
   workflow_dispatch:
+    inputs:
+      trim_baseline_run:
+        description: 'Optional successful rootfs run ID; validate trimming its exact artifact'
+        required: false
+        default: ''
+        type: string
+      trim_baseline_sha256:
+        description: 'Expected rootfs.tar.xz SHA256; required when validating trimming'
+        required: false
+        default: ''
+        type: string
   push:
     paths:
       - 'rootfs/**'
@@ -13,6 +24,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'workflow_dispatch' || inputs.trim_baseline_run == ''
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
     steps:
@@ -43,4 +55,39 @@ jobs:
             dist/rootfs.tar.xz
             dist/BUILD_MANIFEST
             dist/SIZE_REPORT.json
+            dist/TRIM_REPORT.json
+            dist/VALIDATION.json
+          retention-days: 14
+
+  validate-trim:
+    if: github.event_name == 'workflow_dispatch' && inputs.trim_baseline_run != ''
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test archive safety boundaries
+        run: python3 -m unittest discover -s rootfs/tests -p test_trim_rootfs.py -v
+      - name: Download unchanged baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs
+          path: baseline
+          run-id: ${{ inputs.trim_baseline_run }}
+          github-token: ${{ github.token }}
+      - name: Validate each group with original OCR and runtime
+        env:
+          BASELINE_SHA: ${{ inputs.trim_baseline_sha256 }}
+        run: |
+          sudo python3 rootfs/build/validate_trim.py \
+            --input baseline/rootfs.tar.xz --expected-sha256 "$BASELINE_SHA" \
+            --work .tmp/trim-validation --dist dist
+      - name: Save candidate and validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-trim-validation
+          path: dist/
           retention-days: 14
