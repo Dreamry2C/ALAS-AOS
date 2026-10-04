@@ -23,3 +23,6 @@ data class RemoteAccessState(
         }
     }
 }
+
+internal fun RemoteAccessState.configuredGrant(): Pair<RemoteBackend, Boolean> =
+    configuredBackend to isGranted(configuredBackend)

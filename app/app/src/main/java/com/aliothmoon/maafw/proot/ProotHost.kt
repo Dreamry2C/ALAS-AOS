@@ -242,6 +242,8 @@ class ProotHost(
         sessionLog.parentFile?.mkdirs()
         val cmd = listOf(
             File(nativeLibDir, "libproot.so").absolutePath,
+            // glibc sem_open uses hard links, forbidden in Android app_data_file.
+            "--link2symlink",
             "-w", GUEST_ALAS_ROOT,
             "-r", rootfsDir.absolutePath,
             "-b", "/dev:/dev", "-b", "/proc:/proc", "-b", "/sys:/sys",
@@ -421,6 +423,7 @@ class ProotHost(
         check(prootShmDir.isDirectory || prootShmDir.mkdirs()) { "Cannot prepare proot shared memory" }
         val cmd = listOf(
             File(nativeLibDir, "libproot.so").absolutePath,
+            "--link2symlink",
             "-w", GUEST_ALAS_ROOT,
             "-r", rootfsDir.absolutePath,
             "-b", "/dev:/dev", "-b", "/proc:/proc", "-b", "/sys:/sys",
