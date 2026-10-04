@@ -34,6 +34,7 @@ object BridgeServer {
     private const val TAG = "BridgeServer"
     private const val LISTEN_HOST = "127.0.0.1"
     private const val LISTEN_PORT = 22300
+    private const val BIND_FAILURE_LOG_INTERVAL_MS = 5 * 60 * 1000L
 
     /** 请求行上限，防呆（m0 MAX_LINE 同款） */
     private const val MAX_LINE = 64 * 1024
@@ -65,6 +66,7 @@ object BridgeServer {
     @Volatile
     private var startedAtMs = 0L
     private val clientCounter = AtomicInteger(0)
+    private var lastBindFailureLoggedAtMs: Long? = null // guarded by start()'s monitor
 
     /** 幂等；bind 失败记日志不抛——构造期调用方是 RemoteServiceImpl.init，抛了 binder 回不去 */
     @Synchronized
@@ -78,10 +80,17 @@ object BridgeServer {
             socket.reuseAddress = true
             socket.bind(InetSocketAddress(InetAddress.getByName(LISTEN_HOST), LISTEN_PORT), 8)
         } catch (e: IOException) {
-            Ln.e("$TAG: bind $LISTEN_HOST:$LISTEN_PORT failed", e)
+            val now = SystemClock.elapsedRealtime()
+            if (lastBindFailureLoggedAtMs == null ||
+                now - lastBindFailureLoggedAtMs!! >= BIND_FAILURE_LOG_INTERVAL_MS
+            ) {
+                Ln.e("$TAG: bind $LISTEN_HOST:$LISTEN_PORT failed; will retry while app is alive", e)
+                lastBindFailureLoggedAtMs = now
+            }
             runCatching { socket.close() }
             return
         }
+        lastBindFailureLoggedAtMs = null
         serverSocket = socket
         startedAtMs = SystemClock.elapsedRealtime()
         thread(isDaemon = true, name = "alasaos-bridge-accept") { acceptLoop(socket) }
