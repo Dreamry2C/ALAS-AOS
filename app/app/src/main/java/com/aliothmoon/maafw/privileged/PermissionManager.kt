@@ -133,9 +133,11 @@ class PermissionManager(
         // 授权到手就把特权进程连上，用户不必再手动点一次
         scope.launch {
             accessPort.state
-                .map { it.isGranted(it.configuredBackend) }
+                // 后端是事件的一部分：Root/Shizuku 都已授权时，单看 Boolean 会把
+                // 切换压成 true -> true，前一条 collector 已解绑却永远不会重绑。
+                .map(RemoteAccessState::configuredGrant)
                 .distinctUntilChanged()
-                .filter { it }
+                .filter { it.second }
                 .collect { servicePort.bind() }
         }
         // 特权进程一上线就代授，省掉用户逐个点系统页

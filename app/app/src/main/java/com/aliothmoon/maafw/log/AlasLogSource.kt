@@ -17,10 +17,10 @@ class AlasLogSource(context: Context) {
 
     fun logDir(): File = logDir
 
-    /** 按天日志 `yyyy-MM-dd_{config}.txt`，mtime 倒序 */
+    /** 按天日志及 GUI 启动原始输出，mtime 倒序；早期异常可能只写在 gui.out。 */
     fun dailyLogs(): List<File> = runCatching {
         logDir.listFiles()
-            ?.filter { it.isFile && it.name.endsWith(".txt") }
+            ?.filter { it.isFile && (it.name.endsWith(".txt") || it.name == "gui.out") }
             ?.sortedByDescending { it.lastModified() }
             .orEmpty()
     }.getOrDefault(emptyList())
