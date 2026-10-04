@@ -32,7 +32,7 @@ public final class RootServiceStarter {
             System.exit(1);
             return;
         }
-        System.err.println("[RootServiceStarter] RootUserService.create() ok, token=" + createdService.token());
+        System.err.println("[RootServiceStarter] RootUserService.create() ok");
 
         if (!sendBinder(createdService)) {
             System.err.println("[RootServiceStarter] sendBinder() failed");
