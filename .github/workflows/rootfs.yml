@@ -1,6 +1,7 @@
 name: rootfs
 
 on:
+  workflow_call:
   workflow_dispatch:
     inputs:
       trim_baseline_run:
@@ -13,13 +14,9 @@ on:
         required: false
         default: ''
         type: string
-  push:
-    paths:
-      - 'rootfs/**'
-      - '.github/workflows/rootfs.yml'
 
 concurrency:
-  group: rootfs-${{ github.ref }}
+  group: rootfs-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
