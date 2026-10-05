@@ -12,5 +12,5 @@ object DefaultDisplayConfig {
 
     const val WIDTH = 1280
     const val HEIGHT = 720
-    const val DPI = 160
+    const val DPI = 220
 }
