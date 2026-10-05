@@ -45,7 +45,10 @@ jobs:
       # 原 Spike F PP-OCR 门禁随 PP-OCR 退役一并移除。
 
       - name: Measure rootfs and native dependency footprint
-        run: python3 rootfs/build/profile_bundle.py --rootfs dist/rootfs.tar.xz --compress-groups --output dist/SIZE_REPORT.json
+        run: |
+          # The build runs under sudo; return its outputs to the runner before writing the report.
+          sudo chown -R "$(id -u):$(id -g)" dist
+          python3 rootfs/build/profile_bundle.py --rootfs dist/rootfs.tar.xz --compress-groups --output dist/SIZE_REPORT.json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
