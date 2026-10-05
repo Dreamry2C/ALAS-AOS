@@ -13,7 +13,10 @@ from pathlib import Path, PurePosixPath
 import re
 import tarfile
 
-GROUPS = ('linux-docs', 'build-tools', 'python-tests', 'foreign-u2')
+GROUPS = (
+    'linux-docs', 'build-tools', 'python-tests', 'foreign-u2',
+    'proj-data', 'perl-headers', 'apt-cache', 'u2-apks', 'stdlib-tests'
+)
 BINUTILS = frozenset(('addr2line', 'ar', 'as', 'c++filt', 'dwp', 'elfedit',
                      'gprof', 'ld', 'ld.bfd', 'ld.gold', 'nm', 'objcopy',
                      'objdump', 'ranlib', 'readelf', 'size', 'strings', 'strip'))
@@ -42,6 +45,14 @@ def removal_group(name):
         command = parts[-1].removeprefix('aarch64-linux-gnu-')
         if len(parts) == 3 and command in BINUTILS:
             return 'build-tools'
+    if name.startswith('usr/share/proj/') and name.endswith(('.db', '.gtx', '.tif', '.json')):
+        return 'proj-data'
+    if name.startswith('usr/lib/aarch64-linux-gnu/perl/') and name.endswith('.h'):
+        return 'perl-headers'
+    if name.startswith(('var/cache/apt/', 'var/cache/debconf/')) or (name.startswith('var/lib/dpkg/info/') and name.endswith('.symbols')):
+        return 'apt-cache'
+    if name.startswith('usr/lib/python3.12/test/') or ('tornado/test/' in name):
+        return 'stdlib-tests'
     for marker in ('dist-packages', 'site-packages'):
         if marker not in parts:
             continue
@@ -51,6 +62,8 @@ def removal_group(name):
         if tail and tail[0] == 'uiautomator2cache' and 'cache' in tail:
             if re.search(r'atx-agent_[^/]+_linux_(?:386|amd64|armv6|armv7)\.tar\.gz', name):
                 return 'foreign-u2'
+            if name.endswith('.apk'):
+                return 'u2-apks'
     return None
 
 

@@ -3,18 +3,14 @@ name: app
 on:
   workflow_dispatch:
   push:
-    paths:
-      - 'app/**'
-      - 'rootfs/**'
-      - '.github/workflows/app.yml'
+    branches:
+      - '**'
+    tags:
+      - 'v*'
   pull_request:
-    paths:
-      - 'app/**'
-      - 'rootfs/**'
-      - '.github/workflows/app.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: app-${{ github.ref }}
@@ -46,11 +42,10 @@ jobs:
   build:
     needs: checks
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
-          # versionName still uses tags; versionCode is explicit in gradle.properties.
           fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
@@ -60,11 +55,35 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Prepare project-local temporary directory
         run: mkdir -p .tmp/ci
-      - name: Unit tests and debug compilation
+      - name: Cache bundled rootfs
+        id: cache-rootfs
+        uses: actions/cache@v4
+        with:
+          path: app/app/src/main/assets/rootfs/rootfs.tar.xz
+          key: rootfs-tar-xz-v0.1.6
+      - name: Prepare bundled rootfs asset
+        if: steps.cache-rootfs.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p app/app/src/main/assets/rootfs
+          if [ ! -f "app/app/src/main/assets/rootfs/rootfs.tar.xz" ]; then
+            echo "Downloading baseline APK to extract rootfs.tar.xz..."
+            curl -L -o .tmp/baseline.apk https://github.com/Shinarin/ALAS-AOS/releases/download/v0.1.6/ALAS-AOS-v0.1.6-android-arm64.apk
+            unzip -p .tmp/baseline.apk assets/rootfs/rootfs.tar.xz > app/app/src/main/assets/rootfs/rootfs.tar.xz
+            rm -f .tmp/baseline.apk
+          fi
+          ls -lh app/app/src/main/assets/rootfs/rootfs.tar.xz
+      - name: Build APKs (Release & Debug)
         env:
           TMPDIR: ${{ github.workspace }}/.tmp/ci
-        run: bash app/gradlew -p app :app:testDebugUnitTest :app:assembleDebug --no-daemon --console=plain
-      # This compilation gate does not bundle the ignored rootfs.tar.xz. Do not distribute its APK.
+        run: bash app/gradlew -p app :app:testDebugUnitTest :app:assembleRelease :app:assembleDebug --no-daemon --console=plain
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALAS-AOS-apk
+          path: |
+            app/app/build/outputs/apk/release/app-release.apk
+            app/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
       - name: Preserve test evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -75,3 +94,11 @@ jobs:
             app/app/build/reports/tests/
           if-no-files-found: ignore
           retention-days: 14
+      - name: Publish Release Assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/app/build/outputs/apk/release/app-release.apk
+            app/app/build/outputs/apk/debug/app-debug.apk
+
