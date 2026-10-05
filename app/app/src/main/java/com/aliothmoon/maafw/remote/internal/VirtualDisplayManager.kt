@@ -117,6 +117,12 @@ object VirtualDisplayManager {
     }
 
     private fun releaseResources() {
+        val oldVdId = displayId.get()
+        if (oldVdId != DISPLAY_NONE) {
+            runCatching {
+                ServiceManager.getWindowManager().clearForcedDisplaySize(oldVdId)
+            }
+        }
         virtualDisplay.getAndSet(null)?.release()
         NativeBridgeLib.releaseNativeCapturer()
         displayId.set(DISPLAY_NONE)
@@ -150,27 +156,18 @@ object VirtualDisplayManager {
             ", flags=0x${flags.toString(16)}"
         )
 
+        // 强制向 WindowManager 声明 VD 尺寸，消除异形屏/凹口屏安全区与 Letterbox 干扰
+        runCatching {
+            wm.setForcedDisplaySize(vdId, cfg.width, cfg.height)
+            Ln.i("setForcedDisplaySize(${cfg.width}x${cfg.height}) applied to vdId=$vdId")
+        }.onFailure { e -> Ln.w("setForcedDisplaySize failed: ${e.message}") }
+
         if (d.rotation != Surface.ROTATION_0) {
             // 所有旋转非零的情况都先尝试 freezeRotation
             runCatching {
                 wm.freezeRotation(vdId, Surface.ROTATION_0)
                 Ln.i("freezeRotation done, post-freeze rotation=${vd.display.rotation}")
             }.onFailure { e -> Ln.w("freezeRotation failed: ${e.message}") }
-
-            if (physicalRotation == Surface.ROTATION_0) {
-                // 物理屏处于自然方向（rotation=0）而 VD 却有旋转角，
-                // 这是横屏原生设备如AYN Odin2的典型特征：
-                // 此类设备的定制 ROM 对二级显示调 freezeRotation 无效，
-                // 额外调 setForcedDisplaySize 强制 VD 向内部 app 上报横屏尺寸。
-                Ln.w(
-                    "Landscape-native device detected (physRot=0, vdRot=${d.rotation}), " +
-                    "applying setForcedDisplaySize"
-                )
-                runCatching {
-                    wm.setForcedDisplaySize(vdId, cfg.width, cfg.height)
-                    Ln.i("setForcedDisplaySize(${cfg.width}x${cfg.height}) applied")
-                }.onFailure { e -> Ln.w("setForcedDisplaySize failed: ${e.message}") }
-            }
         }
     }
 
