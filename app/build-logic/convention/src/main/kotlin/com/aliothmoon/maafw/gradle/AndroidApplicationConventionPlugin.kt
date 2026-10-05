@@ -82,6 +82,10 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                         "META-INF/LICENSE.md",
                         "META-INF/NOTICE.md",
                     )
+                    excludes += setOf(
+                        "**/__pycache__/**",
+                        "**/*.pyc",
+                    )
                 }
             }
 
@@ -142,9 +146,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                         android.getDefaultProguardFile("proguard-android-optimize.txt"),
                         "proguard-rules.pro",
                     )
-                    if (keystorePath.isNotEmpty()) {
-                        signingConfig = releaseSigning
-                    }
+                    signingConfig = if (keystorePath.isNotEmpty()) releaseSigning else getByName("debug").signingConfig
                 }
             }
 

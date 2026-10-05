@@ -259,6 +259,9 @@ class ModuleBase:
             if isinstance(offset, bool):
                 offset = self.config.BUTTON_OFFSET
             appear = button.match(self.device.image, offset=offset, similarity=similarity)
+            if not appear and similarity == 0.85 and hasattr(button, 'color') and button.color:
+                if button.match(self.device.image, offset=offset, similarity=0.70) and button.appear_on(self.device.image, threshold=threshold):
+                    appear = True
         else:
             appear = button.appear_on(self.device.image, threshold=threshold)
 
