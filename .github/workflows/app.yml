@@ -39,8 +39,12 @@ jobs:
       - name: Translation consistency
         run: python app/scripts/check_i18n_strings.py
 
-  build:
+  rootfs:
     needs: checks
+    uses: ./.github/workflows/rootfs.yml
+
+  build:
+    needs: rootfs
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -55,34 +59,58 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Prepare project-local temporary directory
         run: mkdir -p .tmp/ci
-      - name: Cache bundled rootfs
-        id: cache-rootfs
-        uses: actions/cache@v4
+      - name: Download rootfs built and validated in this run
+        uses: actions/download-artifact@v4
         with:
-          path: app/app/src/main/assets/rootfs/rootfs.tar.xz
-          key: rootfs-tar-xz-v0.1.6
+          name: rootfs
+          path: .tmp/rootfs-dist
       - name: Prepare bundled rootfs asset
-        if: steps.cache-rootfs.outputs.cache-hit != 'true'
         run: |
           mkdir -p app/app/src/main/assets/rootfs
-          if [ ! -f "app/app/src/main/assets/rootfs/rootfs.tar.xz" ]; then
-            echo "Downloading baseline APK to extract rootfs.tar.xz..."
-            curl -L -o .tmp/baseline.apk https://github.com/Shinarin/ALAS-AOS/releases/download/v0.1.6/ALAS-AOS-v0.1.6-android-arm64.apk
-            unzip -p .tmp/baseline.apk assets/rootfs/rootfs.tar.xz > app/app/src/main/assets/rootfs/rootfs.tar.xz
-            rm -f .tmp/baseline.apk
-          fi
-          ls -lh app/app/src/main/assets/rootfs/rootfs.tar.xz
-      - name: Build APKs (Release & Debug)
+          xz --test .tmp/rootfs-dist/rootfs.tar.xz
+          cp .tmp/rootfs-dist/rootfs.tar.xz .tmp/rootfs-dist/BUILD_MANIFEST app/app/src/main/assets/rootfs/
+      - name: Build Release APK
         env:
           TMPDIR: ${{ github.workspace }}/.tmp/ci
-        run: bash app/gradlew -p app :app:testDebugUnitTest :app:assembleRelease :app:assembleDebug --no-daemon --console=plain
-      - name: Upload APK artifacts
+        run: bash app/gradlew -p app :app:testDebugUnitTest :app:assembleRelease --no-daemon --console=plain
+      - name: Verify bundled rootfs and report APK size
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import zipfile
+
+          assets = Path('app/app/src/main/assets/rootfs')
+          def digest(stream):
+              return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+          with (assets / 'rootfs.tar.xz').open('rb') as stream:
+              rootfs_sha = digest(stream)
+          manifest = (assets / 'BUILD_MANIFEST').read_bytes()
+          rows = ['| Package | MiB | SHA256 |', '| --- | ---: | --- |']
+          apk = Path('app/app/build/outputs/apk/release/app-release.apk')
+          with zipfile.ZipFile(apk) as archive:
+              with archive.open('assets/rootfs/rootfs.tar.xz') as stream:
+                  assert digest(stream) == rootfs_sha, 'rootfs differs from this run'
+              assert archive.read('assets/rootfs/BUILD_MANIFEST') == manifest, 'manifest mismatch'
+          with apk.open('rb') as stream:
+              apk_sha = digest(stream)
+          size = apk.stat().st_size / 1024**2
+          rows.append(f'| {apk.name} | {size:.2f} | `{apk_sha}` |')
+          report = '\n'.join(rows) + '\n'
+          print(report)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Download **ALAS-AOS-release** for installation.\n\n')
+              summary.write(report)
+          PY
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: ALAS-AOS-apk
-          path: |
-            app/app/build/outputs/apk/release/app-release.apk
-            app/app/build/outputs/apk/debug/app-debug.apk
+          name: ALAS-AOS-release
+          path: app/app/build/outputs/apk/release/app-release.apk
+          compression-level: 0
+          if-no-files-found: error
           retention-days: 30
       - name: Preserve test evidence
         if: always()
@@ -98,7 +126,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            app/app/build/outputs/apk/release/app-release.apk
-            app/app/build/outputs/apk/debug/app-debug.apk
+          files: app/app/build/outputs/apk/release/app-release.apk
 
