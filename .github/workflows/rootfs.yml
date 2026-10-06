@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Runner info
         run: |
@@ -48,7 +48,7 @@ jobs:
           python3 rootfs/build/profile_bundle.py --rootfs dist/rootfs.tar.xz --compress-groups --output dist/SIZE_REPORT.json
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rootfs
           path: |
@@ -67,11 +67,11 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Test archive safety boundaries
         run: python3 -m unittest discover -s rootfs/tests -p test_trim_rootfs.py -v
       - name: Download unchanged baseline
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: rootfs
           path: baseline
@@ -86,7 +86,7 @@ jobs:
             --work .tmp/trim-validation --dist dist
       - name: Save candidate and validation evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rootfs-trim-validation
           path: dist/
