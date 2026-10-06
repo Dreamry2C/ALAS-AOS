@@ -50,6 +50,8 @@ jobs:
     needs: rootfs
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      KEYSTORE_PATH: ${{ github.workspace }}/.tmp/signing/release.keystore
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,6 +64,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Prepare project-local temporary directory
         run: mkdir -p .tmp/ci
+      - name: Restore and verify release signing key
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: python3 app/scripts/release_identity.py prepare
       - name: Download rootfs built and validated in this run
         uses: actions/download-artifact@v4
         with:
@@ -72,11 +82,26 @@ jobs:
           mkdir -p app/app/src/main/assets/rootfs
           xz --test .tmp/rootfs-dist/rootfs.tar.xz
           cp .tmp/rootfs-dist/rootfs.tar.xz .tmp/rootfs-dist/BUILD_MANIFEST app/app/src/main/assets/rootfs/
-      - name: Build Release APK
+      - name: Kotlin unit tests
         env:
           TMPDIR: ${{ github.workspace }}/.tmp/ci
-        run: bash app/gradlew -p app :app:testDebugUnitTest :app:assembleRelease --no-daemon --console=plain
+        run: bash app/gradlew -p app :app:testDebugUnitTest --no-daemon --console=plain
+      - name: Build Release APK
+        if: github.event_name != 'pull_request'
+        env:
+          TMPDIR: ${{ github.workspace }}/.tmp/ci
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bash app/gradlew -p app :app:assembleRelease --no-daemon --console=plain
+      - name: Verify APK signing certificate and version
+        if: github.event_name != 'pull_request'
+        run: python3 app/scripts/release_identity.py verify
+      - name: Remove temporary signing key
+        if: always() && github.event_name != 'pull_request'
+        run: rm -f -- "$KEYSTORE_PATH"
       - name: Verify bundled rootfs and report APK size
+        if: github.event_name != 'pull_request'
         run: |
           python3 - <<'PY'
           import hashlib
@@ -108,6 +133,7 @@ jobs:
               summary.write(report)
           PY
       - name: Upload Release APK
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: ALAS-AOS-release

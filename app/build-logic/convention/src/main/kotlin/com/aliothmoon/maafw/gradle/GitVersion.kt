@@ -1,24 +1,6 @@
 package com.aliothmoon.maafw.gradle
 
 import org.gradle.api.Project
-import java.io.File
-
-/**
- * A standalone checkout versions itself. When this checkout is a submodule, walk through any
- * nested superprojects and version from the outermost repository instead.
- */
-private fun Project.versionGitWorkingDir(): File {
-    var workingDir = rootProject.projectDir
-    while (true) {
-        val superproject = providers.exec {
-            workingDir(workingDir)
-            commandLine("git", "rev-parse", "--show-superproject-working-tree")
-            isIgnoreExitValue = true
-        }.standardOutput.asText.get().trim()
-        if (superproject.isEmpty()) return workingDir
-        workingDir = File(superproject)
-    }
-}
 
 /** Installation versions are explicit: rewriting Git history must not downgrade an APK. */
 internal fun Project.gitVersionCode(): Int {
@@ -29,20 +11,11 @@ internal fun Project.gitVersionCode(): Int {
     return code
 }
 
-/**
- * A tag on HEAD gives x.y.z; a tag further back bumps patch by one and appends alpha.<distance>
- * A describe output that does not match degrades to itself instead of blocking the build
- */
+/** Display versions are explicit too: a shallow or rewritten history must never expose a SHA. */
 internal fun Project.gitVersionName(): String {
-    val gitWorkingDir = versionGitWorkingDir()
-    val desc = providers.exec {
-        workingDir(gitWorkingDir)
-        commandLine("git", "describe", "--tags", "--always")
-        isIgnoreExitValue = true
-    }.standardOutput.asText.get().trim()
-    val match = Regex("""^v?(\d+)\.(\d+)\.(\d+)(?:-(\d+)-g[0-9a-f]+)?$""").matchEntire(desc)
-        ?: return desc.removePrefix("v").ifEmpty { "0.0.0-dev" }
-    val (major, minor, patch, distance) = match.destructured
-    return if (distance.isEmpty()) "$major.$minor.$patch"
-    else "$major.$minor.${patch.toInt() + 1}-alpha.$distance"
+    val name = providers.gradleProperty("app.versionName").orNull.orEmpty()
+    require(Regex("""\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?""").matches(name)) {
+        "Set app.versionName in gradle.properties to a version such as 0.1.6 or 0.1.6-alpha.1"
+    }
+    return name
 }
