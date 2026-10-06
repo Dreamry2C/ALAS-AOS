@@ -55,15 +55,20 @@ def prepare():
 
 
 def verify_identity(cert_output, badging, expected):
-    certificates = re.findall(r'^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$',
-                              cert_output, re.MULTILINE)
-    if len(certificates) != 1 or certificates[0].lower() != expected['app.signingCertificateSha256']:
-        raise ValueError('APK signing certificate does not match existing installations')
+    # Human-readable signer labels differ across build-tools and SDK-targeted signatures.
+    # Hash the certificate DER itself; repeated SDK ranges may legitimately print the same cert.
+    pem = re.findall(r'-----BEGIN CERTIFICATE-----\s*([A-Za-z0-9+/=\s]+?)\s*-----END CERTIFICATE-----', cert_output)
+    certificates = {hashlib.sha256(base64.b64decode(''.join(body.split()), validate=True)).hexdigest() for body in pem}
+    if not certificates:
+        raise ValueError('apksigner did not output a signing certificate')
+    if certificates != {expected['app.signingCertificateSha256']}:
+        raise ValueError('APK signing certificate does not match existing installations; observed SHA-256: '
+                         + ', '.join(sorted(certificates)))
     package = re.search(r"^package: name='[^']+' versionCode='(\d+)' versionName='([^']+)'", badging, re.MULTILINE)
     if not package or package.group(1) != expected['app.versionCode'] or package.group(2) != expected['app.versionName']:
         raise ValueError('APK version does not match app/gradle.properties')
     return {'versionName': package.group(2), 'versionCode': int(package.group(1)),
-            'certificateSha256': certificates[0].lower()}
+            'certificateSha256': next(iter(certificates))}
 
 
 def verify(apk):
@@ -74,7 +79,7 @@ def verify(apk):
     if not jars:
         raise ValueError('Android SDK apksigner is unavailable')
     jar = max(jars, key=lambda p: tuple(map(int, re.findall(r'\d+', p.parent.parent.name))))
-    result = subprocess.run([java_tool('java'), '-jar', str(jar), 'verify', '--print-certs', str(apk)],
+    result = subprocess.run([java_tool('java'), '-jar', str(jar), 'verify', '--print-certs-pem', str(apk)],
                             capture_output=True, text=True)
     if result.returncode:
         raise ValueError('APK signature verification failed')
