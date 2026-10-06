@@ -9,6 +9,8 @@ import org.gradle.api.tasks.Copy
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.register
+import java.security.KeyStore
+import java.security.MessageDigest
 
 /** ABIs that ship; a debug build can narrow to one via build.debugAbi to save build time. ALAS-AOS: arm64 only — the bundled rootfs is ARM64 Ubuntu and proot does not emulate, so x86_64 could never run ALAS */
 private val SHIPPED_ABIS = listOf("arm64-v8a")
@@ -89,17 +91,42 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 }
             }
 
-            // Without a keystore the release stays unsigned, so a local build never fails
-            // just for missing signing material
+            // Release builds must use the existing installation's key, never an ephemeral debug key.
             val keystorePath = signingSetting("KEYSTORE_PATH", "KEYSTORE_PATH")
+            val releaseStorePassword = signingSetting("KEYSTORE_PASSWORD", "KEYSTORE_PASSWORD")
+            val releaseKeyAlias = signingSetting("KEY_ALIAS", "KEY_ALIAS")
+            val releaseKeyPassword = signingSetting("KEY_PASSWORD", "KEY_PASSWORD")
+            val expectedCertificate = providers.gradleProperty("app.signingCertificateSha256").orNull.orEmpty()
             val releaseSigning = android.signingConfigs.create("release").apply {
                 if (keystorePath.isNotEmpty()) {
                     storeFile = file(keystorePath)
-                    storePassword = signingSetting("KEYSTORE_PASSWORD", "KEYSTORE_PASSWORD")
-                    keyAlias = signingSetting("KEY_ALIAS", "KEY_ALIAS")
-                    keyPassword = signingSetting("KEY_PASSWORD", "KEY_PASSWORD")
+                    storePassword = releaseStorePassword
+                    keyAlias = releaseKeyAlias
+                    keyPassword = releaseKeyPassword
                 }
             }
+            val verifySigning = tasks.register("verifyReleaseSigning") {
+                doLast {
+                    val required = mapOf("KEYSTORE_PATH" to keystorePath, "KEYSTORE_PASSWORD" to releaseStorePassword,
+                        "KEY_ALIAS" to releaseKeyAlias, "KEY_PASSWORD" to releaseKeyPassword)
+                    val missing = required.filterValues { it.isBlank() }.keys
+                    require(missing.isEmpty()) { "Release signing configuration is missing: ${missing.joinToString()}" }
+                    require(Regex("[0-9a-f]{64}").matches(expectedCertificate)) {
+                        "Set app.signingCertificateSha256 to the existing installation's certificate SHA-256"
+                    }
+                    val store = runCatching {
+                        KeyStore.getInstance(file(keystorePath), releaseStorePassword.toCharArray()).also {
+                            require(it.getKey(releaseKeyAlias, releaseKeyPassword.toCharArray()) != null)
+                        }
+                    }.getOrElse { throw IllegalArgumentException("Cannot open the configured release signing key") }
+                    val certificate = requireNotNull(store.getCertificate(releaseKeyAlias)) { "Release signing certificate is missing" }
+                    val digest = MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
+                        .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                    require(digest == expectedCertificate) { "Release signing certificate does not match existing installations" }
+                    logger.lifecycle("Release signing certificate verified: $digest")
+                }
+            }
+            tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(verifySigning) }
 
             extensions.configure<ApplicationAndroidComponentsExtension> {
                 onVariants { variant ->
@@ -146,7 +173,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                         android.getDefaultProguardFile("proguard-android-optimize.txt"),
                         "proguard-rules.pro",
                     )
-                    signingConfig = if (keystorePath.isNotEmpty()) releaseSigning else getByName("debug").signingConfig
+                    signingConfig = releaseSigning
                 }
             }
 
