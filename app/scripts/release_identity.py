@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,6 +23,11 @@ def settings():
 def java_tool(name):
     home = os.environ.get('JAVA_HOME')
     return str(Path(home) / 'bin' / (name + ('.exe' if os.name == 'nt' else ''))) if home else name
+
+
+def release_apk():
+    version = settings()['app.versionName']
+    return ROOT / f'app/app/build/outputs/apk/release/ALAS-AOS-v{version}-arm64-v8a-release.apk'
 
 
 def prepare():
@@ -88,21 +94,28 @@ def verify(apk):
     if metadata.returncode:
         raise ValueError('Cannot read APK version metadata')
     identity = verify_identity(result.stdout, metadata.stdout, settings())
+    with zipfile.ZipFile(apk) as archive:
+        abis = sorted({name.split('/')[1] for name in archive.namelist()
+                       if name.startswith('lib/') and name.endswith('.so')})
+    if abis != ['arm64-v8a']:
+        raise ValueError('APK native ABIs do not match the arm64-v8a package label')
+    identity['abis'] = abis
     identity['apkBytes'] = apk.stat().st_size
     print(json.dumps(identity, indent=2))
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
-            summary.write(f"Release **{identity['versionName']}** (code {identity['versionCode']}); "
+            summary.write(f"Release **{identity['versionName']}** (code {identity['versionCode']}), "
+                          "**arm64-v8a / 64-bit ARM only**; "
                           f"certificate SHA-256: `{identity['certificateSha256']}`.\n\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('prepare', 'verify'))
-    parser.add_argument('--apk', type=Path, default=ROOT / 'app/app/build/outputs/apk/release/app-release.apk')
+    parser.add_argument('--apk', type=Path)
     args = parser.parse_args()
     try:
-        prepare() if args.action == 'prepare' else verify(args.apk)
+        prepare() if args.action == 'prepare' else verify(args.apk or release_apk())
     except ValueError as error:
         # Only bounded validation messages; raw keytool/apksigner diagnostics stay private.
         print('Release identity check failed: ' + str(error), file=sys.stderr)
