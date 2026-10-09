@@ -9,6 +9,7 @@ import io
 from pathlib import Path
 import re
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -33,6 +34,31 @@ class Control:
         if running:
             self.last_config = running[0].config_name
         return self.managers.get_manager(self.last_config)
+
+    def delete_config(self, config):
+        # Shared with native WebUI starts/stops: a running configuration cannot
+        # disappear between the alive check and the atomic move.
+        with self.lock:
+            if (not config or '/' in config or '\\' in config or '\x00' in config
+                    or config not in self.configs()):
+                raise ValueError('unknown_configuration')
+            path = Path('config') / (config + '.json')
+            if path.is_symlink() or path.resolve().parent != Path('config').resolve():
+                raise ValueError('unknown_configuration')
+            instance = config.rsplit('.', 1)[0] if '.' in config else config
+            if any(m.config_name in (config, instance) for m in self.managers.running_instances()):
+                raise ValueError('configuration_running')
+            remaining = [name for name in self.configs() if name != config]
+            if not remaining:
+                raise ValueError('last_configuration')
+            # Keep a private recovery copy, outside the list of selectable JSONs.
+            backup = Path('config/.alasaos-deleted') / uuid.uuid4().hex
+            backup.mkdir(parents=True)
+            path.rename(backup / path.name)
+            if self.last_config in (config, instance):
+                self.last_config = remaining[0]
+            self._state_cache.pop(instance, None)
+            return {'deleted': config}
 
     def logs(self, count=200):
         # Native run_process sets this instance's file logger before any imports.
@@ -119,6 +145,11 @@ def install():
     @functools.wraps(original_start)
     def start(manager, func, *args, **kwargs):
         with control.lock:
+            # Old browser sessions may still hold a manager after deletion.
+            from module.config.utils import filepath_config
+            from module.submodule.utils import get_config_mod
+            if not Path(filepath_config(manager.config_name, get_config_mod(manager.config_name))).is_file():
+                raise ValueError('Unknown configuration')
             if not manager.alive:
                 manager._alasaos_func = func or 'alas'
                 control.last_config = manager.config_name
@@ -154,6 +185,8 @@ def install():
                             result = control.status()
                         elif self.command == 'GET' and url.path == '/configs':
                             result = {'configs': control.configs()}
+                        elif self.command == 'POST' and url.path == '/configs/delete':
+                            result = control.delete_config(query.get('config', [''])[0])
                         elif self.command == 'GET' and url.path == '/logs':
                             count = max(1, min(int(query.get('tail', ['200'])[0]), 2000))
                             result = control.logs(count)
