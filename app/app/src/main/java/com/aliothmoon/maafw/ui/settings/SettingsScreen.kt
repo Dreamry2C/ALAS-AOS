@@ -39,8 +39,9 @@ import com.aliothmoon.maafw.domain.ThemeMode
 import com.aliothmoon.maafw.i18n.AppLocales
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.SettingsUiState
-import com.aliothmoon.maafw.theme.MaaDesignTokens
+import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.theme.ThemeStyle
+import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.ui.components.MaaCard
 import com.aliothmoon.maafw.ui.components.MaaFieldLabel
 import com.aliothmoon.maafw.ui.components.MaaInfoRow
@@ -82,7 +83,7 @@ fun SettingsScreen(
                 Text(
                     text = stringResource(R.string.nav_settings),
                     style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = if (MaaTheme.isMaterial) FontWeight.Normal else FontWeight.SemiBold,
                 )
             },
             windowInsets = WindowInsets(0, 0, 0, 0),
@@ -115,7 +116,7 @@ fun SettingsScreen(
     }
 }
 
-/** 主题、主题风格、语言：三组都只改观感，合成一张卡（对齐 MaaMeow 的「显示设置」） */
+/** Material 3 appearance and application language. */
 @Composable
 private fun DisplayCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
     MaaCard(title = stringResource(R.string.settings_section_display), collapsible = true) {
@@ -132,12 +133,12 @@ private fun DisplayCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Un
         )
         Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
         MaaFieldLabel(stringResource(R.string.settings_theme_style))
-        val styles = listOf(
-            ThemeStyle.DEFAULT to stringResource(R.string.settings_theme_style_default),
-            ThemeStyle.SEMI_DESIGN to stringResource(R.string.settings_theme_style_semi),
-        )
         MaaSingleChoiceFlow(
-            options = styles,
+            options = listOf(
+                ThemeStyle.MATERIAL to stringResource(R.string.settings_theme_style_material),
+                ThemeStyle.DEFAULT to stringResource(R.string.settings_theme_style_default),
+                ThemeStyle.SEMI_DESIGN to stringResource(R.string.settings_theme_style_semi),
+            ),
             selected = state.themeStyle,
             onSelect = { onIntent(SettingsIntent.SetThemeStyle(it)) },
         )

@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -214,7 +215,10 @@ fun AlasScreen(
                 if (webView === it) webView = null
                 it.destroy()
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().onSizeChanged {
+                // Keep the existing viewport workaround in sync without reloading ALAS on rotation.
+                webView?.post { webView?.evaluateJavascript(SCOPE_HEIGHT_FIX_JS, null) }
+            },
         )
 
         AnimatedVisibility(
