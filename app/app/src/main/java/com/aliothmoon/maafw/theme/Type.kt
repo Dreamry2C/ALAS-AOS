@@ -10,7 +10,7 @@ import androidx.compose.ui.unit.sp
  * 字阶对齐 Material 3 type scale 的常用业务档（size 用偶数 sp）
  * 角色用法见 docs/design-system.md §1；Screen 只取 typography 角色，不写裸 sp
  */
-val Typography = Typography(
+val LegacyTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,

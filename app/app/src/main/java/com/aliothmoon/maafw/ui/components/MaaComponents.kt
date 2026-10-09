@@ -6,6 +6,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -85,9 +85,9 @@ fun MaaCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = if (MaaTheme.isMaterial) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = MaaTheme.style.cardElevation),
-        border = BorderStroke(MaaDesignTokens.Separator.thickness, MaterialTheme.colorScheme.outline),
+        border = if (MaaTheme.isMaterial) null else BorderStroke(MaaDesignTokens.Separator.thickness, MaterialTheme.colorScheme.outline),
     ) {
         Column(
             modifier = Modifier.padding(contentPadding),
@@ -188,21 +188,13 @@ fun MaaLabeledControlRow(
     }
 }
 
-/**
- * 按钮的统一形状：走 `MaaTheme.style.radii.button`
- *
- * M3 的 `Button` 默认形状取自它自己的 token（`CornerFull` → 胶囊），**不经过主题的 `Shapes`**，
- * 所以换主题风格也压不到它。全仓的按钮一律走这两个 wrapper，别直接用 M3 的
- *
- * 只包了形状的**默认值**，其余参数原样透传：颜色与内边距按场景各不相同，包死反而要再开一堆口子。
- * [shape] 仍可覆盖，但只在「要跟旁边的输入框或卡片对齐」时才该覆盖，且写清理由
- */
+/** Shared Material 3 button shape; preserve each existing screen's sizing and layout. */
 @Composable
 fun MaaButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    shape: Shape = RoundedCornerShape(MaaTheme.style.radii.button),
+    shape: Shape = if (MaaTheme.isMaterial) ButtonDefaults.shape else RoundedCornerShape(MaaTheme.style.radii.button),
     colors: ButtonColors = ButtonDefaults.buttonColors(),
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     content: @Composable RowScope.() -> Unit,
@@ -223,7 +215,7 @@ fun MaaOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    shape: Shape = RoundedCornerShape(MaaTheme.style.radii.button),
+    shape: Shape = if (MaaTheme.isMaterial) ButtonDefaults.shape else RoundedCornerShape(MaaTheme.style.radii.button),
     colors: ButtonColors = ButtonDefaults.outlinedButtonColors(),
     border: BorderStroke? = ButtonDefaults.outlinedButtonBorder(enabled),
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
@@ -288,8 +280,8 @@ fun MaaNavigationRow(
 @Composable
 fun MaaCardSurface(
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.surface,
-    border: BorderStroke = BorderStroke(MaaDesignTokens.Separator.thickness, MaterialTheme.colorScheme.outline),
+    color: Color = if (MaaTheme.isMaterial) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surface,
+    border: BorderStroke? = if (MaaTheme.isMaterial) null else BorderStroke(MaaDesignTokens.Separator.thickness, MaterialTheme.colorScheme.outline),
     content: @Composable () -> Unit,
 ) {
     Surface(
