@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import com.aliothmoon.maafw.ui.components.MaaButton
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -130,10 +132,25 @@ fun AlasScreen(
 ) {
     var loadFailed by remember { mutableStateOf(false) }
     var pageReady by remember { mutableStateOf(false) }
+    var hasShownPage by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     val hostSnapshot by hostState.snapshot.collectAsStateWithLifecycle()
     val prootState by prootHost.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val mobileAdaptation = remember { context.assets.open("alas-webview.js").bufferedReader().use { it.readText() } }
+    var deleteRequest by remember { mutableStateOf<Pair<WebView, String>?>(null) }
+    val fileTransfer = rememberAlasFileTransfer { view, name -> deleteRequest = view to name }
+    deleteRequest?.let { request ->
+        AlasConfigDeleteDialog(request.second, onDismiss = { deleteRequest = null }) {
+            deleteRequest = null
+            if (webView === request.first) {
+                // A deleted instance must not remain the WebUI's saved selection.
+                request.first.evaluateJavascript("localStorage.removeItem('aside');", null)
+                request.first.reload()
+            }
+        }
+    }
 
     LaunchedEffect(active, hostSnapshot.privilegedConnected) {
         if (active && hostSnapshot.privilegedConnected) {
@@ -156,7 +173,7 @@ fun AlasScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().imePadding()) {
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
@@ -167,6 +184,7 @@ fun AlasScreen(
                     // pywebio 是 SPA，JS 与 localStorage 都要开
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
+                    webChromeClient = fileTransfer
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
                             view: WebView,
@@ -180,17 +198,22 @@ fun AlasScreen(
 
                         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                             loadFailed = false
-                            pageReady = false
+                            // Internal navigation is not a new environment startup.
+                            if (!hasShownPage) pageReady = false
                         }
 
                         override fun onPageFinished(view: WebView, url: String?) {
                             canGoBack = view.canGoBack()
                             // 主文档失败不算就绪（onReceivedError 已置位），开屏就不淡出
-                            if (!loadFailed) pageReady = true
+                            if (!loadFailed) {
+                                pageReady = true
+                                hasShownPage = true
+                            }
                             // 见 SCOPE_HEIGHT_FIX_JS：本机 vh=0，补像素高度
                             view.evaluateJavascript(SCOPE_HEIGHT_FIX_JS, null)
                             // Fix marked wrapper frames and real spinners; only fill/idle stops rotating.
                             view.evaluateJavascript(IDLE_SPINNER_FIX_JS, null)
+                            if (AlasConfigDownload.isAlasOrigin(url)) view.evaluateJavascript(mobileAdaptation, null)
                         }
 
                         override fun onReceivedError(
@@ -202,6 +225,7 @@ fun AlasScreen(
                             if (request.isForMainFrame) {
                                 canGoBack = view.canGoBack()
                                 loadFailed = true
+                                pageReady = false
                             }
                         }
                     }

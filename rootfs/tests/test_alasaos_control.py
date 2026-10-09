@@ -87,6 +87,43 @@ class SharedControlTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.control.start(config)
         self.assertEqual(self.native.starts,0)
 
+    def prepare_configs(self):
+        Path('config').mkdir()
+        Path('config/alas.json').write_text('{"keep": true}')
+        Path('config/other.json').write_text('{"test": true}')
+        del self.control.configs
+
+    def test_delete_moves_only_selected_config_and_changes_current(self):
+        self.prepare_configs()
+        self.control.last_config = 'other'
+        self.control.delete_config('other')
+        self.assertEqual(self.control.configs(), ['alas'])
+        self.assertEqual(self.control.last_config, 'alas')
+        saved = list(Path('config/.alasaos-deleted').glob('*/other.json'))
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(saved[0].read_text(), '{"test": true}')
+        self.assertEqual(Path('config/alas.json').read_text(), '{"keep": true}')
+
+    def test_delete_rejects_running_and_last_config(self):
+        self.prepare_configs()
+        self.native.start()
+        with self.assertRaisesRegex(ValueError, 'configuration_running'):
+            self.control.delete_config('alas')
+        self.assertTrue(Path('config/alas.json').is_file())
+        self.control.delete_config('other')
+        self.native.stop()
+        with self.assertRaisesRegex(ValueError, 'last_configuration'):
+            self.control.delete_config('alas')
+
+    def test_delete_rejects_traversal_unknown_and_template(self):
+        self.prepare_configs()
+        Path('config/template.json').write_text('{}')
+        for name in ('../other', '..\\other', 'missing', 'template', ''):
+            with self.assertRaises(ValueError):
+                self.control.delete_config(name)
+        self.assertTrue(Path('config/other.json').is_file())
+        self.assertFalse(Path('config/.alasaos-deleted').exists())
+
 class BridgeShellTests(unittest.TestCase):
     def setUp(self):
         tree=ast.parse((ROOT/'rootfs/patches/module/device/connection.py').read_text(encoding='utf-8'))

@@ -1,5 +1,11 @@
 # Debug · 坑点记录
 
+## [2026-10-10] ALAS 列表刷新抽动与 WebView 文件操作失效
+
+- **现象**：任务列表周期抽动，管理页闪启动检查，配置表单被键盘遮挡，浏览/导出无响应。
+- **根因**：列表分多条消息清空/重建，空内容导致网格重排；普通导航重置启动遮罩；PyWebIO 默认底部输入面板，宿主缺少 IME 避让和文件选择/Blob 保存接管。
+- **解决**：AOS 注入在更新短窗口保持网格轨道，表单按可见视口居中；宿主保留已显示页面状态并处理 IME inset。WebChromeClient 接入系统文件选择，限制本机来源接收 FileSaver Blob。测试须等待保存完成再读取文件，刚创建的文件可能仍为 0 字节。
+
 > 本文件记录新阶段踩过的坑（现象 / 根本原因 / 解决方案）。
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。
