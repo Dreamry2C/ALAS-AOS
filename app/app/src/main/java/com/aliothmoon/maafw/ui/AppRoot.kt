@@ -1,5 +1,7 @@
 package com.aliothmoon.maafw.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -75,6 +77,7 @@ import com.aliothmoon.maafw.provision.RootfsProvisioner
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.SettingsViewModel
 import com.aliothmoon.maafw.service.HostState
+import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaFwTheme
 import com.aliothmoon.maafw.ui.components.clearFocusOnBlankTap
@@ -225,9 +228,9 @@ fun AppRoot(
                 Column {
                     HorizontalDivider(
                         thickness = MaaDesignTokens.Separator.thickness,
-                        color = MaterialTheme.colorScheme.outline,
+                        color = if (MaaTheme.isMaterial) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.outline,
                     )
-                    Surface(color = MaterialTheme.colorScheme.surface) {
+                    Surface(color = if (MaaTheme.isMaterial) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -238,7 +241,7 @@ fun AppRoot(
                             TopDestination.entries.forEachIndexed { index, destination ->
                                 val selected = pagerState.currentPage == index
                                 val tint = if (selected) {
-                                    MaterialTheme.colorScheme.primary
+                                    if (MaaTheme.isMaterial) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.primary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 }
@@ -258,11 +261,22 @@ fun AppRoot(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center,
                                 ) {
-                                    Icon(
-                                        imageVector = if (selected) destination.filledIcon else destination.outlinedIcon,
-                                        contentDescription = stringResource(destination.labelRes),
-                                        tint = tint,
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                if (MaaTheme.isMaterial && selected) MaterialTheme.colorScheme.secondaryContainer
+                                                else androidx.compose.ui.graphics.Color.Transparent,
+                                                CircleShape,
+                                            )
+                                            .padding(horizontal = if (MaaTheme.isMaterial) 20.dp else 0.dp, vertical = if (MaaTheme.isMaterial) 3.dp else 0.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = if (selected) destination.filledIcon else destination.outlinedIcon,
+                                            contentDescription = null,
+                                            tint = tint,
+                                        )
+                                    }
                                     Spacer(Modifier.height(MaaDesignTokens.Spacing.xxs))
                                     Text(
                                         text = stringResource(destination.labelRes),

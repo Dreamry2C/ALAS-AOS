@@ -15,7 +15,7 @@ import com.aliothmoon.maafw.theme.ThemeStyle
 data class SettingsUiState(
     val remoteAccess: RemoteAccessState = RemoteAccessState(),
     val themeMode: ThemeMode = ThemeMode.System,
-    val themeStyle: ThemeStyle = ThemeStyle.DEFAULT,
+    val themeStyle: ThemeStyle = ThemeStyle.MATERIAL,
     val autoCleanLogs: Boolean = true,
     val runMode: RunMode = RunMode.BACKGROUND,
     val updateSource: String = "",
