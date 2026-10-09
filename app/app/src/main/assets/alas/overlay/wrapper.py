@@ -166,7 +166,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def relay(self):
         if self.path.split('?', 1)[0] not in (
-                '/status', '/configs', '/logs', '/start', '/stop', '/tool/start', '/tool/stop'):
+                '/status', '/configs', '/configs/delete', '/logs', '/start', '/stop', '/tool/start', '/tool/stop'):
             self.send_error(404)
             return
         request = urllib.request.Request('http://127.0.0.1:22401' + self.path,

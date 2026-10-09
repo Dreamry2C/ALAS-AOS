@@ -3,11 +3,12 @@
 """AlasAos：由 config/template.json 生成 config/alas.json 并注入桥接配置。
 
 在 ~/alas 根目录下运行：python seed_config.py
-幂等：config/alas.json 已存在时不覆盖（改配置请走 WebUI）。
+幂等：已有用户配置时不再生成默认项（改配置请走 WebUI）。
 """
 import json
 import os
 import sys
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 # 允许从任意目录运行：脚本在 termux/ 下，ALAS 根目录取 ~/alas
@@ -28,6 +29,9 @@ OVERRIDES = {
 def main():
     if os.path.exists(DST):
         print(f'{DST} already exists, skip')
+        return
+    if any(not path.stem.startswith('template') for path in Path(ALAS, 'config').glob('*.json')):
+        print('User configurations already exist, skip default seed')
         return
     with open(SRC, encoding='utf-8') as f:
         cfg = json.load(f)
