@@ -1,5 +1,9 @@
 # Development
 
+## 当前 UI 外观
+
+宿主采用 Material 3 配色、控件形状和字阶，Android 12+ 支持系统动态色。仍为主页、ALAS、设置三个页面；主页继续顶部虚拟屏、中间配置/工具与运行状态、下方日志和启停的布局，页面高度分配、预览 Surface 和控制链保持原实现。主 Activity 继续锁定竖屏；横向窗口下主页以画面/配置和状态/日志并列显示，原全屏预览仍临时横屏。内嵌 ALAS 页面内容与渲染不变，仅宿主窗口改变尺寸时重新应用既有高度修正，不引入 apa 前端或运行时。主题风格提供 Material 3（默认）、经典蓝（DEFAULT）和 Semi Design 三档；未设置或非法值回落 MATERIAL，已保存的 DEFAULT/SEMI_DESIGN 选择保留。Material 3 使用系统动态色；三主题共用原紧凑字阶；选择项共用12sp字号、行高和间距，选中不显示勾且不改变尺寸。Material选项和配置框保留小圆角及显式描边，主操作保持胶囊形；旧主题保留各自配色与圆角。
+
 ## 当前阶段
 
 **阶段四应用内侧全落地**：M4-a ✅（悬浮窗直连 wrapper 薄 HTTP：调度器状态行 + 开始/停止挂机 + 半透明日志板；双头管理定案=悬浮窗唯一控制面）→ M4-b ✅（官方版 Shizuku 冲突引导：flavor 检测 + OfficialConflict 档 + 去卸载闭环；冲突分支真机未演留阶段五）→ M4-c ✅（开屏 `pageReady` 载入层淡出不再闪错误脸 + 面板分工 caption）→ M4-d ✅（M2-b 遗留②③④⑤核销：死 pref×7、分辨率安慰剂连根拔、runner/ 包删、okhttp/tracing/baselineprofile/toml 死账清）。**阶段四 DoD 只剩「开始挂机」端到端演示（真拉起 ALAS 操作游戏，必须用户在场）**，演示前置体检全绿（游戏在装/guest 配置一致/VD+桥+wrapper 通），过后进阶段五（多 ROM/长稳/Release/README）。**阶段五已开锣**：-3 断网容灾 ✅（审计 + PC 七场景 + 真机三态实证）、-4 桥截图定档 ✅（screencap p50=30ms，对照 >1s 不可用线富余 33 倍）；剩 -1 多 ROM 矩阵、-2 长稳挂机（依赖演示）、-5 shizuku-m 产品化、-6 Release/三仓库公开 + README。**阶段三已收官**（M3-a/b/c 全 ✅，重启恢复机制+文案落地、真机重启验证待用户授权）。阶段一 M1 已交付：rootfs 构建链 GHA 四连迭代至绿，v4 artifact 为交付基准；M1-d 真机复验 WebUI/MANIFEST 已过，**油数验收改走生产链（待用户把游戏点到出击菜单页）**。

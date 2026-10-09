@@ -98,7 +98,7 @@
     <string name="settings_follow_system">跟随系统</string>
     <string name="settings_theme_light">浅色</string>
     <string name="settings_theme_dark">深色</string>
-    <string name="settings_theme_style_default">默认</string>
+    <string name="settings_theme_style_default">经典蓝</string>
     <string name="settings_theme_style_semi">Semi Design</string>
     <string name="settings_language">语言</string>
     <string name="settings_language_hint">切换语言会重新加载项目，运行期间不可切换</string>
@@ -295,7 +295,7 @@
     <string name="proot_phase_failed">ALAS 环境启动失败：%1$s</string>
 
     <!-- 挂机 tab：虚拟屏画面 + 运行配置 + 控制面板 -->
-    <string name="nav_hangar">挂机</string>
+    <string name="nav_hangar">主页</string>
     <string name="hangar_env_down">环境未启动，暂无画面</string>
     <string name="hangar_env_start">启动环境</string>
     <string name="hangar_preview_waiting">正在接入画面…</string>
@@ -684,4 +684,5 @@
     <string name="transfer_unknown">已下载 %1$s · %2$s/s</string>
     <string name="transfer_known">%1$s / %2$s · %3$d%% · %4$s/s</string>
     <string name="provision_throughput">压缩包读取速度：%1$s/s</string>
+    <string name="settings_theme_style_material">Material 3</string>
 </resources>

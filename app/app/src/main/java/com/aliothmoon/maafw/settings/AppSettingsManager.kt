@@ -152,5 +152,5 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
         runCatching { OverlayControlMode.valueOf(raw) }.getOrDefault(OverlayControlMode.FLOAT_BALL)
 
     private fun parseThemeStyle(raw: String): ThemeStyle =
-        runCatching { ThemeStyle.valueOf(raw) }.getOrDefault(ThemeStyle.DEFAULT)
+        ThemeStyle.fromPreference(raw)
 }

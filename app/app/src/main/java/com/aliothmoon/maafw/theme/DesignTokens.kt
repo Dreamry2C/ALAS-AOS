@@ -6,7 +6,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * 与 [ThemeStyle] 无关的静态尺寸：间距、图标、描边、透明度
- * 圆角与卡片 elevation 随风格变，见 [MaaStyleTokens] / [MaaTheme.style]
+ * 辅助度量见 [MaaStyleTokens] / [MaaTheme.style]；标准组件采用 Material 3 默认 token
  */
 object MaaDesignTokens {
 
@@ -96,8 +96,8 @@ object MaaDesignTokens {
     }
 
     /**
-     * DEFAULT 卡片度量；elevation 随风格变时用 [MaaTheme.style]
-     * innerPadding / dragElevation 两风格共用
+     * Material 3 辅助卡片度量；组合内也可使用 [MaaTheme.style]
+     * innerPadding / dragElevation 由宿主共用
      */
     object Card {
         val elevation: Dp = DefaultStyleTokens.cardElevation
@@ -122,13 +122,7 @@ object MaaDesignTokens {
     }
 }
 
-/**
- * 随 [ThemeStyle] 变化的圆角档；间距/触控节奏不进此结构
- * Semi 档位对应官方 token：small→button/inner，medium→card，large→large
- *
- * 没有胶囊档：M3 的胶囊走 `CornerFull` → `CircleShape`，不读主题圆角，
- * 这里放一个大数只会经 `Shapes.extraLarge` 漏进对话框把它压成椭圆
- */
+/** Surface metrics for custom host components; standard M3 components own their shapes. */
 @Immutable
 data class MaaRadii(
     val card: Dp,
@@ -136,18 +130,11 @@ data class MaaRadii(
     val inner: Dp,
     /** 分段按钮相邻侧；比 [inner] 更收 */
     val segment: Dp,
-    /** 大容器（sheet / 对话框 / 大面板）；Semi 的 border-radius-large */
+    /** 大容器（sheet / 对话框 / 大面板） */
     val large: Dp = card,
 )
 
-/**
- * 随 [ThemeStyle] 变化的表面度量
- *
- * - DEFAULT：略圆 + 卡片 1dp 轻投影
- * - SEMI_DESIGN：圆角对齐 Semi Design token（small 3 / medium 6 / large 12），
- *   卡片 elevation 0，靠描边分层
- * 拖拽抬升与内边距两风格共用，不做成第二套密度
- */
+/** Shared host surface metrics, independent of the legacy saved theme preference. */
 @Immutable
 data class MaaStyleTokens(
     val radii: MaaRadii,
@@ -183,7 +170,13 @@ val SemiStyleTokens = MaaStyleTokens(
     cardElevation = 0.dp,
 )
 
+val MaterialStyleTokens = MaaStyleTokens(
+    radii = MaaRadii(card = 12.dp, button = 20.dp, inner = 8.dp, segment = 4.dp, large = 28.dp),
+    cardElevation = 0.dp,
+)
+
 fun styleTokensOf(style: ThemeStyle): MaaStyleTokens = when (style) {
+    ThemeStyle.MATERIAL -> MaterialStyleTokens
     ThemeStyle.DEFAULT -> DefaultStyleTokens
     ThemeStyle.SEMI_DESIGN -> SemiStyleTokens
 }

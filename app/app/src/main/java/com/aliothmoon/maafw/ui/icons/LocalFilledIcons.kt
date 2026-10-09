@@ -7,6 +7,23 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
+private var _stop: ImageVector? = null
+
+/** Keep this simple glyph local instead of shipping the extended icon library. */
+public val Icons.Filled.Stop: ImageVector
+    get() = _stop ?: ImageVector.Builder(
+        name = "Filled.Stop", defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f,
+    ).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(6f, 6f)
+            horizontalLineTo(18f)
+            verticalLineTo(18f)
+            horizontalLineTo(6f)
+            close()
+        }
+    }.build().also { _stop = it }
+
 private var _playCircle: ImageVector? = null
 
 public val Icons.Filled.PlayCircle: ImageVector

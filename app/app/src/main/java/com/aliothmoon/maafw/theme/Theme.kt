@@ -1,5 +1,9 @@
 package com.aliothmoon.maafw.theme
 
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -121,8 +125,15 @@ private val BlueDark = createDarkColorScheme(
     onPrimaryContainer = Color(0xFFDBEAFE)
 )
 
-/** 可选主题风格；DEFAULT 是暖石色 + 蓝，SEMI_DESIGN 取 Semi Design 的冷灰 + 品牌蓝 */
-enum class ThemeStyle { DEFAULT, SEMI_DESIGN }
+/** Material 3 is the default; DEFAULT and SEMI_DESIGN retain their original saved identities. */
+enum class ThemeStyle {
+    MATERIAL, DEFAULT, SEMI_DESIGN;
+
+    companion object {
+        /** Saved names stay stable; absent or invalid preferences use the new default. */
+        fun fromPreference(raw: String?): ThemeStyle = entries.firstOrNull { it.name == raw } ?: MATERIAL
+    }
+}
 
 // Semi Design 默认主题配色；色值取自 @douyinfe/semi-theme-default 的 _palette.scss / global.scss
 // （primary=blue-5 #0064FA，中性 grey 冷灰，暗色 palette 反转）
@@ -254,14 +265,37 @@ private val SemiDarkMaaPalette = MaaPalette(
     switchOff = Color(0xFFA7ABB0),
 )
 
-val LocalMaaPalette = staticCompositionLocalOf { LightMaaPalette }
+private val MaterialLightPalette = MaaPalette(
+    success = MaaTone(Color(0xFF146C2E), Color(0xFFB8F1BE)),
+    warning = MaaTone(Color(0xFF8F4C00), Color(0xFFFFDCC0)),
+    info = MaaTone(Color(0xFF435E91), Color(0xFFD9E2FF)),
+    violet = MaaTone(Color(0xFF68548E), Color(0xFFECDCFF)),
+    neutral = MaaTone(Color(0xFF44474F), Color(0xFFE2E2E9)),
+    switchOff = Color(0xFF74777F),
+)
 
-val LocalMaaStyleTokens = staticCompositionLocalOf { DefaultStyleTokens }
+private val MaterialDarkPalette = MaaPalette(
+    success = MaaTone(Color(0xFF7FDA95), Color(0xFF00391A)),
+    warning = MaaTone(Color(0xFFFFB86B), Color(0xFF4C2700)),
+    info = MaaTone(Color(0xFFADC6FF), Color(0xFF294777)),
+    violet = MaaTone(Color(0xFFD3BCFD), Color(0xFF503D74)),
+    neutral = MaaTone(Color(0xFFC4C6CF), Color(0xFF31343B)),
+    switchOff = Color(0xFF8E9099),
+)
 
-val LocalThemeStyle = staticCompositionLocalOf { ThemeStyle.DEFAULT }
+val LocalMaaPalette = staticCompositionLocalOf { MaterialLightPalette }
+
+val LocalMaaStyleTokens = staticCompositionLocalOf { MaterialStyleTokens }
+
+val LocalThemeStyle = staticCompositionLocalOf { ThemeStyle.MATERIAL }
 
 /** 主题扩展读取入口；Screen 不直接碰 DataStore / ThemeStyle 分支 */
 object MaaTheme {
+    val isMaterial: Boolean
+        @Composable
+        @ReadOnlyComposable
+        get() = themeStyle == ThemeStyle.MATERIAL
+
     val palette: MaaPalette
         @Composable
         @ReadOnlyComposable
@@ -294,11 +328,13 @@ private fun shapesOf(tokens: MaaStyleTokens): Shapes = Shapes(
 )
 
 private fun colorSchemeOf(style: ThemeStyle, dark: Boolean): ColorScheme = when (style) {
+    ThemeStyle.MATERIAL -> if (dark) darkColorScheme() else lightColorScheme()
     ThemeStyle.DEFAULT -> if (dark) BlueDark else BlueLight
     ThemeStyle.SEMI_DESIGN -> if (dark) SemiDark else SemiLight
 }
 
 private fun paletteOf(style: ThemeStyle, dark: Boolean): MaaPalette = when (style) {
+    ThemeStyle.MATERIAL -> if (dark) MaterialDarkPalette else MaterialLightPalette
     ThemeStyle.DEFAULT -> if (dark) DarkMaaPalette else LightMaaPalette
     ThemeStyle.SEMI_DESIGN -> if (dark) SemiDarkMaaPalette else SemiLightMaaPalette
 }
@@ -320,25 +356,35 @@ private object NoIndication : IndicationNodeFactory {
 
 @Composable
 fun MaaFwTheme(
-    themeStyle: ThemeStyle = ThemeStyle.DEFAULT,
+    themeStyle: ThemeStyle = ThemeStyle.MATERIAL,
     darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val styleTokens = styleTokensOf(themeStyle)
-    val colorScheme = colorSchemeOf(themeStyle, darkTheme)
-    val palette = paletteOf(themeStyle, darkTheme)
+    val context = LocalContext.current
+    val isMaterial = themeStyle == ThemeStyle.MATERIAL
+    val colorScheme = if (isMaterial && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else colorSchemeOf(themeStyle, darkTheme)
+    val basePalette = paletteOf(themeStyle, darkTheme)
+    val palette = if (isMaterial) basePalette.copy(
+        info = MaaTone(colorScheme.primary, colorScheme.primaryContainer),
+        neutral = MaaTone(colorScheme.onSurfaceVariant, colorScheme.surfaceContainerHigh),
+        switchOff = colorScheme.outline,
+    ) else basePalette
 
     CompositionLocalProvider(
         // maaClickable 自带按压缩放反馈；foundation 层 plain clickable 不再叠加涟漪
-        LocalIndication provides NoIndication,
+        LocalIndication provides if (isMaterial) LocalIndication.current else NoIndication,
         LocalMaaPalette provides palette,
         LocalMaaStyleTokens provides styleTokens,
         LocalThemeStyle provides themeStyle,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = Typography,
-            shapes = shapesOf(styleTokens),
+            typography = LegacyTypography,
+            shapes = if (isMaterial) Shapes() else shapesOf(styleTokens),
             content = content
         )
     }

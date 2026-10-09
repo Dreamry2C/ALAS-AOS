@@ -45,9 +45,9 @@ data class AppSettings(
     @PrefKey(default = "true")
     val autoCleanLogs: String = "true",
 
-    /** [com.aliothmoon.maafw.theme.ThemeStyle] 的 name；DEFAULT 暖石蓝，SEMI_DESIGN 取 Semi Design 配色 */
-    @PrefKey(default = "DEFAULT")
-    val themeStyle: String = "DEFAULT",
+    /** ThemeStyle name: Material 3 by default; existing classic and Semi preferences remain valid. */
+    @PrefKey(default = "MATERIAL")
+    val themeStyle: String = "MATERIAL",
 
     /** Legacy migration input only. Runtime source of truth is config/deploy.yaml. */
     @PrefKey(default = "")
