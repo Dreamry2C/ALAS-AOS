@@ -1,5 +1,16 @@
 package com.aliothmoon.maafw.ui.components
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Icon
+import com.aliothmoon.maafw.theme.MaaTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,8 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +73,7 @@ fun AlasControlPanel(
         Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
             AlasStatusRow(
                 labelRes = R.string.overlay_host_privileged,
+                healthy = snapshot.privilegedConnected,
                 value = stringResource(
                     if (snapshot.privilegedConnected) {
                         R.string.host_state_connected
@@ -72,6 +84,7 @@ fun AlasControlPanel(
             )
             AlasStatusRow(
                 labelRes = R.string.overlay_host_bridge,
+                healthy = snapshot.bridgeReachable,
                 value = stringResource(
                     if (snapshot.bridgeReachable) {
                         R.string.host_state_ok
@@ -82,6 +95,7 @@ fun AlasControlPanel(
             )
             AlasStatusRow(
                 labelRes = R.string.overlay_host_display,
+                healthy = snapshot.vdDisplayId != DefaultDisplayConfig.DISPLAY_NONE,
                 value = if (snapshot.vdDisplayId != DefaultDisplayConfig.DISPLAY_NONE) {
                     "#${snapshot.vdDisplayId}"
                 } else {
@@ -90,6 +104,7 @@ fun AlasControlPanel(
             )
             AlasStatusRow(
                 labelRes = R.string.overlay_alas_status,
+                healthy = alas.runnerAlive,
                 value = when {
                     !alas.reachable && proot.phase == ProotPhase.FAILED ->
                         stringResource(R.string.overlay_alas_start_failed, proot.detail)
@@ -116,6 +131,10 @@ fun AlasControlPanel(
             enabled = alas.reachable && !alas.busy,
             modifier = Modifier.fillMaxWidth(),
         ) {
+            if (MaaTheme.isMaterial) {
+                Icon(if (alas.runnerAlive) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = null)
+                androidx.compose.foundation.layout.Spacer(Modifier.size(MaaDesignTokens.Spacing.sm))
+            }
             Text(
                 stringResource(
                     if (alas.runnerAlive) {
@@ -143,7 +162,7 @@ fun AlasControlPanel(
     }
 }
 
-/** 半透明黑底日志板：新日志自动沉底；无内容时给占位提示 */
+/** Themed log surface; keeps the original viewport, density and auto-scroll behavior. */
 @Composable
 private fun AlasLogBoard(lines: List<String>, linesCount: Int, modifier: Modifier = Modifier) {
     val scrollState = rememberScrollState()
@@ -151,7 +170,8 @@ private fun AlasLogBoard(lines: List<String>, linesCount: Int, modifier: Modifie
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
-        color = Color.Black.copy(alpha = 0.55f),
+        color = if (MaaTheme.isMaterial) MaterialTheme.colorScheme.surfaceContainerLow else Color.Black.copy(alpha = 0.55f),
+        border = if (MaaTheme.isMaterial) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
     ) {
         Column(
             modifier = Modifier
@@ -163,7 +183,7 @@ private fun AlasLogBoard(lines: List<String>, linesCount: Int, modifier: Modifie
                 Text(
                     text = stringResource(R.string.overlay_alas_log_empty),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.LightGray,
+                    color = if (MaaTheme.isMaterial) MaterialTheme.colorScheme.onSurfaceVariant else Color.LightGray,
                 )
             } else {
                 Text(
@@ -173,7 +193,7 @@ private fun AlasLogBoard(lines: List<String>, linesCount: Int, modifier: Modifie
                         fontSize = 10.sp,
                         lineHeight = 13.sp,
                     ),
-                    color = Color(0xFFDDDDDD),
+                    color = if (MaaTheme.isMaterial) MaterialTheme.colorScheme.onSurface else Color(0xFFDDDDDD),
                 )
             }
         }
@@ -181,12 +201,23 @@ private fun AlasLogBoard(lines: List<String>, linesCount: Int, modifier: Modifie
 }
 
 @Composable
-private fun AlasStatusRow(labelRes: Int, value: String) {
-    Text(
-        text = stringResource(labelRes, value),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+private fun AlasStatusRow(labelRes: Int, value: String, healthy: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+    ) {
+        if (MaaTheme.isMaterial) {
+            Box(Modifier.size(MaaDesignTokens.IconSize.dotMd).background(
+                if (healthy) MaaTheme.palette.success.content else MaterialTheme.colorScheme.outline,
+                CircleShape,
+            ))
+        }
+        Text(
+            text = stringResource(labelRes, value),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 /**
@@ -206,7 +237,7 @@ private fun AlasToolSection(
         Text(
             text = stringResource(R.string.hangar_tool_label),
             style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = if (MaaTheme.isMaterial) MaterialTheme.colorScheme.onSurface else Color(0xFFDDDDDD),
         )
         Row(
             modifier = Modifier.fillMaxWidth(),

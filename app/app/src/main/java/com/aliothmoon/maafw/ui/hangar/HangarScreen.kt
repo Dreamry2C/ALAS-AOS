@@ -1,6 +1,8 @@
 package com.aliothmoon.maafw.ui.hangar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.OndemandVideo
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -54,6 +58,7 @@ import com.aliothmoon.maafw.proot.AlasRunController
 import com.aliothmoon.maafw.proot.AlasRunState
 import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
+import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.AlasControlPanel
 import com.aliothmoon.maafw.ui.components.MaaButton
 import com.aliothmoon.maafw.ui.components.ToolSlotButton
@@ -84,6 +89,8 @@ fun HangarScreen(
     val snapshot by hostState.snapshot.collectAsStateWithLifecycle()
     val alas by alasController.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val configuration = LocalConfiguration.current
+    val landscape = configuration.screenWidthDp > configuration.screenHeightDp
 
     // 本页可见且特权连接就绪时自动补一次「开始」链路建虚拟屏（HostState 内幂等）
     LaunchedEffect(active, snapshot.privilegedConnected) {
@@ -93,7 +100,7 @@ fun HangarScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        TopAppBar(
+        if (!landscape) TopAppBar(
             title = {
                 Text(
                     text = stringResource(R.string.nav_hangar),
@@ -108,7 +115,42 @@ fun HangarScreen(
                 titleContentColor = MaterialTheme.colorScheme.onBackground,
             ),
         )
-        Column(
+        if (landscape) {
+            Row(
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(MaaDesignTokens.Spacing.md),
+                horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.lg),
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+                ) {
+                    VdPreview(
+                        envUp = snapshot.vdDisplayId != DefaultDisplayConfig.DISPLAY_NONE,
+                        onStartEnv = { scope.launch { hostState.ensureEnvironmentStarted() } },
+                        content = previewContent,
+                        onEnterFullscreen = onEnterFullscreen,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        maintainAspectRatio = false,
+                    )
+                    ConfigToolRow(
+                        alas = alas,
+                        onSelect = alasController::selectConfig,
+                        onToolStart = { alasController.startTool(it) },
+                        onToolStop = { alasController.stopTool() },
+                    )
+                }
+                AlasControlPanel(
+                    snapshot = snapshot,
+                    alas = alas,
+                    onAlasStart = { alasController.startAlas() },
+                    onAlasStop = { alasController.stopAlas() },
+                    onToolStart = { alasController.startTool(it) },
+                    onToolStop = { alasController.stopTool() },
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    showTools = false,
+                )
+            }
+        } else Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -167,10 +209,13 @@ private fun VdPreview(
     content: (@Composable () -> Unit)?,
     onEnterFullscreen: () -> Unit,
     modifier: Modifier = Modifier,
+    maintainAspectRatio: Boolean = true,
 ) {
     Box(
         modifier = modifier
-            .aspectRatio(DefaultDisplayConfig.WIDTH.toFloat() / DefaultDisplayConfig.HEIGHT)
+            .then(if (maintainAspectRatio) {
+                Modifier.aspectRatio(DefaultDisplayConfig.WIDTH.toFloat() / DefaultDisplayConfig.HEIGHT)
+            } else Modifier)
             .clip(MaterialTheme.shapes.medium)
             .background(Color.Black),
         contentAlignment = Alignment.Center,
@@ -245,6 +290,7 @@ private fun ConfigToolRow(
     // 弹层宽度对齐锚按钮：DropdownMenu 默认按内容包宽，量出按钮宽显式喂给它
     var menuWidthPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    val configSelectionEnabled = !alas.runnerAlive && alas.configs.isNotEmpty()
     // 模块整体压高 ~30%：关掉 M3 的 48dp 最小交互尺寸强制（本行按钮/下拉显式给矮高）
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
         Row(
@@ -273,7 +319,14 @@ private fun ConfigToolRow(
             Box {
                 MaaOutlinedButton(
                     onClick = { expanded = true },
-                    enabled = !alas.runnerAlive && alas.configs.isNotEmpty(),
+                    enabled = configSelectionEnabled,
+                    // This is a selector field, so use the same small radius as choice chips.
+                    shape = if (MaaTheme.isMaterial) MaterialTheme.shapes.small
+                        else RoundedCornerShape(MaaTheme.style.radii.button),
+                    border = if (MaaTheme.isMaterial) BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outline.copy(alpha = if (configSelectionEnabled) 1f else 0.38f),
+                    ) else ButtonDefaults.outlinedButtonBorder(configSelectionEnabled),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(32.dp)
