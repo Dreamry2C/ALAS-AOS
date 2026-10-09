@@ -1,5 +1,6 @@
 """Runtime deploy reader / policy regressions, with no ALAS dependencies."""
 import os
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -10,6 +11,25 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class DeploySeedTests(unittest.TestCase):
+    def test_default_config_is_seeded_only_when_no_user_config_remains(self):
+        base = ROOT / '.tmp/deploy-seed-tests'
+        base.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=base) as tmp:
+            config = Path(tmp) / 'config'
+            config.mkdir()
+            (config / 'template.json').write_text(json.dumps({'Alas': {'Emulator': {}}}))
+            other = config / 'other.json'
+            other.write_text('{"keep": true}')
+            env = dict(os.environ, ALASAOS_ALAS_ROOT=tmp, PYTHONDONTWRITEBYTECODE='1')
+            command = [sys.executable, str(ROOT / 'rootfs/seeds/seed_config.py')]
+            subprocess.run(command, env=env, capture_output=True, check=True, timeout=10)
+            self.assertFalse((config / 'alas.json').exists())
+            self.assertEqual(other.read_text(), '{"keep": true}')
+            other.unlink()
+            subprocess.run(command, env=env, capture_output=True, check=True, timeout=10)
+            seeded = json.loads((config / 'alas.json').read_text())
+            self.assertEqual(seeded['Alas']['Emulator']['Serial'], 'alasaos')
+
     def test_policy_and_source_reader_preserve_user_settings_and_line_endings(self):
         base = ROOT / '.tmp/deploy-seed-tests'
         base.mkdir(parents=True, exist_ok=True)
