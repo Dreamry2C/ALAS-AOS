@@ -102,7 +102,7 @@
     <string name="settings_follow_system">System default</string>
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>
-    <string name="settings_theme_style_default">Default</string>
+    <string name="settings_theme_style_default">Classic Blue</string>
     <string name="settings_theme_style_semi">Semi Design</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_hint">Switching language reloads the project; unavailable while running</string>
@@ -299,7 +299,7 @@
     <string name="proot_phase_failed">Failed to start ALAS environment: %1$s</string>
 
     <!-- Hangar tab: virtual display preview + run config + control panel -->
-    <string name="nav_hangar">Farming</string>
+    <string name="nav_hangar">Home</string>
     <string name="hangar_env_down">Environment not started — no preview</string>
     <string name="hangar_env_start">Start environment</string>
     <string name="hangar_preview_waiting">Connecting preview…</string>
@@ -689,4 +689,5 @@
     <string name="transfer_unknown">Downloaded %1$s · %2$s/s</string>
     <string name="transfer_known">%1$s / %2$s · %3$d%% · %4$s/s</string>
     <string name="provision_throughput">Archive read speed: %1$s/s</string>
+    <string name="settings_theme_style_material">Material 3</string>
 </resources>

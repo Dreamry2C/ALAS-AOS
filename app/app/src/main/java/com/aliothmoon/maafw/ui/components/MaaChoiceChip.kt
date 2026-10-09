@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -22,6 +23,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaTheme
+import com.aliothmoon.maafw.theme.LegacyTypography
 
 /**
  * 单选胶囊 chip：宽度随文字自适应，配合 FlowRow 平铺换行；
@@ -49,14 +51,17 @@ fun MaaChoiceChip(
         )
     }
     Surface(
-        shape = RoundedCornerShape(MaaTheme.style.radii.button),
+        shape = if (MaaTheme.isMaterial) MaterialTheme.shapes.small
+            else RoundedCornerShape(MaaTheme.style.radii.button),
         color = if (selected) {
             MaterialTheme.colorScheme.primaryContainer
+        } else if (MaaTheme.isMaterial) {
+            MaterialTheme.colorScheme.surface
         } else {
             Color.Transparent
         },
         border = BorderStroke(
-            width = MaaDesignTokens.Separator.thickness,
+            width = if (MaaTheme.isMaterial) 1.dp else MaaDesignTokens.Separator.thickness,
             color = if (selected) {
                 MaterialTheme.colorScheme.primary
             } else {
@@ -78,8 +83,8 @@ fun MaaChoiceChip(
             leading?.invoke()
             Text(
                 text = label,
-                // chip label：bodySmall(12) 提到 Medium，比 labelLarge(14) 收一档
-                style = MaterialTheme.typography.bodySmall.copy(
+                // Shared metrics keep option bounds stable across selection and theme changes.
+                style = LegacyTypography.bodySmall.copy(
                     fontWeight = FontWeight.Medium,
                 ),
                 color = if (selected) {
