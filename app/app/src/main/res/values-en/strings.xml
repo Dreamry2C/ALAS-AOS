@@ -690,4 +690,13 @@
     <string name="transfer_known">%1$s / %2$s · %3$d%% · %4$s/s</string>
     <string name="provision_throughput">Archive read speed: %1$s/s</string>
     <string name="settings_theme_style_material">Material 3</string>
+    <string name="alas_config_export_saved">Configuration saved</string>
+    <string name="alas_config_export_failed">Could not export configuration. Please try again</string>
+    <string name="alas_config_picker_failed">Could not open the system file picker</string>
+    <string name="alas_config_delete_title">Delete configuration</string>
+    <string name="alas_config_delete_confirm">Delete “%1$s”?\nThe configuration will be removed from the list, and the app will keep a backup for recovery. Configurations currently in use cannot be deleted.</string>
+    <string name="alas_config_deleted">Configuration deleted</string>
+    <string name="alas_config_delete_running">Stop the task using this configuration first</string>
+    <string name="alas_config_delete_last">Keep at least one configuration</string>
+    <string name="alas_config_delete_failed">Could not delete configuration. Refresh the page and try again</string>
 </resources>

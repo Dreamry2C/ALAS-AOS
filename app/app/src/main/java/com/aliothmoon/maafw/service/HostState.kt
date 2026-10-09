@@ -91,36 +91,39 @@ class HostState(
             }.distinctUntilChanged().collectLatest { (foreground, active) ->
                 // Visibility is part of the key even if both intervals are 4s: resume probes now.
                 while (true) {
-                    // Suspend the collector so it can cancel us while socket IO is blocking.
-                    withContext(MaaDispatchers.IO) { probeBridgeNow() }
+                    probeBridgeNow()
                     delay(BackgroundPolling.intervalMs(foreground, active))
                 }
             }
         }
     }
 
-    suspend fun probeBridgeNow(): Boolean = probeMutex.withLock {
-        currentCoroutineContext().ensureActive()
-        val result = runCatching { pingBridge() }
-        // Socket IO is blocking; a cancelled old poll must not publish its late result.
-        currentCoroutineContext().ensureActive()
-        val reachable = result.getOrDefault(false)
-        if (reachable) {
-            val recovered = probeFailures.recovered()
-            if (recovered > 0) Timber.d("bridge probe recovered after %d failures", recovered)
-            _snapshot.update { it.copy(bridgeReachable = true) }
-        } else {
-            if (probeFailures.failed(SystemClock.elapsedRealtime())) {
-                Timber.d("bridge probe failed (streak=%d): %s", probeFailures.failures,
-                    result.exceptionOrNull()?.message ?: "no pong")
+    // Page activation and overlay actions also call this from Main. Keep the IO
+    // boundary here so those probes cannot turn NetworkOnMainThread into an outage.
+    suspend fun probeBridgeNow(): Boolean = withContext(MaaDispatchers.IO) {
+        probeMutex.withLock {
+            currentCoroutineContext().ensureActive()
+            val result = runCatching { pingBridge() }
+            // Socket IO is blocking; a cancelled old poll must not publish its late result.
+            currentCoroutineContext().ensureActive()
+            val reachable = result.getOrDefault(false)
+            if (reachable) {
+                val recovered = probeFailures.recovered()
+                if (recovered > 0) Timber.d("bridge probe recovered after %d failures", recovered)
+                _snapshot.update { it.copy(bridgeReachable = true) }
+            } else {
+                if (probeFailures.failed(SystemClock.elapsedRealtime())) {
+                    Timber.d("bridge probe failed (streak=%d): %s", probeFailures.failures,
+                        result.exceptionOrNull()?.toString() ?: "no pong")
+                }
+                // 挂机满负荷（ALAS 每帧 2.7MB 打 screencap）时单次 ping 超时是常态，
+                // 连续 BRIDGE_FAIL_THRESHOLD 次失败才判不可达，与 FGS「桥抖动不撤保活」对齐
+                if (probeFailures.failures >= BRIDGE_FAIL_THRESHOLD) {
+                    _snapshot.update { it.copy(bridgeReachable = false) }
+                }
             }
-            // 挂机满负荷（ALAS 每帧 2.7MB 打 screencap）时单次 ping 超时是常态，
-            // 连续 BRIDGE_FAIL_THRESHOLD 次失败才判不可达，与 FGS「桥抖动不撤保活」对齐
-            if (probeFailures.failures >= BRIDGE_FAIL_THRESHOLD) {
-                _snapshot.update { it.copy(bridgeReachable = false) }
-            }
+            reachable
         }
-        reachable
     }
 
     /**
