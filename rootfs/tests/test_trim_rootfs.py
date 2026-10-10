@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import lzma
 from pathlib import Path
 import shutil
 import tarfile
@@ -102,6 +103,25 @@ class TrimRootfsTest(unittest.TestCase):
         self.assertEqual(report['removed'], [])
         with tarfile.open(dest) as t:
             self.assertEqual(t.extractfile('usr/share/man/foo').read(), b'doc')
+
+    def test_compression_presets_preserve_the_same_tar_with_bounded_decoder_memory(self):
+        source = self.archive([('opt/alas/original', b'original bytes' * 4096),
+                               ('usr/lib/libfoo.so', (tarfile.SYMTYPE, 'libfoo.so.1'))])
+        decoded = []
+        for preset in (6, 7, 8):
+            output = self.path / f'preset-{preset}.tar.xz'
+            report = trim.trim_archive(source, output, groups=(), xz_preset=preset)
+            decoded.append(lzma.decompress(output.read_bytes(), memlimit=40 * 1024 * 1024))
+            self.assertEqual(report['compression']['preset'], preset)
+            self.assertEqual(report['removed'], [])
+        self.assertEqual(decoded[0], decoded[1])
+        self.assertEqual(decoded[0], decoded[2])
+        default = self.path / 'default.tar.xz'
+        report = trim.trim_archive(source, default, groups=())
+        self.assertEqual(report['compression']['dictionary_bytes'], 32 * 1024 * 1024)
+        self.assertEqual(lzma.decompress(default.read_bytes()), decoded[0])
+        with self.assertRaises(ValueError):
+            trim.trim_archive(source, self.path / 'unsupported.tar.xz', xz_preset=9)
 
     @unittest.skipUnless(shutil.which('tar'), 'Requires the tar used by the build entrypoint')
     def test_build_tar_and_artifact_xz_both_unpack(self):
