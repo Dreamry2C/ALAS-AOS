@@ -136,10 +136,10 @@ def slim(root, replacement, apply=False):
                     stream.seek(0)
                     data = stream.read()
                 details = elf_dependencies(data)
-                if name.is_relative_to(PurePosixPath('opt/alas/bin')) and (
+                if not name.is_relative_to(LIBDIR) and (
                         details is None or details['machine'] != 183):
-                    # ALAS ships Android helpers for several architectures. They
-                    # cannot consume this Linux AArch64 library and stay intact.
+                    # ALAS and Python packages ship Android helpers for several
+                    # architectures. Preserve them outside the ARM64 library graph.
                     require(len(data) >= 20 and data[4] in (1, 2) and data[5] in (1, 2),
                             f'Malformed foreign ELF asset: {name}')
                     foreign_assets.append(str(name))

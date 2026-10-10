@@ -146,7 +146,7 @@ class SlimOpenCVTests(unittest.TestCase):
         self.assertTrue((self.lib / 'libgdcmCommon.so.3.0').is_file())
         self.assertIn('libother.so.1', str(report['retained']))
 
-    def test_foreign_alas_binaries_are_preserved_without_entering_arm64_graph(self):
+    def test_foreign_assets_are_preserved_without_entering_arm64_graph(self):
         directory = self.root / 'opt/alas/bin/ascreencap'
         directory.mkdir(parents=True)
         x86 = bytearray(elf(machine=3))
@@ -154,12 +154,17 @@ class SlimOpenCVTests(unittest.TestCase):
         samples = {'x86': bytes(x86), 'x86_64': elf(machine=62, needed=('libgdal.so.34',))}
         for name, data in samples.items():
             (directory / name).write_bytes(data)
+        cached = self.root / 'usr/local/lib/python3.12/dist-packages/uiautomator2cache/cache/minicap.so'
+        cached.parent.mkdir(parents=True)
+        cached.write_bytes(bytes(x86))
         report = slim.slim(self.root, self.replacement, apply=True)
         self.assertEqual(set(report['preserved_foreign_assets']),
-                         {f'opt/alas/bin/ascreencap/{name}' for name in samples})
+                         {f'opt/alas/bin/ascreencap/{name}' for name in samples} |
+                         {cached.relative_to(self.root).as_posix()})
         self.assertFalse((self.lib / 'libgdal.so.34').exists())
         for name, data in samples.items():
             self.assertEqual((directory / name).read_bytes(), data)
+        self.assertEqual(cached.read_bytes(), bytes(x86))
 
     def test_alias_outside_library_directory_retains_target(self):
         self.link(self.root / 'opt/alas/private-backend.so', '../../usr/lib/aarch64-linux-gnu/libgdal.so.34')
