@@ -38,15 +38,39 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maafw.BuildConfig
+import com.aliothmoon.maafw.MaaDispatchers
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.proot.ProotHost
 import com.aliothmoon.maafw.proot.ProotPhase
 import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
+import java.net.HttpURLConnection
+import java.net.URL
 
 /** ALAS WebUI：App 内置环境监听的本机回环地址 */
 private const val ALAS_WEBUI_URL = "http://127.0.0.1:22267"
+
+/** 向运行中的 ALAS（wrapper 22400 或 GUI 控制 22401）同步主题 */
+private suspend fun syncAlasTheme(theme: String): Boolean = withContext(MaaDispatchers.IO) {
+    for (port in listOf(ProotHost.WRAPPER_PORT, 22401)) {
+        val success = runCatching {
+            val url = URL("http://127.0.0.1:$port/theme?theme=$theme")
+            val conn = url.openConnection() as HttpURLConnection
+            try {
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 1500
+                conn.readTimeout = 3000
+                conn.responseCode == 200
+            } finally {
+                conn.disconnect()
+            }
+        }.getOrDefault(false)
+        if (success) return@withContext true
+    }
+    false
+}
 
 /**
  * 本机（HONOR PPG-AN00, WebView 151）实测 `vh` 单位恒为 0：页面的 layout viewport
@@ -126,6 +150,7 @@ private const val IDLE_SPINNER_FIX_JS =
 @Composable
 fun AlasScreen(
     active: Boolean,
+    darkTheme: Boolean = false,
     modifier: Modifier = Modifier,
     hostState: HostState = koinInject(),
     prootHost: ProotHost = koinInject(),
@@ -141,6 +166,24 @@ fun AlasScreen(
     val mobileAdaptation = remember { context.assets.open("alas-webview.js").bufferedReader().use { it.readText() } }
     var deleteRequest by remember { mutableStateOf<Pair<WebView, String>?>(null) }
     val fileTransfer = rememberAlasFileTransfer { view, name -> deleteRequest = view to name }
+    val targetTheme = if (darkTheme) "dark" else "default"
+    var lastAppliedTheme by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(targetTheme, prootState.phase) {
+        if (prootState.phase == ProotPhase.RUNNING) {
+            if (lastAppliedTheme != targetTheme) {
+                val synced = syncAlasTheme(targetTheme)
+                if (synced) {
+                    val wasInitial = lastAppliedTheme == null
+                    lastAppliedTheme = targetTheme
+                    if (!wasInitial && hasShownPage) {
+                        webView?.reload()
+                    }
+                }
+            }
+        }
+    }
+
     deleteRequest?.let { request ->
         AlasConfigDeleteDialog(request.second, onDismiss = { deleteRequest = null }) {
             deleteRequest = null

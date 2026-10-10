@@ -96,7 +96,11 @@ import com.aliothmoon.maafw.ui.logs.AppLogScreen
 import com.aliothmoon.maafw.ui.logs.LogExportController
 import com.aliothmoon.maafw.ui.settings.SettingsScreen
 import com.aliothmoon.maafw.ui.setup.ProvisionScreen
+import com.aliothmoon.maafw.MaaDispatchers
+import com.aliothmoon.maafw.settings.AlasSourceRepository
+import java.io.File
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -157,12 +161,21 @@ fun AppRoot(
         if (provisionState is ProvisionState.Ready) prootHost.ensureStarted()
     }
 
+    val context = LocalContext.current
     val darkTheme = when (settingsState.themeMode) {
         ThemeMode.System -> isSystemInDarkTheme()
         ThemeMode.Light -> false
         ThemeMode.Dark -> true
     }
-    LaunchedEffect(darkTheme) { onDarkThemeChanged(darkTheme) }
+    LaunchedEffect(darkTheme) {
+        onDarkThemeChanged(darkTheme)
+        withContext(MaaDispatchers.IO) {
+            runCatching {
+                AlasSourceRepository(File(context.filesDir, "rootfs/opt/alas"))
+                    .updateTheme(if (darkTheme) "dark" else "default")
+            }
+        }
+    }
 
     MaaFwTheme(themeStyle = settingsState.themeStyle, darkTheme = darkTheme) {
         // NavHost 只承载二级页面；主 tab 仍由下面的 HorizontalPager 渲染
@@ -186,8 +199,6 @@ fun AppRoot(
             onSurfaceAvailable = { hostState.attachPreviewSurface(it) },
             onSurfaceDestroyed = { hostState.detachPreviewSurface() },
         )
-
-        val context = LocalContext.current
 
         // 未装/未启动/未授权时的引导；needsGuidance 为 false 时自身不渲染
         ShizukuReadinessDialog(
@@ -317,6 +328,7 @@ fun AppRoot(
                     TopDestination.Alas -> AlasScreen(
                         // 不在本页时（pager 预组合）不抢返回键
                         active = pagerState.currentPage == TopDestination.Alas.ordinal,
+                        darkTheme = darkTheme,
                         modifier = Modifier.fillMaxSize(),
                     )
 

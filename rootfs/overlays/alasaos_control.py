@@ -23,6 +23,7 @@ class Control:
         self.lock = threading.RLock()
         self.stop_event = lambda: None
         self._state_cache = {}
+        self.theme_setter = None
 
     def configs(self):
         from pathlib import Path
@@ -86,15 +87,31 @@ class Control:
             self._state_cache[manager.config_name] = cached
         func = getattr(manager, '_alasaos_func', 'alas')
         tool = func in ('Daemon', 'EventStory')
+        theme = getattr(self.state, 'theme', None)
+        if theme is None:
+            deploy_config = getattr(self.state, 'deploy_config', None)
+            theme = getattr(deploy_config, 'Theme', 'default') if deploy_config else 'default'
         return dict(runner_alive=alive and not tool,
                     runner_wanted=alive and not tool, runner_respawns=0,
                     runner_state=cached[1],
                     pid=manager._process.pid if alive else None,
                     config=manager.config_name, gui_alive=True,
+                    theme=theme,
                     log_lines=len(manager.renderables), log_file=None,
                     tool_alive=alive and tool,
                     tool_name={'Daemon': 'daemon', 'EventStory': 'event_story'}.get(func),
                     tool_pid=manager._process.pid if alive and tool else None)
+
+    def set_theme(self, theme):
+        if theme not in ('dark', 'default'):
+            raise ValueError('Invalid theme')
+        with self.lock:
+            if callable(self.theme_setter):
+                self.theme_setter(theme)
+            else:
+                from module.webui.app import AlasGUI
+                AlasGUI.set_theme(theme)
+            return {'theme': theme}
 
     def start(self, config, func=None):
         if not re.fullmatch(r'[A-Za-z0-9_-]+', config) or config not in self.configs():
@@ -201,6 +218,8 @@ def install():
                             result = control.start(query.get('config', ['alas'])[0], func)
                         elif self.command == 'POST' and url.path in ('/stop', '/tool/stop'):
                             result = control.stop()
+                        elif self.command == 'POST' and url.path == '/theme':
+                            result = control.set_theme(query.get('theme', ['default'])[0])
                         else:
                             code, result = 404, {'error': 'not found'}
                 except ValueError as exc:
