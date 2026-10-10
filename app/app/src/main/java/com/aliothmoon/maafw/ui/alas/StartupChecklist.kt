@@ -12,7 +12,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.proot.ProotSnapshot
@@ -23,6 +26,7 @@ import java.util.Locale
 
 @Composable
 internal fun StartupChecklist(snapshot: ProotSnapshot) {
+    val darkBackground = MaterialTheme.colorScheme.background.luminance() < 0.5f
     Column(
         modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -54,11 +58,14 @@ internal fun StartupChecklist(snapshot: ProotSnapshot) {
                 Text(
                     stringResource(statusText),
                     style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = when (entry.status) {
-                        StepStatus.FAILED -> MaterialTheme.colorScheme.error
-                        StepStatus.WARNING -> MaterialTheme.colorScheme.tertiary
-                        StepStatus.ACTIVE, StepStatus.DONE -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        StepStatus.DONE -> if (darkBackground) Color(0xFF86EFAC) else Color(0xFF166534)
+                        StepStatus.ACTIVE -> if (darkBackground) Color(0xFF93C5FD) else Color(0xFF1D4ED8)
+                        StepStatus.WARNING -> if (darkBackground) Color(0xFFFCD34D) else Color(0xFF92400E)
+                        StepStatus.FAILED -> if (darkBackground) Color(0xFFFCA5A5) else Color(0xFFB91C1C)
+                        StepStatus.WAITING, StepStatus.SKIPPED ->
+                            if (darkBackground) Color(0xFFCBD5E1) else Color(0xFF475569)
                     },
                 )
             }
