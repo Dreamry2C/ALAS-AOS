@@ -145,6 +145,8 @@ def slim(root, replacement, apply=False):
                     foreign_assets.append(str(name))
                     continue
                 require(details is not None, f'Unsupported ELF: {name}')
+                require(not any('/' in needed for needed in details['needed']),
+                        f'Unexpected dependency path in {name}; requires manual audit')
                 elf[name] = details
                 if name != TARGET and SONAME in details['needed']:
                     used = symbols(data)[1] & old_exports

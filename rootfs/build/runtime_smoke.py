@@ -63,20 +63,29 @@ def smoke(alas_root, work):
     assert str(ZoneInfo('Asia/Shanghai')) == 'Asia/Shanghai'
 
     from module.ocr.al_ocr import AlOcr
-    model = AlOcr(model_name='densenet-lite-gru', model_epoch=15,
-                  root=str(alas_root / 'bin/cnocr_models/azur_lane'), name='trim_validation')
     # Synthetic inputs contain no user screenshots/configuration. Compare the
-    # original model's exact predictions before and after each trim group.
-    predictions = []
-    for text in ('12345', '67890', '2026', '100/200'):
-        frame = np.full((40, 200), 255, dtype=np.uint8)
-        cv2.putText(frame, text, (2, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.9, 0, 2, cv2.LINE_AA)
-        prediction = model.atomic_ocr_for_single_line(frame, cand_alphabet='0123456789/')
-        predictions.append(''.join(prediction))
-    assert any(predictions), 'OCR must actually load the model and recognize text'
-    params = alas_root / 'bin/cnocr_models/azur_lane/cnocr-v1.2.0-densenet-lite-gru-0015.params'
-    return {'numeric': numeric, 'ocr_predictions': predictions,
-            'ocr_model_sha256': hashlib.sha256(params.read_bytes()).hexdigest(),
+    # original models' exact predictions before and after each trim group.
+    # Epochs match the upstream module/ocr/models.py definitions.
+    ocr_models = {}
+    for name, epoch in (('azur_lane', 15), ('azur_lane_jp', 20), ('cnocr', 39), ('jp', 125), ('tw', 63)):
+        model_root = alas_root / 'bin/cnocr_models' / name
+        labels = set((model_root / 'label_cn.txt').read_text(encoding='utf-8').splitlines())
+        assert set('0123456789') <= labels, f'{name} has no numeric OCR alphabet'
+        alphabet = ''.join(char for char in '0123456789/' if char in labels)
+        model = AlOcr(model_name='densenet-lite-gru', model_epoch=epoch,
+                      root=str(model_root), name='trim_validation_' + name)
+        predictions = []
+        for text in ('12345', '67890', '2026', '100/200'):
+            frame = np.full((40, 200), 255, dtype=np.uint8)
+            cv2.putText(frame, text, (2, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.9, 0, 2, cv2.LINE_AA)
+            prediction = model.atomic_ocr_for_single_line(frame, cand_alphabet=alphabet)
+            predictions.append(''.join(prediction))
+        assert any(predictions), f'OCR must load the {name} model and recognize text'
+        params = model_root / f'cnocr-v1.2.0-densenet-lite-gru-{epoch:04d}.params'
+        ocr_models[name] = {'predictions': predictions, 'alphabet': alphabet,
+                            'params_sha256': hashlib.sha256(params.read_bytes()).hexdigest()}
+    return {'numeric': numeric, 'ocr_predictions': ocr_models['azur_lane']['predictions'],
+            'ocr_model_sha256': ocr_models['azur_lane']['params_sha256'], 'ocr_models': ocr_models,
             'versions': {'numpy': np.__version__, 'scipy': scipy.__version__,
                          'cv2': cv2.__version__, 'mxnet': mx.__version__,
                          'imageio': imageio.__version__},

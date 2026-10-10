@@ -172,6 +172,13 @@ class SlimOpenCVTests(unittest.TestCase):
         self.assertFalse(report['remove'])
         self.assertIn('Alias outside', str(report['retained']))
 
+    def test_path_based_dependency_cannot_hide_a_backend_consumer(self):
+        self.library('libother.so.1', needed=('/usr/lib/aarch64-linux-gnu/libgdal.so.34',))
+        before = self.snapshot()
+        with self.assertRaisesRegex(ValueError, 'dependency path'):
+            slim.slim(self.root, self.replacement, apply=True)
+        self.assertEqual(self.snapshot(), before)
+
     def test_invalid_replacement_rejected_without_changes(self):
         cases = [
             (elf(slim.SONAME, exports=('cv_imread',), machine=62), 'AArch64'),
