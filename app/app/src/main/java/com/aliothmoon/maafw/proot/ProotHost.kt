@@ -135,7 +135,10 @@ class ProotHost(
         )
         val deploy = runGuest(
             listOf("/usr/bin/python3", "seeds/seed_deploy.py"), SHORT_EXEC_MS,
-            mapOf("ALASAOS_ALAS_ROOT" to GUEST_ALAS_ROOT),
+            mapOf(
+                "ALASAOS_ALAS_ROOT" to GUEST_ALAS_ROOT,
+                "ALASAOS_THEME" to AlasSourceRepository(alasDir).readTheme(),
+            ),
         )
         recordGuestResult(if (config?.exit == 0 && !config.timedOut) deploy else config)
 

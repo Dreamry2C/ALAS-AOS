@@ -175,6 +175,39 @@ class AlasSourceRepository(private val alasDir: File) {
         saved
     }
 
+    fun readTheme(): String = locked {
+        if (!deploy.isFile || Files.isSymbolicLink(deploy.toPath())) return@locked "default"
+        val text = decode(deploy.readBytes())
+        val pattern = Regex("""(?m)^[ \t]*Theme:[ \t]*(\S+)""")
+        val match = pattern.find(text)
+        match?.groupValues?.get(1)?.trim('\'', '"') ?: "default"
+    }
+
+    fun updateTheme(theme: String): Boolean {
+        require(theme == "dark" || theme == "default") { "Invalid theme: $theme" }
+        return locked {
+            if (!deploy.isFile || Files.isSymbolicLink(deploy.toPath())) return@locked false
+            val currentBytes = deploy.readBytes()
+            val text = decode(currentBytes)
+            val pattern = Regex("""(?m)^([ \t]*Theme:[ \t]*)(\S+)(.*)$""")
+            val match = pattern.find(text)
+            val newText = if (match != null) {
+                val current = match.groupValues[2].trim('\'', '"')
+                if (current == theme) return@locked true
+                pattern.replace(text) { "${it.groupValues[1]}$theme${it.groupValues[3]}" }
+            } else {
+                val webuiPattern = Regex("""(?m)^([ \t]*Webui:.*)$""")
+                val webuiMatch = webuiPattern.find(text) ?: return@locked false
+                val indent = webuiMatch.value.takeWhile { it == ' ' || it == '\t' } + "    "
+                val lineBreak = if (text.contains("\r\n")) "\r\n" else "\n"
+                webuiPattern.replace(text) { "${it.value}${lineBreak}${indent}Theme: $theme" }
+            }
+            val newBytes = newText.toByteArray(Charsets.UTF_8)
+            atomicReplace(deploy, newBytes, currentBytes)
+            true
+        }
+    }
+
     private fun saveUnlocked(expected: Snapshot, source: AlasSource): Snapshot {
         val current = readUnlocked()
         if (!current.bytes.contentEquals(expected.bytes)) throw Conflict()

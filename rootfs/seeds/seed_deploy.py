@@ -29,6 +29,9 @@ DEPLOY = os.path.join(ALAS, 'config', 'deploy.yaml')
 TARGETS = {
     'EnableReload': 'true',
 }
+theme = os.environ.get('ALASAOS_THEME')
+if theme in ('dark', 'default'):
+    TARGETS['Theme'] = theme
 
 
 def main():
