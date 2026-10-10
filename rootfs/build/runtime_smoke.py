@@ -45,6 +45,16 @@ def smoke(alas_root, work):
     assert cv2.imdecode(cv2.imencode('.jpg', pixels)[1], cv2.IMREAD_COLOR).shape == pixels.shape
     # Exercise MXNet's separate apt OpenCV chain as well as the Python wheel.
     assert tuple(mx.image.imdecode(encoded.tobytes()).shape) == pixels.shape
+    # Compare the actual imgcodecs consumer across a replacement, not just cv2
+    # (the Python wheel carries a separate OpenCV implementation).
+    codec_pixels = np.arange(96 * 128 * 3, dtype=np.uint8).reshape((96, 128, 3))
+    native_codecs = {}
+    for extension in ('.png', '.jpg', '.bmp', '.tiff', '.webp', '.jp2', '.ppm'):
+        ok, buffer = cv2.imencode(extension, codec_pixels)
+        assert ok, f'Cannot encode test input: {extension}'
+        frame = mx.image.imdecode(buffer.tobytes()).asnumpy()
+        assert frame.shape == codec_pixels.shape, (extension, frame.shape)
+        native_codecs[extension] = hashlib.sha256(frame.tobytes()).hexdigest()
     gif = work / 'palette.gif'
     Image.fromarray(pixels).convert('P').save(gif)
     decoded = imageio.v2.imread(gif)
@@ -53,24 +63,34 @@ def smoke(alas_root, work):
     assert str(ZoneInfo('Asia/Shanghai')) == 'Asia/Shanghai'
 
     from module.ocr.al_ocr import AlOcr
-    model = AlOcr(model_name='densenet-lite-gru', model_epoch=15,
-                  root=str(alas_root / 'bin/cnocr_models/azur_lane'), name='trim_validation')
     # Synthetic inputs contain no user screenshots/configuration. Compare the
-    # original model's exact predictions before and after each trim group.
-    predictions = []
-    for text in ('12345', '67890', '2026', '100/200'):
-        frame = np.full((40, 200), 255, dtype=np.uint8)
-        cv2.putText(frame, text, (2, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.9, 0, 2, cv2.LINE_AA)
-        prediction = model.atomic_ocr_for_single_line(frame, cand_alphabet='0123456789/')
-        predictions.append(''.join(prediction))
-    assert any(predictions), 'OCR must actually load the model and recognize text'
-    params = alas_root / 'bin/cnocr_models/azur_lane/cnocr-v1.2.0-densenet-lite-gru-0015.params'
-    return {'numeric': numeric, 'ocr_predictions': predictions,
-            'ocr_model_sha256': hashlib.sha256(params.read_bytes()).hexdigest(),
+    # original models' exact predictions before and after each trim group.
+    # Epochs match the upstream module/ocr/models.py definitions.
+    ocr_models = {}
+    for name, epoch in (('azur_lane', 15), ('azur_lane_jp', 20), ('cnocr', 39), ('jp', 125), ('tw', 63)):
+        model_root = alas_root / 'bin/cnocr_models' / name
+        labels = set((model_root / 'label_cn.txt').read_text(encoding='utf-8').splitlines())
+        assert set('0123456789') <= labels, f'{name} has no numeric OCR alphabet'
+        alphabet = ''.join(char for char in '0123456789/' if char in labels)
+        model = AlOcr(model_name='densenet-lite-gru', model_epoch=epoch,
+                      root=str(model_root), name='trim_validation_' + name)
+        predictions = []
+        for text in ('12345', '67890', '2026', '100/200'):
+            frame = np.full((40, 200), 255, dtype=np.uint8)
+            cv2.putText(frame, text, (2, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.9, 0, 2, cv2.LINE_AA)
+            prediction = model.atomic_ocr_for_single_line(frame, cand_alphabet=alphabet)
+            predictions.append(''.join(prediction))
+        assert any(predictions), f'OCR must load the {name} model and recognize text'
+        params = model_root / f'cnocr-v1.2.0-densenet-lite-gru-{epoch:04d}.params'
+        ocr_models[name] = {'predictions': predictions, 'alphabet': alphabet,
+                            'params_sha256': hashlib.sha256(params.read_bytes()).hexdigest()}
+    return {'numeric': numeric, 'ocr_predictions': ocr_models['azur_lane']['predictions'],
+            'ocr_model_sha256': ocr_models['azur_lane']['params_sha256'], 'ocr_models': ocr_models,
             'versions': {'numpy': np.__version__, 'scipy': scipy.__version__,
                          'cv2': cv2.__version__, 'mxnet': mx.__version__,
                          'imageio': imageio.__version__},
             'png_sha256': hashlib.sha256(encoded.tobytes()).hexdigest(),
+            'native_imgcodecs_sha256': native_codecs,
             'gif_shape': list(decoded.shape), 'imports_ok': True}
 
 
