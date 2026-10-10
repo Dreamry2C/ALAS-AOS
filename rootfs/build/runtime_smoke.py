@@ -45,6 +45,16 @@ def smoke(alas_root, work):
     assert cv2.imdecode(cv2.imencode('.jpg', pixels)[1], cv2.IMREAD_COLOR).shape == pixels.shape
     # Exercise MXNet's separate apt OpenCV chain as well as the Python wheel.
     assert tuple(mx.image.imdecode(encoded.tobytes()).shape) == pixels.shape
+    # Compare the actual imgcodecs consumer across a replacement, not just cv2
+    # (the Python wheel carries a separate OpenCV implementation).
+    codec_pixels = np.arange(96 * 128 * 3, dtype=np.uint8).reshape((96, 128, 3))
+    native_codecs = {}
+    for extension in ('.png', '.jpg', '.bmp', '.tiff', '.webp', '.jp2', '.ppm'):
+        ok, buffer = cv2.imencode(extension, codec_pixels)
+        assert ok, f'Cannot encode test input: {extension}'
+        frame = mx.image.imdecode(buffer.tobytes()).asnumpy()
+        assert frame.shape == codec_pixels.shape, (extension, frame.shape)
+        native_codecs[extension] = hashlib.sha256(frame.tobytes()).hexdigest()
     gif = work / 'palette.gif'
     Image.fromarray(pixels).convert('P').save(gif)
     decoded = imageio.v2.imread(gif)
@@ -71,6 +81,7 @@ def smoke(alas_root, work):
                          'cv2': cv2.__version__, 'mxnet': mx.__version__,
                          'imageio': imageio.__version__},
             'png_sha256': hashlib.sha256(encoded.tobytes()).hexdigest(),
+            'native_imgcodecs_sha256': native_codecs,
             'gif_shape': list(decoded.shape), 'imports_ok': True}
 
 
