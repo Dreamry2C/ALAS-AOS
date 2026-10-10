@@ -154,4 +154,33 @@ class AlasSourceRepositoryTest {
         assertFalse(snapshot.toString().contains("FAKE_SECRET"))
         assertFalse(snapshot.source.toString().contains("FAKE_SECRET"))
     }
+
+    @Test fun readThemeReturnsDefaultWhenMissing() {
+        assertEquals("default", repository.readTheme())
+    }
+
+    @Test fun updateThemeInsertsUnderWebuiWhenMissing() {
+        assertTrue(repository.updateTheme("dark"))
+        assertEquals("dark", repository.readTheme())
+        assertTrue(deploy.readText().contains("Theme: dark"))
+    }
+
+    @Test fun updateThemeModifiesExistingTheme() {
+        deploy.writeText(document(AlasSource.GITHUB, "master") + "    Theme: default\r\n")
+        assertEquals("default", repository.readTheme())
+        assertTrue(repository.updateTheme("dark"))
+        assertEquals("dark", repository.readTheme())
+        // 幂等
+        assertTrue(repository.updateTheme("dark"))
+        assertEquals("dark", repository.readTheme())
+        // 切回 default
+        assertTrue(repository.updateTheme("default"))
+        assertEquals("default", repository.readTheme())
+    }
+
+    @Test fun updateThemeRejectsInvalidTheme() {
+        assertThrows(IllegalArgumentException::class.java) {
+            repository.updateTheme("invalid_theme")
+        }
+    }
 }
