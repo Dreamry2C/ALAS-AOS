@@ -1,9 +1,9 @@
 {
   "rootfs_version": "0.2.0-ocr",
-  "build_time_utc": "2026-09-25T20:56:42Z",
+  "build_time_utc": "2026-10-10T04:36:20Z",
   "alas_repo": "https://github.com/LmeSzinc/AzurLaneAutoScript.git",
-  "alas_commit": "01c0a0101a7ce7bf4adec17f9a4ed46ebb94cfa1",
-  "patches_source": "rootfs/patches @ repo commit 2ab5dbc5fcf1094011b726b2bc295b8e8e83804c",
+  "alas_commit": "7d6a415e3ef5ed049fd7024311c16158fcd2af28",
+  "patches_source": "rootfs/patches @ repo commit aa725dfec0706ee35eb592441e6256bfeb99a695",
   "ocr": {
     "engine": "cnocr+mxnet (ALAS original, UseOcrServer=false)",
     "mxnet_version": "1.9.1",
