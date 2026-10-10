@@ -17,6 +17,9 @@ GROUPS = (
     'linux-docs', 'build-tools', 'python-tests', 'foreign-u2',
     'proj-data', 'perl-headers', 'apt-cache', 'u2-apks', 'stdlib-tests'
 )
+# Preset 8 uses a 32 MiB decoder dictionary; retain 6/7 for measured controls.
+DEFAULT_XZ_PRESET = 8
+XZ_DICTIONARY_BYTES = {6: 8 * 1024 * 1024, 7: 16 * 1024 * 1024, 8: 32 * 1024 * 1024}
 BINUTILS = frozenset(('addr2line', 'ar', 'as', 'c++filt', 'dwp', 'elfedit',
                      'gprof', 'ld', 'ld.bfd', 'ld.gold', 'nm', 'objcopy',
                      'objdump', 'ranlib', 'readelf', 'size', 'strings', 'strip'))
@@ -84,7 +87,9 @@ def identity(path):
                 'sha256': hashlib.file_digest(f, 'sha256').hexdigest()}
 
 
-def trim_archive(source, output=None, groups=GROUPS):
+def trim_archive(source, output=None, groups=GROUPS, xz_preset=DEFAULT_XZ_PRESET):
+    if xz_preset not in XZ_DICTIONARY_BYTES:
+        raise ValueError('Select a supported XZ preset (6, 7 or 8)')
     groups = set(groups)
     if groups - set(GROUPS):
         raise ValueError('Select known trim groups')
@@ -102,7 +107,7 @@ def trim_archive(source, output=None, groups=GROUPS):
     try:
         if partial:
             partial.parent.mkdir(parents=True, exist_ok=True)
-            compressed = lzma.open(partial, 'xb', preset=6)
+            compressed = lzma.open(partial, 'xb', preset=xz_preset)
             archive_out = tarfile.open(fileobj=compressed, mode='w|', format=tarfile.PAX_FORMAT)
         with tarfile.open(source, 'r|*') as archive:
             for member in archive:
@@ -146,6 +151,8 @@ def trim_archive(source, output=None, groups=GROUPS):
     if output:
         partial.rename(output)
         report['output'] = identity(output)
+        report['compression'] = {'format': 'xz', 'preset': xz_preset,
+                                 'dictionary_bytes': XZ_DICTIONARY_BYTES[xz_preset]}
         with source.open('rb') as f:
             if f.read(6) == b'\xfd7zXZ\x00':
                 report['compressed_saved_bytes'] = report['input']['bytes'] - report['output']['bytes']
@@ -159,8 +166,11 @@ def main():
     p.add_argument('--report', required=True, type=Path)
     p.add_argument('--groups', default=','.join(GROUPS))
     p.add_argument('--repack-only', action='store_true', help='Compression control; preserve every entry')
+    p.add_argument('--xz-preset', type=int, choices=sorted(XZ_DICTIONARY_BYTES), default=DEFAULT_XZ_PRESET,
+                   help='XZ preset; default 8 uses a 32 MiB decoder dictionary')
     args = p.parse_args()
-    report = trim_archive(args.input, args.output, () if args.repack_only else args.groups.split(','))
+    report = trim_archive(args.input, args.output, () if args.repack_only else args.groups.split(','),
+                          xz_preset=args.xz_preset)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding='utf-8')
     print(json.dumps({k: v for k, v in report.items() if k != 'removed'}, indent=2))
