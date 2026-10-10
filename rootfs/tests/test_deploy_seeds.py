@@ -72,6 +72,18 @@ class DeploySeedTests(unittest.TestCase):
                 self.assertEqual(p.returncode, code)
             self.assertFalse((Path(tmp) / 'config/deploy.yaml').exists())
 
+    def test_theme_env_updates_deploy_yaml(self):
+        base = ROOT / '.tmp/deploy-seed-tests'
+        base.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=base) as tmp:
+            alas = Path(tmp)
+            (alas / 'config').mkdir()
+            deploy = alas / 'config/deploy.yaml'
+            deploy.write_text('Deploy:\n  Webui:\n    Theme: default\n')
+            env = dict(os.environ, ALASAOS_ALAS_ROOT=str(alas), ALASAOS_THEME='dark', PYTHONDONTWRITEBYTECODE='1')
+            subprocess.run([sys.executable, str(ROOT / 'rootfs/seeds/seed_deploy.py')], env=env, check=True, timeout=10)
+            self.assertIn('Theme: dark', deploy.read_text())
+
 
 if __name__ == '__main__':
     unittest.main()
