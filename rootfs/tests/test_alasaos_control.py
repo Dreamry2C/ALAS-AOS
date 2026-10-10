@@ -124,6 +124,18 @@ class SharedControlTests(unittest.TestCase):
         self.assertTrue(Path('config/other.json').is_file())
         self.assertFalse(Path('config/.alasaos-deleted').exists())
 
+    def test_theme_control_and_status(self):
+        recorded = []
+        self.control.theme_setter = lambda t: recorded.append(t)
+        self.assertEqual(self.control.set_theme('dark'), {'theme': 'dark'})
+        self.assertEqual(recorded, ['dark'])
+        self.assertEqual(self.control.set_theme('default'), {'theme': 'default'})
+        self.assertEqual(recorded, ['dark', 'default'])
+        with self.assertRaisesRegex(ValueError, 'Invalid theme'):
+            self.control.set_theme('blue')
+        self.control.state.theme = 'dark'
+        self.assertEqual(self.control.status()['theme'], 'dark')
+
 class BridgeShellTests(unittest.TestCase):
     def setUp(self):
         tree=ast.parse((ROOT/'rootfs/patches/module/device/connection.py').read_text(encoding='utf-8'))
