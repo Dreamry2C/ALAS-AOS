@@ -146,6 +146,21 @@ class SlimOpenCVTests(unittest.TestCase):
         self.assertTrue((self.lib / 'libgdcmCommon.so.3.0').is_file())
         self.assertIn('libother.so.1', str(report['retained']))
 
+    def test_foreign_alas_binaries_are_preserved_without_entering_arm64_graph(self):
+        directory = self.root / 'opt/alas/bin/ascreencap'
+        directory.mkdir(parents=True)
+        x86 = bytearray(elf(machine=3))
+        x86[4] = 1  # The inventory parser intentionally does not decode ELF32.
+        samples = {'x86': bytes(x86), 'x86_64': elf(machine=62, needed=('libgdal.so.34',))}
+        for name, data in samples.items():
+            (directory / name).write_bytes(data)
+        report = slim.slim(self.root, self.replacement, apply=True)
+        self.assertEqual(set(report['preserved_foreign_assets']),
+                         {f'opt/alas/bin/ascreencap/{name}' for name in samples})
+        self.assertFalse((self.lib / 'libgdal.so.34').exists())
+        for name, data in samples.items():
+            self.assertEqual((directory / name).read_bytes(), data)
+
     def test_alias_outside_library_directory_retains_target(self):
         self.link(self.root / 'opt/alas/private-backend.so', '../../usr/lib/aarch64-linux-gnu/libgdal.so.34')
         report = slim.slim(self.root, self.replacement)

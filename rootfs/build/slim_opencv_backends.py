@@ -120,7 +120,7 @@ def slim(root, replacement, apply=False):
     old_exports, _ = symbols(old_data)
     new_exports, _ = symbols(new_data)
     require(old_exports and new_exports, 'Empty imgcodecs export table')
-    elf, links, consumers = {}, {}, {}
+    elf, links, consumers, foreign_assets = {}, {}, {}, []
     for directory, dirs, files in os.walk(root, followlinks=False):
         for item in dirs + files:
             path = Path(directory) / item
@@ -136,6 +136,14 @@ def slim(root, replacement, apply=False):
                     stream.seek(0)
                     data = stream.read()
                 details = elf_dependencies(data)
+                if name.is_relative_to(PurePosixPath('opt/alas/bin')) and (
+                        details is None or details['machine'] != 183):
+                    # ALAS ships Android helpers for several architectures. They
+                    # cannot consume this Linux AArch64 library and stay intact.
+                    require(len(data) >= 20 and data[4] in (1, 2) and data[5] in (1, 2),
+                            f'Malformed foreign ELF asset: {name}')
+                    foreign_assets.append(str(name))
+                    continue
                 require(details is not None, f'Unsupported ELF: {name}')
                 elf[name] = details
                 if name != TARGET and SONAME in details['needed']:
@@ -197,6 +205,7 @@ def slim(root, replacement, apply=False):
               'replacement_needed': new['needed'],
               'consumers': consumers, 'remove': records, 'remove_bytes': sum(r['bytes'] for r in records),
               'retained': retained, 'preexisting_missing': sorted(before),
+              'preserved_foreign_assets': sorted(foreign_assets),
               'note': 'Named-backend DT_NEEDED audit only; dlopen/data and ARM64 runtime gates remain required.'}
     if apply:
         require(identity(target) == report['original'] and identity(replacement) == report['replacement'],
