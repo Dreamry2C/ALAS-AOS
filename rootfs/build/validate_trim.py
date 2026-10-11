@@ -35,6 +35,7 @@ def materialize_alas_tree(root):
     shutil.copytree(git_dir, pristine)
     try:
         subprocess.run(['git', '-C', str(alas), '-c', 'safe.directory=*',
+                        '--git-dir=.git', '--work-tree=.',
                         'reset', '--hard', '--quiet'], check=True)
     finally:
         shutil.rmtree(git_dir)
@@ -46,13 +47,29 @@ def strip_alas_tree(root):
     build-rootfs.sh: remove git-tracked working-tree files (pack + untracked AOS
     assets stay). Validators that repack a materialized root must strip first,
     otherwise the repacked artifact would carry the full tree again and silently
-    undo the image-side slimming. Legacy archives without .git keep their tree."""
+    undo the image-side slimming. Install the current restore seed and pending
+    marker even for old full-tree Git archives. Archives without .git keep their tree."""
     alas = root / 'opt/alas'
     if not (alas / '.git' / 'objects' / 'pack').is_dir():
         return
+    git = ['git', '-C', str(alas), '-c', 'safe.directory=*', '--git-dir=.git', '--work-tree=.']
+    subprocess.run(git + ['rev-parse', '--verify', 'HEAD^{commit}'],
+                   stdout=subprocess.DEVNULL, check=True)
+    metadata = ['seeds/alasaos_restore.sh', '.alasaos_restored', '.alasaos_restore_pending']
+    tracked = subprocess.run(git + ['ls-files', '-z', '--', *metadata],
+                             stdout=subprocess.PIPE, check=True).stdout
+    if tracked:
+        raise ValueError('Restore metadata collides with tracked ALAS files')
+    seed = alas / metadata[0]
+    seed.parent.mkdir(parents=True, exist_ok=True)
+    seed.write_bytes((Path(__file__).resolve().parents[1] / metadata[0]).read_bytes())
+    seed.chmod(0o755)
+    (alas / '.alasaos_restored').unlink(missing_ok=True)
+    (alas / '.alasaos_restore_pending').write_text('git-pack-v1\n', encoding='utf-8')
     subprocess.run(
         ['bash', '-c',
-         'set -eu; cd "$1"; git -c safe.directory=* ls-files -z | xargs -0 -r rm -f --; '
+         'set -euo pipefail; cd "$1"; '
+         'git -c safe.directory=* --git-dir=.git --work-tree=. ls-files -z | xargs -0 -r rm -f --; '
          'find . -depth -type d -empty -not -path "./.git" -not -path "./.git/*" -delete',
          'strip-alas-tree', str(alas)], check=True)
 

@@ -250,11 +250,21 @@ class ProotHost(
      * （官方 Windows 一键包 deploy/git.py 同款方案）。
      */
     private suspend fun restoreAlasTree(): Boolean {
-        if (File(alasDir, RESTORE_MARKER).isFile) return true
-        // seed 缺失 ⟺ 覆盖安装保留下来的旧版 rootfs（那份镜像必带完整树，无需还原）。
-        // 注意本步骤先于 AlasOverlay 执行，seed 尚未由 overlay 重铺，只能靠镜像自带；
-        // 等将来版本闸门触发重解压换上新镜像后，本步骤才真正参与启动链。
-        if (!File(alasDir, RESTORE_SEED).isFile) return true
+        if (File(alasDir, RESTORE_MARKER).isFile && !File(alasDir, RESTORE_PENDING).isFile) return true
+        // Restore runs before the full overlay. Refresh its seed first so an old
+        // rootfs cannot block an APK's restore fix or omit the script altogether.
+        val prepared = runCatching {
+            val seed = File(alasDir, RESTORE_SEED)
+            val bytes = app.assets.open("alas/overlay/$RESTORE_SEED").use { it.readBytes() }
+            if (!seed.isFile || !seed.readBytes().contentEquals(bytes)) {
+                seed.parentFile?.mkdirs()
+                seed.writeBytes(bytes)
+            }
+        }.onFailure { Timber.w(it, "restore seed preparation failed") }.isSuccess
+        if (!prepared) {
+            fail("ALAS 还原脚本准备失败，请重试")
+            return false
+        }
         val r = runGuest(listOf("/bin/bash", "seeds/alasaos_restore.sh"), RESTORE_TIMEOUT_MS)
         if (r != null && r.exit == 0 && !r.timedOut) return true
         fail("ALAS 文件还原失败（exit=${r?.exit ?: "?"}），请重试或重新安装整包")
@@ -642,7 +652,10 @@ class ProotHost(
         /** 还原完成 marker（/opt/alas 内 untracked 文件，由 alasaos_restore.sh 落） */
         private const val RESTORE_MARKER = ".alasaos_restored"
 
-        /** 还原脚本在镜像内的位置；缺失即旧版完整树 rootfs，跳过还原 */
+        /** 剥离工作区时写入；优先于旧的完成标记 */
+        private const val RESTORE_PENDING = ".alasaos_restore_pending"
+
+        /** 还原前从当前 APK 刷新的 AOS 自有脚本 */
         private const val RESTORE_SEED = "seeds/alasaos_restore.sh"
 
         private const val REGEN_ARGS_TIMEOUT_MS = 360_000L
