@@ -1,11 +1,11 @@
 # AlasAos rootfs 内置 deploy 配置：行结构按 ALAS config/deploy.template-linux-cn.yaml，
-# 更新器七键全锁定 + fullcn 同款镜像（git.lyoko.io / aliyun pypi）。
-# Repository 绝不能写 gitee URL 或 tuna pypi 镜像：ALAS config_redirect() 会按内置
-# 规则把非约定值静默改写（gitee→lyoko），写了也留不住，徒增排查成本。
+# 更新器七键全锁定 + 默认国内镜像（git.lyoko.io / aliyun pypi）。
+# 注：ALAS 上游 config_redirect() 仅对 5 个官方废弃的旧镜像 URL 做强制重定向，
+# 用户在 AOS 设置页或自定义填写的私人仓库不受其影响。
 # AutoUpdate:false 是保住 rootfs 钉版 commit（BUILD_MANIFEST.alas_commit）的唯一闸门。
 Deploy:
   Git:
-    # fullcn 同款镜像；不要改成 gitee（会被 config_redirect 改写）
+    # 默认国内源；在 AOS 设置页可自由切换为 GitHub 或自定义仓库
     Repository: git://git.lyoko.io/AzurLaneAutoScript
     Branch: master
     GitExecutable: /usr/bin/git
