@@ -133,12 +133,13 @@ class ProotHost(
         recordGuestResult(runGuest(listOf("/bin/bash", "seeds/env_fix.sh"), ENV_FIX_TIMEOUT_MS))
 
         beginStep(StartupStep.CONFIG, ProotPhase.PREPARING, "播种实例配置")
+        // Stdlib-only helpers do not need the site hook that eagerly imports NumPy.
         val config = runGuest(
-            listOf("/usr/bin/python3", "seeds/seed_config.py"), SHORT_EXEC_MS,
+            listOf("/usr/bin/python3", "-S", "seeds/seed_config.py"), SHORT_EXEC_MS,
             mapOf("ALASAOS_ALAS_ROOT" to GUEST_ALAS_ROOT),
         )
         val deploy = runGuest(
-            listOf("/usr/bin/python3", "seeds/seed_deploy.py"), SHORT_EXEC_MS,
+            listOf("/usr/bin/python3", "-S", "seeds/seed_deploy.py"), SHORT_EXEC_MS,
             mapOf(
                 "ALASAOS_ALAS_ROOT" to GUEST_ALAS_ROOT,
                 "ALASAOS_THEME" to AlasSourceRepository(alasDir).readTheme(),
@@ -166,7 +167,8 @@ class ProotHost(
         if (!runAssetsFix()) finishStep(StepStatus.WARNING)
 
         beginStep(StartupStep.ARGUMENTS, ProotPhase.PREPARING, "再生 args 配置")
-        recordGuestResult(runGuest(listOf("/usr/bin/python3", "seeds/regen_args.py"), REGEN_ARGS_TIMEOUT_MS))
+        // The helper starts the upstream generator in a separate, normal Python.
+        recordGuestResult(runGuest(listOf("/usr/bin/python3", "-S", "seeds/regen_args.py"), REGEN_ARGS_TIMEOUT_MS))
         if (!wantRunning) return@withLock
 
         beginStep(StartupStep.SESSION, ProotPhase.STARTING, "拉起 proot 会话")
@@ -286,7 +288,8 @@ class ProotHost(
             "-r", rootfsDir.absolutePath,
             "-b", "/dev:/dev", "-b", "/proc:/proc", "-b", "/sys:/sys",
             "-b", "${prootShmDir.absolutePath}:/dev/shm",
-            "/usr/bin/python3", "wrapper.py",
+            // The stdlib supervisor starts the ALAS GUI with normal site initialization.
+            "/usr/bin/python3", "-S", "wrapper.py",
         )
         Timber.i("proot session spawn: %s", cmd.joinToString(" "))
         val proc = ProcessBuilder(cmd)
@@ -499,7 +502,7 @@ class ProotHost(
 
     /** assets_fix：幂等 + 漂移自检（Button 找不到会非零退出），失败只记警告 */
     private suspend fun runAssetsFix(): Boolean {
-        val r = runGuest(listOf("/usr/bin/python3", "seeds/assets_fix.py", GUEST_ALAS_ROOT), SHORT_EXEC_MS)
+        val r = runGuest(listOf("/usr/bin/python3", "-S", "seeds/assets_fix.py", GUEST_ALAS_ROOT), SHORT_EXEC_MS)
             ?: return false
         if (r.exit == 0 && !r.timedOut) {
             Timber.d("assets_fix OK")
