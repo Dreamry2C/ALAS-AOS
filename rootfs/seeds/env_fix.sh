@@ -32,6 +32,7 @@ mark "start"
 cur="$(python3 -c 'import imageio; print(imageio.__version__)' 2>/dev/null)"
 if [ "$cur" = "$WANT" ]; then
   mark "imageio already $WANT"
+  now="$cur"
 else
   mark "imageio ${cur:-missing} -> $WANT, pip install..."
   # proot 下 pip 比原生慢一个量级，给 --timeout/--retries 快速失败而非死等
@@ -39,8 +40,8 @@ else
     --timeout 15 --retries 2 --disable-pip-version-check \
     -i "$MIRROR" "imageio==$WANT" \
     || mark "WARN pip install failed（保留现状不阻塞启动）"
+  now="$(python3 -c 'import imageio; print(imageio.__version__)' 2>/dev/null)"
 fi
-now="$(python3 -c 'import imageio; print(imageio.__version__)' 2>/dev/null)"
 [ "$now" = "$WANT" ] || mark "WARN imageio verify = ${now:-missing}"
 
 # 白名单还原：仅 module/base/template.py（T2 旧补丁从资产中删除后，设备上遗留的覆盖件）
