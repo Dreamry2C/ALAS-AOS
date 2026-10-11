@@ -32,7 +32,8 @@ import java.util.concurrent.TimeUnit
  * proot 会话宿主：以 App 进程为父，拉起 rootfs 内的 wrapper.py（WebUI 由 wrapper 监管）
  *
  * 链路（roadmap 阶段三第 3 条）：
- * 自愈清锁 → 铺 overlay → 播种实例配置 → 热更新（降级不阻塞）→ 必要时重放补丁
+ * 自愈清锁 → 离线还原工作区（缺 marker 时从 .git pack 物化）→ 铺 overlay → 播种实例配置
+ * → 热更新（降级不阻塞）→ 必要时重放补丁
  * → ProcessBuilder 拉起 proot 长跑会话 → 崩溃/退出带退避重拉
  *
  * 生命周期约定：
@@ -116,6 +117,9 @@ class ProotHost(
         beginStep(StartupStep.CLEANUP, ProotPhase.PREPARING, "清理残留")
         cleanupStale()
         writeResolvConf()
+
+        beginStep(StartupStep.RESTORE, ProotPhase.PREPARING, "还原 ALAS 文件")
+        if (!restoreAlasTree()) return@withLock
 
         beginStep(StartupStep.OVERLAY, ProotPhase.PREPARING, "同步运行文件")
         val overlay = AlasOverlay(app).apply(alasDir)
@@ -234,6 +238,27 @@ class ProotHost(
             return false
         }
         return true
+    }
+
+    /**
+     * 首启还原：rootfs 镜像只带浅克隆 .git（瘦身——pack 体积≈整树压缩，树+pack 两份
+     * 快照只发一份），git 跟踪的工作区文件在打包前已剥离，untracked 的 AOS 自有资产
+     * （seeds/、config/deploy.yaml、BUILD_MANIFEST、wrapper 等）在镜像里完好。
+     * 缺 marker 时由 guest 脚本从 pack 离线物化（git reset --hard，无需网络，一次性
+     * 数十秒），成功后落 marker，后续启动本方法宿主侧零开销跳过；旧版完整工作区的
+     * rootfs 升级上来时脚本同样补 marker。失败即 fatal——树不全 ALAS 必然起不来
+     * （官方 Windows 一键包 deploy/git.py 同款方案）。
+     */
+    private suspend fun restoreAlasTree(): Boolean {
+        if (File(alasDir, RESTORE_MARKER).isFile) return true
+        // seed 缺失 ⟺ 覆盖安装保留下来的旧版 rootfs（那份镜像必带完整树，无需还原）。
+        // 注意本步骤先于 AlasOverlay 执行，seed 尚未由 overlay 重铺，只能靠镜像自带；
+        // 等将来版本闸门触发重解压换上新镜像后，本步骤才真正参与启动链。
+        if (!File(alasDir, RESTORE_SEED).isFile) return true
+        val r = runGuest(listOf("/bin/bash", "seeds/alasaos_restore.sh"), RESTORE_TIMEOUT_MS)
+        if (r != null && r.exit == 0 && !r.timedOut) return true
+        fail("ALAS 文件还原失败（exit=${r?.exit ?: "?"}），请重试或重新安装整包")
+        return false
     }
 
     // ------------------------------------------------------------------ 会话
@@ -610,6 +635,16 @@ class ProotHost(
         private const val SERVICES_UP_MS = 90_000L
         private const val SHORT_EXEC_MS = 60_000L
         private const val ENV_FIX_TIMEOUT_MS = 300_000L
+
+        /** 首启从 pack 物化整树：9367 文件 ~130MB 在 proot 下写入，慢设备留足余量 */
+        private const val RESTORE_TIMEOUT_MS = 600_000L
+
+        /** 还原完成 marker（/opt/alas 内 untracked 文件，由 alasaos_restore.sh 落） */
+        private const val RESTORE_MARKER = ".alasaos_restored"
+
+        /** 还原脚本在镜像内的位置；缺失即旧版完整树 rootfs，跳过还原 */
+        private const val RESTORE_SEED = "seeds/alasaos_restore.sh"
+
         private const val REGEN_ARGS_TIMEOUT_MS = 360_000L
         private const val STOP_GRACE_MS = 8_000L
         private const val RESTART_BACKOFF_INIT_MS = 3_000L

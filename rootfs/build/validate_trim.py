@@ -18,6 +18,45 @@ def unpack_archive(archive, root):
     subprocess.run(['tar', '-xf', str(archive.resolve()), '-C', str(root)], check=True)
 
 
+def materialize_alas_tree(root):
+    """First-boot parity: the shipped image keeps tracked ALAS files only as git
+    objects. Materialize them from the pack exactly as seeds/alasaos_restore.sh
+    does on device, so the runtime smoke sees the real post-restore tree.
+    Legacy archives without .git already carry the full tree (no-op)."""
+    alas = root / 'opt/alas'
+    git_dir = alas / '.git'
+    if not (git_dir / 'objects' / 'pack').is_dir():
+        return
+    # reset --hard rewrites .git metadata (index stat cache with fresh mtimes,
+    # reflog timestamps, ORIG_HEAD), which would make otherwise identical trees
+    # compare unequal across roots; restore the archive's .git afterwards so
+    # tree_identity stays deterministic while the worktree stays materialized.
+    pristine = root / '.aos-git-pristine'
+    shutil.copytree(git_dir, pristine)
+    try:
+        subprocess.run(['git', '-C', str(alas), '-c', 'safe.directory=*',
+                        'reset', '--hard', '--quiet'], check=True)
+    finally:
+        shutil.rmtree(git_dir)
+        pristine.rename(git_dir)
+
+
+def strip_alas_tree(root):
+    """Inverse of materialize_alas_tree and of the image-side strip in
+    build-rootfs.sh: remove git-tracked working-tree files (pack + untracked AOS
+    assets stay). Validators that repack a materialized root must strip first,
+    otherwise the repacked artifact would carry the full tree again and silently
+    undo the image-side slimming. Legacy archives without .git keep their tree."""
+    alas = root / 'opt/alas'
+    if not (alas / '.git' / 'objects' / 'pack').is_dir():
+        return
+    subprocess.run(
+        ['bash', '-c',
+         'set -eu; cd "$1"; git -c safe.directory=* ls-files -z | xargs -0 -r rm -f --; '
+         'find . -depth -type d -empty -not -path "./.git" -not -path "./.git/*" -delete',
+         'strip-alas-tree', str(alas)], check=True)
+
+
 def tree_identity(root):
     result = {}
     for directory, dirs, files in os.walk(root, followlinks=False):
@@ -75,6 +114,7 @@ def main():
     (dist / 'TRIM_PLAN.json').write_text(json.dumps(plan, indent=2), encoding='utf-8')
     root.mkdir(parents=True)
     unpack_archive(args.input, root)
+    materialize_alas_tree(root)
     protected = tree_identity(root / 'opt/alas')
     stage = root / 'aos-validation'
     stage.mkdir()
