@@ -5,7 +5,7 @@ import java.io.RandomAccessFile
 
 /** Independent steps, not a made-up overall percentage. */
 enum class StartupStep {
-    RUNTIME, CLEANUP, OVERLAY, ENVIRONMENT, CONFIG, UPDATE, PATCHES, ARGUMENTS, SESSION, SERVICES,
+    RUNTIME, CLEANUP, RESTORE, OVERLAY, ENVIRONMENT, CONFIG, UPDATE, PATCHES, ARGUMENTS, SESSION, SERVICES,
 }
 
 enum class StepStatus { WAITING, ACTIVE, DONE, WARNING, FAILED, SKIPPED }
