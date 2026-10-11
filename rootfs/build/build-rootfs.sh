@@ -72,6 +72,7 @@ require_file "$ASSETS/seeds/alasaos_update.sh"
 require_file "$ASSETS/seeds/update_progress.py"
 require_file "$ASSETS/seeds/cdn_update.py"
 require_file "$ASSETS/seeds/regen_args.py"
+require_file "$ASSETS/seeds/alasaos_restore.sh"
 require_file "$ASSETS/shims/jellyfish.py"
 require_file "$ASSETS/shims/numpy_shim.py"
 require_file "$ASSETS/shims/zzz_alas_shim.pth"
@@ -252,6 +253,10 @@ install -D -m 0755 "$ASSETS/seeds/regen_args.py" "$ROOTFS_DIR/opt/alas/seeds/reg
 # imageio 钉回上游 2.27.0，并 git 还原被旧构建补丁盖过的上游跟踪文件；协议见脚本头注释
 install -D -m 0755 "$ASSETS/seeds/env_fix.sh" "$ROOTFS_DIR/opt/alas/seeds/env_fix.sh"
 
+# 工作区离线还原：rootfs 只带 .git（瘦身），git 跟踪的工作区文件由本脚本在打包前
+# 剥离、真机首启经 proot 拉起本 seed 从 pack 物化（协议见脚本头注释）
+install -D -m 0755 "$ASSETS/seeds/alasaos_restore.sh" "$ROOTFS_DIR/opt/alas/seeds/alasaos_restore.sh"
+
 # 原版 OCR 模型随上游 ALAS 自带（bin/cnocr_models/{azur_lane,azur_lane_jp,cnocr,jp,tw}，
 # 共约 31MB），无需另装；PP-OCR 的 det/rec/keys.onnx 已随自研 OCR 层退役，不再装入。
 
@@ -374,10 +379,21 @@ for mp in dev dev/pts proc sys etc/resolv.conf; do
   fi
 done
 
-# 保留浅克隆的 /opt/alas/.git（含钉版 commit pack），仅移除 hooks、logs 与锁，
-# 确保真机首启直接持有真实 HEAD 与 base commit，避免首启全量拉取 75MB
+# 保留浅克隆的 /opt/alas/.git（含钉版 commit pack），仅移除 hooks、logs 与锁。
+# pack 是 ALAS 树在镜像里的唯一载体：体积≈整树 xz 压缩（67MB↔70MB 基本等价），
+# 真机首启由 seeds/alasaos_restore.sh 离线物化整树（官方一键包同款方案），
+# 后续热更新以 pack 为基线做增量拉取。
 rm -rf "$ROOTFS_DIR/opt/alas/.git/hooks" "$ROOTFS_DIR/opt/alas/.git/logs"
 find "$ROOTFS_DIR/opt/alas/.git" -name '*.lock' -delete 2>/dev/null
+# 瘦身核心：按 ls-files 精确剥离 git 跟踪的工作区文件（与官方包一致的 index 原样
+# 保留）。不用整树清空——untracked 的 AOS 自有资产（seeds/、config/deploy.yaml、
+# BUILD_MANIFEST、wrapper*.py 等）必须留在镜像里
+(
+  cd "$ROOTFS_DIR/opt/alas" &&
+  git ls-files -z | xargs -0 -r rm -f -- &&
+  find . -depth -type d -empty -not -path './.git' -not -path './.git/*' -delete
+)
+log "ALAS 跟踪工作区已剥离，镜像只带 .git pack + AOS untracked 资产"
 find "$ROOTFS_DIR" -type d -name __pycache__ -prune -exec rm -rf {} +
 rm -rf "$ROOTFS_DIR/root/.cache" "$ROOTFS_DIR/var/lib/apt/lists"/*
 
