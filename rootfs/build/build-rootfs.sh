@@ -374,7 +374,10 @@ for mp in dev dev/pts proc sys etc/resolv.conf; do
   fi
 done
 
-rm -rf "$ROOTFS_DIR/opt/alas/.git"
+# 保留浅克隆的 /opt/alas/.git（含钉版 commit pack），仅移除 hooks、logs 与锁，
+# 确保真机首启直接持有真实 HEAD 与 base commit，避免首启全量拉取 75MB
+rm -rf "$ROOTFS_DIR/opt/alas/.git/hooks" "$ROOTFS_DIR/opt/alas/.git/logs"
+find "$ROOTFS_DIR/opt/alas/.git" -name '*.lock' -delete 2>/dev/null
 find "$ROOTFS_DIR" -type d -name __pycache__ -prune -exec rm -rf {} +
 rm -rf "$ROOTFS_DIR/root/.cache" "$ROOTFS_DIR/var/lib/apt/lists"/*
 
