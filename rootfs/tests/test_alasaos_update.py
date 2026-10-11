@@ -62,11 +62,13 @@ class UpdateTests(unittest.TestCase):
         progress_child = (
             'if [[ "$1" == seeds/update_progress.py ]]; then\n'
             '  shift 2\n'
-            f'  exec "{shell_path(sys.executable)}" seeds/update_progress.py -- "$ALASAOS_TEST_BASH" "{shell_path(self.bin / "git")}" "${{@:2}}"\n'
+            f'  exec "{shell_path(sys.executable)}" "${{python_flags[@]}}" seeds/update_progress.py -- "$ALASAOS_TEST_BASH" "{shell_path(self.bin / "git")}" "${{@:2}}"\n'
             'fi\n'
         ) if os.name == 'nt' else ''
         (self.bin / 'python3').write_text(
-            '#!/bin/bash\n' + progress_child + f'exec "{shell_path(sys.executable)}" "$@"\n', newline='\n')
+            '#!/bin/bash\npython_flags=()\n'
+            'if [[ "${1:-}" == -S ]]; then python_flags+=("$1"); shift; fi\n'
+            + progress_child + f'exec "{shell_path(sys.executable)}" "${{python_flags[@]}}" "$@"\n', newline='\n')
         for p in self.bin.iterdir():
             p.chmod(0o755)
 
@@ -274,7 +276,9 @@ class UpdateTests(unittest.TestCase):
         (self.alas / rel).write_text('class Icon:\n    RUN = "old"\n')
         config_before = (self.alas / 'config/deploy.yaml').read_bytes()
         # Avoid importing/installing any host Python dependency in this test.
-        (self.bin / 'python3').write_text('#!/bin/bash\necho 2.27.0\n', newline='\n')
+        imports = self.root / 'imageio-imports'
+        (self.bin / 'python3').write_text(
+            f'#!/bin/bash\nprintf . >> "{shell_path(imports)}"\necho 2.27.0\n', newline='\n')
         bash = os.environ.get('ALASAOS_TEST_BASH', shutil.which('bash') or '/bin/bash')
         p = subprocess.run([bash, '-c', f'export PATH="{shell_path(self.bin)}:$PATH"; exec /bin/bash "$1"',
                             'seed-test', shell_path(SEEDS / 'env_fix.sh')], env=self.env,
@@ -282,6 +286,7 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual((self.alas / rel).read_bytes(), source.read_bytes())
         self.assertEqual((self.alas / 'config/deploy.yaml').read_bytes(), config_before)
+        self.assertEqual(imports.read_text(), '.', 'An already valid imageio needs only one import')
 
 
 if __name__ == '__main__':

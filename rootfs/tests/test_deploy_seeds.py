@@ -21,7 +21,7 @@ class DeploySeedTests(unittest.TestCase):
             other = config / 'other.json'
             other.write_text('{"keep": true}')
             env = dict(os.environ, ALASAOS_ALAS_ROOT=tmp, PYTHONDONTWRITEBYTECODE='1')
-            command = [sys.executable, str(ROOT / 'rootfs/seeds/seed_config.py')]
+            command = [sys.executable, '-S', str(ROOT / 'rootfs/seeds/seed_config.py')]
             subprocess.run(command, env=env, capture_output=True, check=True, timeout=10)
             self.assertFalse((config / 'alas.json').exists())
             self.assertEqual(other.read_text(), '{"keep": true}')
@@ -45,8 +45,8 @@ class DeploySeedTests(unittest.TestCase):
                             '  Webui:\n    WebuiPort: 22267\n    Password: retain-test-value\n')
                 deploy.write_bytes(original.replace('\n', newline).encode())
                 env = dict(os.environ, ALASAOS_ALAS_ROOT=str(alas), PYTHONDONTWRITEBYTECODE='1')
-                policy = [sys.executable, str(ROOT / 'rootfs/seeds/seed_deploy.py')]
-                reader = [sys.executable, str(ROOT / 'rootfs/seeds/sync_deploy.py'), '--read']
+                policy = [sys.executable, '-S', str(ROOT / 'rootfs/seeds/seed_deploy.py')]
+                reader = [sys.executable, '-S', str(ROOT / 'rootfs/seeds/sync_deploy.py'), '--read']
                 p = subprocess.run(policy, env=env, capture_output=True, text=True, timeout=10)
                 self.assertEqual(p.returncode, 0, p.stderr)
                 self.assertNotIn('FAKE_TEST_SECRET', p.stdout + p.stderr)
@@ -67,7 +67,7 @@ class DeploySeedTests(unittest.TestCase):
             env = dict(os.environ, ALASAOS_ALAS_ROOT=tmp, PYTHONDONTWRITEBYTECODE='1')
             for script, args, code in [('seed_deploy.py', [], 0), ('sync_deploy.py', ['--read'], 2),
                                        ('sync_deploy.py', ['test-source', 'cloud'], 2)]:
-                p = subprocess.run([sys.executable, str(ROOT / 'rootfs/seeds' / script), *args],
+                p = subprocess.run([sys.executable, '-S', str(ROOT / 'rootfs/seeds' / script), *args],
                                    env=env, capture_output=True, timeout=10)
                 self.assertEqual(p.returncode, code)
             self.assertFalse((Path(tmp) / 'config/deploy.yaml').exists())
@@ -81,7 +81,7 @@ class DeploySeedTests(unittest.TestCase):
             deploy = alas / 'config/deploy.yaml'
             deploy.write_text('Deploy:\n  Webui:\n    Theme: default\n')
             env = dict(os.environ, ALASAOS_ALAS_ROOT=str(alas), ALASAOS_THEME='dark', PYTHONDONTWRITEBYTECODE='1')
-            subprocess.run([sys.executable, str(ROOT / 'rootfs/seeds/seed_deploy.py')], env=env, check=True, timeout=10)
+            subprocess.run([sys.executable, '-S', str(ROOT / 'rootfs/seeds/seed_deploy.py')], env=env, check=True, timeout=10)
             self.assertIn('Theme: dark', deploy.read_text())
 
 
