@@ -44,6 +44,7 @@ internal fun StartupChecklist(snapshot: ProotSnapshot) {
             val label = when (entry.step) {
                 StartupStep.RUNTIME -> R.string.startup_runtime
                 StartupStep.CLEANUP -> R.string.startup_cleanup
+                StartupStep.RESTORE -> R.string.startup_restore
                 StartupStep.OVERLAY -> R.string.startup_overlay
                 StartupStep.ENVIRONMENT -> R.string.startup_environment
                 StartupStep.CONFIG -> R.string.startup_config

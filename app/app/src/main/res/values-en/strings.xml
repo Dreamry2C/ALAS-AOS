@@ -677,6 +677,7 @@
     <string name="startup_skipped">Skipped</string>
     <string name="startup_runtime">Check runtime</string>
     <string name="startup_cleanup">Clean up and prepare network</string>
+    <string name="startup_restore">Restore ALAS files (slower on first start)</string>
     <string name="startup_overlay">Sync runtime files</string>
     <string name="startup_environment">Check and repair environment</string>
     <string name="startup_config">Prepare instance configuration</string>
