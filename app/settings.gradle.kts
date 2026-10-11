@@ -11,15 +11,19 @@ pluginManagement {
     }
     repositories {
         mavenLocal()
-        // 大陆网络环境 dl.google.com 偶发握手中断，Aliyun 镜像优先、官方源兜底
-        maven {
-            name = "AliyunGoogle"
-            url = uri("https://maven.aliyun.com/repository/google")
-            content {
-                includeGroupByRegex("com\\.android.*")
-                includeGroupByRegex("com\\.google.*")
-                includeGroupByRegex("androidx.*")
-                excludeGroupByRegex("com\\.google\\.devtools.*")
+        // 大陆网络环境 dl.google.com 偶发握手中断，Aliyun 镜像优先、官方源兜底。
+        // CI（GitHub Actions 海外 runner）只用官方源：Aliyun 偶发 502 会把整个解析拖死
+        // （2026-10-11 run 38144758649：kotlin-daemon-embeddable 解析 502 → 构建失败）。
+        if (System.getenv("CI") != "true") {
+            maven {
+                name = "AliyunGoogle"
+                url = uri("https://maven.aliyun.com/repository/google")
+                content {
+                    includeGroupByRegex("com\\.android.*")
+                    includeGroupByRegex("com\\.google.*")
+                    includeGroupByRegex("androidx.*")
+                    excludeGroupByRegex("com\\.google\\.devtools.*")
+                }
             }
         }
         google {
@@ -30,9 +34,11 @@ pluginManagement {
                 excludeGroupByRegex("com\\.google\\.devtools.*")
             }
         }
-        maven {
-            name = "AliyunCentral"
-            url = uri("https://maven.aliyun.com/repository/central")
+        if (System.getenv("CI") != "true") {
+            maven {
+                name = "AliyunCentral"
+                url = uri("https://maven.aliyun.com/repository/central")
+            }
         }
         mavenCentral()
         gradlePluginPortal()
@@ -44,17 +50,22 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        maven {
-            name = "AliyunGoogle"
-            url = uri("https://maven.aliyun.com/repository/google")
-            content { excludeGroupByRegex("com\\.google\\.devtools.*") }
+        // CI 只用官方源，理由见 pluginManagement 注释
+        if (System.getenv("CI") != "true") {
+            maven {
+                name = "AliyunGoogle"
+                url = uri("https://maven.aliyun.com/repository/google")
+                content { excludeGroupByRegex("com\\.google\\.devtools.*") }
+            }
         }
         google {
             content { excludeGroupByRegex("com\\.google\\.devtools.*") }
         }
-        maven {
-            name = "AliyunCentral"
-            url = uri("https://maven.aliyun.com/repository/central")
+        if (System.getenv("CI") != "true") {
+            maven {
+                name = "AliyunCentral"
+                url = uri("https://maven.aliyun.com/repository/central")
+            }
         }
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
