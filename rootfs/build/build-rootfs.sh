@@ -385,14 +385,15 @@ done
 # 后续热更新以 pack 为基线做增量拉取。
 rm -rf "$ROOTFS_DIR/opt/alas/.git/hooks" "$ROOTFS_DIR/opt/alas/.git/logs"
 find "$ROOTFS_DIR/opt/alas/.git" -name '*.lock' -delete 2>/dev/null
-# 瘦身核心：按 ls-files 精确剥离 git 跟踪的工作区文件（与官方包一致的 index 原样
-# 保留）。不用整树清空——untracked 的 AOS 自有资产（seeds/、config/deploy.yaml、
-# BUILD_MANIFEST、wrapper*.py 等）必须留在镜像里
-(
-  cd "$ROOTFS_DIR/opt/alas" &&
-  git ls-files -z | xargs -0 -r rm -f -- &&
-  find . -depth -type d -empty -not -path './.git' -not -path './.git/*' -delete
-)
+# 与 native-slim 重打包共用剥离入口：补齐恢复 seed、pending 标记后才移除跟踪文件。
+# index、pack 与 config/deploy.yaml、BUILD_MANIFEST、wrapper 等 AOS 自有资产保留。
+python3 - "$ASSETS/build" "$ROOTFS_DIR" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from validate_trim import strip_alas_tree
+strip_alas_tree(Path(sys.argv[2]))
+PY
 log "ALAS 跟踪工作区已剥离，镜像只带 .git pack + AOS untracked 资产"
 find "$ROOTFS_DIR" -type d -name __pycache__ -prune -exec rm -rf {} +
 rm -rf "$ROOTFS_DIR/root/.cache" "$ROOTFS_DIR/var/lib/apt/lists"/*
