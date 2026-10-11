@@ -20,7 +20,8 @@ fail() { date +%F > "$FAIL_FILE" 2>/dev/null; echo "FAILED $1"; exit 1; }
 # Do not expose shell-generated paths or tool diagnostics (including credentials).
 exec 2>/dev/null
 cd "$ALAS_DIR" || fail "workdir"
-config="$(python3 seeds/sync_deploy.py --read "$DEPLOY_YAML" 2>/dev/null)" || { echo "FAILED deploy-config"; exit 1; }
+# These helpers use only stdlib; avoid loading the runtime's NumPy site hook.
+config="$(python3 -S seeds/sync_deploy.py --read "$DEPLOY_YAML" 2>/dev/null)" || { echo "FAILED deploy-config"; exit 1; }
 REPO="${config%%$'\n'*}"
 BRANCH="${config#*$'\n'}"
 unset config
@@ -76,7 +77,7 @@ find .git -name '*.lock' -delete 2>/dev/null
 
 # CDN pack is valid only for the unchanged official domestic/master source with a real base.
 if [[ -z "${ALASAOS_UPDATE_NO_CDN:-}" && "$REPO" == "$DEFAULT_REPO" && "$BRANCH" == master && -n "$current" && "$source_changed" -eq 0 && "$current_branch" == "$BRANCH" ]]; then
-  cdn_out="$(python3 seeds/cdn_update.py "$ALAS_DIR" "$current" 2>&1)"; cdn_rc=$?
+  cdn_out="$(python3 -S seeds/cdn_update.py "$ALAS_DIR" "$current" 2>&1)"; cdn_rc=$?
   cdn_last="${cdn_out##*$'\n'}"
   if [[ $cdn_rc -eq 0 && "$cdn_last" == "UPTODATE" ]]; then
     git update-ref "refs/remotes/origin/$BRANCH" "$current" >/dev/null 2>&1 || fail "remote-ref"
@@ -111,7 +112,7 @@ fi
 if [[ ! -f .git/FETCH_HEAD && ! -f .git/shallow ]]; then DEPTH=1; fi
 
 echo "PHASE fetch"
-timeout "$TIMEOUT" python3 seeds/update_progress.py -- git fetch --progress --depth "$DEPTH" origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" >/dev/null 2>&1 || fail "fetch"
+timeout "$TIMEOUT" python3 -S seeds/update_progress.py -- git fetch --progress --depth "$DEPTH" origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" >/dev/null 2>&1 || fail "fetch"
 new="$(git rev-parse --verify 'FETCH_HEAD^{commit}' 2>/dev/null)" || fail "revision"
 if [[ "$new" == "$current" && "$source_changed" -eq 0 && "$current_branch" == "$BRANCH" ]]; then
   echo "$new" > "$STATE_FILE"
