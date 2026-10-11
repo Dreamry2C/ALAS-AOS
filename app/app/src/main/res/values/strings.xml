@@ -672,6 +672,7 @@
     <string name="startup_skipped">已跳过</string>
     <string name="startup_runtime">检查运行环境</string>
     <string name="startup_cleanup">清理残留与网络准备</string>
+    <string name="startup_restore">还原 ALAS 文件（首启稍慢）</string>
     <string name="startup_overlay">同步运行文件</string>
     <string name="startup_environment">环境自检与修复</string>
     <string name="startup_config">准备实例配置</string>

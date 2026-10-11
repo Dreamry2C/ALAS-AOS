@@ -10,7 +10,7 @@ import subprocess
 from profile_bundle import identity
 from slim_opencv_backends import slim
 from trim_rootfs import trim_archive
-from validate_trim import tree_identity, unpack_archive
+from validate_trim import materialize_alas_tree, strip_alas_tree, tree_identity, unpack_archive
 
 
 def run_smoke(root, output):
@@ -66,6 +66,7 @@ def main():
     for root in roots.values():
         root.mkdir()
         unpack_archive(args.input, root)
+        materialize_alas_tree(root)
     # The source/Ubuntu patch audit was done for this exact distribution build.
     # A later vendor revision needs a new audit, even if its SONAME is unchanged.
     packages = (roots['baseline'] / 'var/lib/dpkg/status').read_text(encoding='utf-8').split('\n\n')
@@ -86,6 +87,11 @@ def main():
         if tree_identity(root / 'opt/alas') != protected:
             raise ValueError('ALAS tree changed during validation')
     # Identical compressor and tar metadata for the control and candidate.
+    # The roots hold materialized ALAS trees (smoke parity); strip them back to
+    # the shipped image layout before repacking, or the candidate would re-bake
+    # the full tree and silently undo the image-side slimming.
+    for root in roots.values():
+        strip_alas_tree(root)
     archives = {}
     for name, root in roots.items():
         raw = work / f'{name}.tar'
