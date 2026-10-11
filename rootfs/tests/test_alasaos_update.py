@@ -34,6 +34,7 @@ class UpdateTests(unittest.TestCase):
         for p in (self.origin, self.alas, self.bin):
             p.mkdir()
         self.env = dict(os.environ, GIT_CONFIG_NOSYSTEM='1',
+                        GIT_CEILING_DIRECTORIES=str(self.root),
                         GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT='0',
                         ALASAOS_UPDATE_NO_CDN='1', ALASAOS_UPDATE_TIMEOUT='5',
                         ALASAOS_ALAS_ROOT=shell_path(self.alas), PYTHONDONTWRITEBYTECODE='1')
@@ -107,6 +108,48 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(self.update().returncode, 0)
         self.assertEqual(self.update().returncode, 0)
         self.assertEqual(self.git(self.alas, 'rev-parse', '--verify', 'origin/zenko'), self.sha)
+
+    def baked_repository(self):
+        self.git(self.alas, 'init', '-q', '-b', 'master')
+        self.git(self.alas, 'remote', 'add', 'origin', shell_path(self.origin))
+        self.git(self.alas, 'fetch', '--depth', '1', 'origin', 'master')
+        self.git(self.alas, 'checkout', '-q', '-B', 'master', 'FETCH_HEAD')
+
+    def test_baked_same_source_and_head_skip_first_fetch(self):
+        self.baked_repository()
+        p = self.update(branch='master', FAIL_FETCH='1')
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.assertIn('UNCHANGED ' + self.sha, p.stdout)
+        self.assertNotIn('PHASE fetch', p.stdout)
+        self.assertEqual((self.alas / '.alasaos_update_source').read_text().strip(),
+                         hashlib.sha256((shell_path(self.origin) + '\nmaster').encode()).hexdigest())
+
+    def test_baked_official_github_base_uses_domestic_cdn_on_first_start(self):
+        self.baked_repository()
+        self.git(self.alas, 'remote', 'set-url', 'origin',
+                 'https://github.com/LmeSzinc/AzurLaneAutoScript.git')
+        (self.alas / 'seeds/cdn_update.py').write_text('print("UPTODATE")\n')
+        p = self.update(source='git://git.lyoko.io/AzurLaneAutoScript', branch='master',
+                        ALASAOS_UPDATE_NO_CDN='', FAIL_FETCH='1', FAIL_PROBE='1')
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.assertIn('UNCHANGED ' + self.sha + ' (cdn)', p.stdout)
+        self.assertEqual(self.git(self.alas, 'rev-parse', 'origin/master'), self.sha)
+
+    def test_unknown_baked_source_does_not_bootstrap_official_cdn(self):
+        self.baked_repository()
+        (self.alas / 'seeds/cdn_update.py').write_text('print("UPTODATE")\n')
+        p = self.update(source='git://git.lyoko.io/AzurLaneAutoScript', branch='master',
+                        ALASAOS_UPDATE_NO_CDN='', FAIL_FETCH='1', FAIL_PROBE='1')
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn('PHASE source-changed', p.stdout)
+        self.assertIn('FAILED fetch', p.stdout)
+
+    def test_baked_branch_change_still_checks_out_selected_branch(self):
+        self.baked_repository()
+        p = self.update(branch='zenko')
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.assertIn('UPDATED ' + self.sha, p.stdout)
+        self.assertEqual(self.git(self.alas, 'symbolic-ref', '--short', 'HEAD'), 'zenko')
 
     def test_changed_branch_at_same_commit_checks_out_branch(self):
         self.assertEqual(self.update(branch='master').returncode, 0)

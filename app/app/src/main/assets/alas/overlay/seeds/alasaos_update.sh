@@ -27,13 +27,28 @@ unset config
 export GIT_TERMINAL_PROMPT=0
 
 # Manifest/state files cannot prove checkout; only real Git objects and HEAD do.
-current="$(git rev-parse --verify HEAD 2>/dev/null || true)"
-current_branch="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+current="$(git --git-dir=.git rev-parse --verify 'HEAD^{commit}' 2>/dev/null || true)"
+current_branch="$(git --git-dir=.git symbolic-ref --short HEAD 2>/dev/null || true)"
 git check-ref-format --branch "$BRANCH" >/dev/null 2>&1 || { echo "FAILED invalid-branch"; exit 1; }
 
 want_source="$(printf '%s\n%s' "$REPO" "$BRANCH" | sha256sum | cut -d' ' -f1)"
 last_source=""
 [[ -f "$SOURCE_FILE" ]] && last_source="$(cat "$SOURCE_FILE" 2>/dev/null)"
+# A baked clone has a real base but no previous update attempt. Bootstrap only
+# when its recorded origin and branch already identify the selected source.
+# Official GitHub/master and domestic/master share that base; arbitrary forks,
+# branch changes and existing source markers retain normal checks.
+if [[ ! -e "$SOURCE_FILE" && -n "$current" && "$current_branch" == "$BRANCH" ]]; then
+  baked_repo="$(git --git-dir=.git remote get-url origin 2>/dev/null || true)"
+  official_github='https://github.com/LmeSzinc/AzurLaneAutoScript'
+  if [[ "$baked_repo" == "$REPO" ]] ||
+     { [[ "$BRANCH" == master ]] &&
+       [[ "$baked_repo" == "$DEFAULT_REPO" || "$baked_repo" == "$official_github" || "$baked_repo" == "$official_github.git" ]] &&
+       [[ "$REPO" == "$DEFAULT_REPO" || "$REPO" == "$official_github" || "$REPO" == "$official_github.git" ]]; }; then
+    last_source="$want_source"
+  fi
+  unset baked_repo official_github
+fi
 source_changed=0
 [[ "$want_source" != "$last_source" ]] && source_changed=1
 
