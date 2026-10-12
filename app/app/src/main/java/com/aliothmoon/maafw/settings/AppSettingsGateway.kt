@@ -2,6 +2,7 @@ package com.aliothmoon.maafw.settings
 
 import com.aliothmoon.maafw.domain.OverlayControlMode
 import com.aliothmoon.maafw.domain.RunMode
+import com.aliothmoon.maafw.provision.RootfsSourceKind
 import com.aliothmoon.maafw.theme.ThemeStyle
 import kotlinx.coroutines.flow.StateFlow
 
@@ -33,5 +34,21 @@ interface AppSettingsGateway {
     /** ALAS 热更新分支；默认 master */
     val updateBranch: StateFlow<String>
     suspend fun setUpdateBranch(branch: String)
+
+    /** lite 构建首启 rootfs 下载源类型 */
+    val rootfsSourceKind: StateFlow<RootfsSourceKind>
+    suspend fun setRootfsSourceKind(kind: RootfsSourceKind)
+
+    /** 自定义 rootfs 下载直链；仅 CUSTOM 源生效 */
+    val rootfsCustomUrl: StateFlow<String>
+    suspend fun setRootfsCustomUrl(url: String)
+
+    /** GitHub 源是否走镜像前缀加速 */
+    val rootfsUseMirror: StateFlow<Boolean>
+    suspend fun setRootfsUseMirror(enabled: Boolean)
+
+    /** 镜像前缀列表（按序尝试） */
+    val rootfsMirrors: StateFlow<List<String>>
+    suspend fun setRootfsMirrors(mirrors: List<String>)
 
 }
