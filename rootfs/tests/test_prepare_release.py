@@ -28,7 +28,7 @@ class PrepareReleaseTests(unittest.TestCase):
             z.writestr('classes.dex', b'dex')
 
     def prepare(self, tag='v0.1.11'):
-        release.prepare(tag, '0.1.11', '# Changes\n\n## v0.1.11\n\n- 新改动\n\n## v0.1.10\n旧改动\n',
+        release.prepare(tag, '0.1.11', '# Changes\n\n## v0.1.11（2026-10-13）\n\n- 新改动\n\n## v0.1.10\n旧改动\n',
                         self.root, self.root, self.root / 'output')
 
     def test_matching_pair_generates_only_current_notes_and_all_checksums(self):

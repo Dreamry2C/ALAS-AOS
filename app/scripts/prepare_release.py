@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def release_notes(changelog, tag):
     sections = re.split(r'(?=^## v)', changelog, flags=re.MULTILINE)
-    matches = [s for s in sections if re.match(rf'^## {re.escape(tag)}(?:\s|$)', s)]
+    matches = [s for s in sections if re.match(rf'^## {re.escape(tag)}(?:\s|[（(]|$)', s)]
     if len(matches) != 1:
         raise ValueError('CHANGELOG must contain exactly one section for this release')
     return matches[0].strip() + '\n'
