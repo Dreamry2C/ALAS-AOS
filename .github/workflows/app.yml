@@ -63,7 +63,29 @@ jobs:
       # setup-gradle validates wrapper JARs by default.
       - uses: gradle/actions/setup-gradle@v6
       - name: Prepare project-local temporary directory
-        run: mkdir -p .tmp/ci
+        run: |
+          mkdir -p .tmp/ci
+          mkdir -p dist/apk
+      - name: Compute dynamic build version code
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          props_path = Path('app/gradle.properties')
+          content = props_path.read_text(encoding='utf-8')
+
+          run_number = int(os.environ.get('GITHUB_RUN_NUMBER', '0'))
+          run_attempt = int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+          if run_number > 0:
+              # Run 28 was code 107 -> offset is 79 (28 + 79 = 107)
+              # 每一次 Action 构建 run_number 严格自增 1，同一次重试 run_attempt 也会自增
+              version_code = 79 + run_number + (run_attempt - 1)
+              new_content = re.sub(r'^app\.versionCode=\d+', f'app.versionCode={version_code}', content, flags=re.MULTILINE)
+              props_path.write_text(new_content, encoding='utf-8')
+              print(f'Dynamic versionCode set: {version_code} (GitHub run #{run_number}, attempt {run_attempt})')
+          PY
       - name: Restore and verify release signing key
         if: github.event_name != 'pull_request'
         env:
@@ -77,16 +99,18 @@ jobs:
         with:
           name: rootfs
           path: .tmp/rootfs-dist
-      - name: Prepare bundled rootfs asset
-        run: |
-          mkdir -p app/app/src/main/assets/rootfs
-          xz --test .tmp/rootfs-dist/rootfs.tar.xz
-          cp .tmp/rootfs-dist/rootfs.tar.xz .tmp/rootfs-dist/BUILD_MANIFEST app/app/src/main/assets/rootfs/
       - name: Kotlin unit tests
         env:
           TMPDIR: ${{ github.workspace }}/.tmp/ci
         run: bash app/gradlew -p app :app:testDebugUnitTest --no-daemon --console=plain
-      - name: Build Release APK
+
+      # ── 第 1 阶段：构建 Lite 版本（不内置 rootfs，首启选源在线下载）──
+      - name: Prepare Lite build (clean rootfs assets)
+        if: github.event_name != 'pull_request'
+        run: |
+          rm -rf app/app/src/main/assets/rootfs
+          mkdir -p app/app/src/main/assets/rootfs
+      - name: Build Lite Release APK
         if: github.event_name != 'pull_request'
         env:
           TMPDIR: ${{ github.workspace }}/.tmp/ci
@@ -94,54 +118,158 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: bash app/gradlew -p app :app:assembleRelease --no-daemon --console=plain
-      - name: Verify APK signing certificate and version
+      - name: Verify and stage Lite Release APK
         if: github.event_name != 'pull_request'
-        run: python3 app/scripts/release_identity.py verify
+        run: |
+          python3 app/scripts/release_identity.py verify
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import shutil
+          import zipfile
+          from app.scripts.release_identity import settings, release_apk
+
+          def digest(stream):
+              return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+          src = release_apk()
+          version = settings()['app.versionName']
+          dst = Path(f'dist/apk/ALAS-AOS-v{version}-arm64-v8a-lite-release.apk')
+
+          with zipfile.ZipFile(src) as archive:
+              names = archive.namelist()
+              assert 'assets/rootfs/rootfs.tar.xz' not in names, 'lite APK must not bundle rootfs.tar.xz'
+              assert 'assets/rootfs/BUILD_MANIFEST' not in names, 'lite APK must not bundle BUILD_MANIFEST'
+
+          shutil.move(src, dst)
+          size_mib = dst.stat().st_size / 1024**2
+          with dst.open('rb') as stream:
+              sha = digest(stream)
+          print(f'Lite APK staged: {dst.name} ({size_mib:.2f} MiB, SHA256: {sha})')
+          assert size_mib < 25.0, f'Lite APK unexpectedly large: {size_mib:.2f} MiB'
+          PY
+
+      # ── 第 2 阶段：构建 Full 完整版（内置 rootfs，开箱即用）──
+      - name: Prepare Full bundled rootfs asset
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p app/app/src/main/assets/rootfs
+          xz --test .tmp/rootfs-dist/rootfs.tar.xz
+          cp .tmp/rootfs-dist/rootfs.tar.xz .tmp/rootfs-dist/BUILD_MANIFEST app/app/src/main/assets/rootfs/
+      - name: Build Full Release APK
+        if: github.event_name != 'pull_request'
+        env:
+          TMPDIR: ${{ github.workspace }}/.tmp/ci
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bash app/gradlew -p app :app:assembleRelease --no-daemon --console=plain
+      - name: Verify and stage Full Release APK
+        if: github.event_name != 'pull_request'
+        run: |
+          python3 app/scripts/release_identity.py verify
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import shutil
+          import zipfile
+          from app.scripts.release_identity import settings, release_apk
+
+          def digest(stream):
+              return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+          src = release_apk()
+          version = settings()['app.versionName']
+          dst = Path(f'dist/apk/ALAS-AOS-v{version}-arm64-v8a-release.apk')
+
+          assets = Path('app/app/src/main/assets/rootfs')
+          with (assets / 'rootfs.tar.xz').open('rb') as stream:
+              rootfs_sha = digest(stream)
+          manifest = (assets / 'BUILD_MANIFEST').read_bytes()
+
+          with zipfile.ZipFile(src) as archive:
+              with archive.open('assets/rootfs/rootfs.tar.xz') as stream:
+                  assert digest(stream) == rootfs_sha, 'rootfs in APK differs from this run'
+              assert archive.read('assets/rootfs/BUILD_MANIFEST') == manifest, 'manifest mismatch'
+
+          shutil.copy2(src, dst)
+          size_mib = dst.stat().st_size / 1024**2
+          with dst.open('rb') as stream:
+              sha = digest(stream)
+          print(f'Full APK staged: {dst.name} ({size_mib:.2f} MiB, SHA256: {sha})')
+          assert size_mib > 100.0, f'Full APK unexpectedly small: {size_mib:.2f} MiB'
+          PY
+
+      # ── 清理签名密钥 ──
       - name: Remove temporary signing key
         if: always() && github.event_name != 'pull_request'
         run: rm -f -- "$KEYSTORE_PATH"
-      - name: Verify bundled rootfs and report APK size
+
+      # ── 汇总报告 ──
+      - name: Generate dual-edition APK release summary
         if: github.event_name != 'pull_request'
         run: |
           python3 - <<'PY'
           import hashlib
           import os
           from pathlib import Path
-          import zipfile
-          from app.scripts.release_identity import release_apk
 
-          assets = Path('app/app/src/main/assets/rootfs')
           def digest(stream):
               return hashlib.file_digest(stream, 'sha256').hexdigest()
 
-          with (assets / 'rootfs.tar.xz').open('rb') as stream:
-              rootfs_sha = digest(stream)
-          manifest = (assets / 'BUILD_MANIFEST').read_bytes()
-          rows = ['| Package | MiB | SHA256 |', '| --- | ---: | --- |']
-          apk = release_apk()
-          with zipfile.ZipFile(apk) as archive:
-              with archive.open('assets/rootfs/rootfs.tar.xz') as stream:
-                  assert digest(stream) == rootfs_sha, 'rootfs differs from this run'
-              assert archive.read('assets/rootfs/BUILD_MANIFEST') == manifest, 'manifest mismatch'
-          with apk.open('rb') as stream:
-              apk_sha = digest(stream)
-          size = apk.stat().st_size / 1024**2
-          rows.append(f'| {apk.name} | {size:.2f} | `{apk_sha}` |')
+          props = dict(line.strip().split('=', 1) for line in
+                       Path('app/gradle.properties').read_text(encoding='utf-8').splitlines()
+                       if '=' in line and not line.lstrip().startswith('#'))
+          version_name = props.get('app.versionName', 'unknown')
+          version_code = props.get('app.versionCode', 'unknown')
+          commit_sha = os.environ.get('GITHUB_SHA', '')[:7]
+
+          rows = [
+              '| Edition | Package | MiB | SHA256 | Description |',
+              '| --- | --- | ---: | --- | --- |'
+          ]
+          for p in sorted(Path('dist/apk').glob('*.apk')):
+              size = p.stat().st_size / 1024**2
+              with p.open('rb') as s:
+                  sha = digest(s)
+              edition = 'Lite (下载运行环境)' if 'lite' in p.name else 'Full (完整内置运行环境)'
+              desc = '不内置 rootfs，首启在线/镜像下载' if 'lite' in p.name else '内置完整 rootfs，开箱即用'
+              rows.append(f'| **{edition}** | `{p.name}` | {size:.2f} | `{sha}` | {desc} |')
+
           report = '\n'.join(rows) + '\n'
           print(report)
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('Download **ALAS-AOS-arm64-v8a-release** for 64-bit ARM Android devices. 32-bit ARM and x86/x86_64 are not supported.\n\n')
-              summary.write(report)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('### ALAS-AOS 双版本构建产物 (64-bit ARM / arm64-v8a only)\n\n')
+              summary.write(f'- **版本号 (versionName)**: `{version_name}` (保持不变，由配置指定)\n')
+              summary.write(f'- **构建号 (versionCode)**: `{version_code}` (每次 Action 构建自动自增 +1)\n')
+              if commit_sha:
+                  summary.write(f'- **Git Commit**: `{commit_sha}`\n')
+              summary.write('\n' + report)
           PY
-      - name: Upload Release APK
+
+      # ── 上传 Release Artifacts（分开独立输出，不合并打包）──
+      - name: Upload Full Release APK
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           name: ALAS-AOS-arm64-v8a-release
-          path: app/app/build/outputs/apk/release/ALAS-AOS-*-arm64-v8a-release.apk
+          path: dist/apk/ALAS-AOS-*-arm64-v8a-release.apk
           compression-level: 0
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload Lite Release APK
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ALAS-AOS-arm64-v8a-lite-release
+          path: dist/apk/ALAS-AOS-*-arm64-v8a-lite-release.apk
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Preserve test evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -152,9 +280,4 @@ jobs:
             app/app/build/reports/tests/
           if-no-files-found: ignore
           retention-days: 14
-      - name: Publish Release Assets
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: app/app/build/outputs/apk/release/ALAS-AOS-*-arm64-v8a-release.apk
 
