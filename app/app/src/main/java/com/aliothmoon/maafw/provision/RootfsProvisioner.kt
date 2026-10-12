@@ -24,8 +24,11 @@ sealed interface ProvisionState {
     /** 刚启动，正在比对内置版本与已装版本 */
     data object Checking : ProvisionState
 
-    /** 安装包未内置 rootfs.tar.xz（开发构建走 M1-d 的 /data/local/tmp 通道时可跳过） */
+    /** 安装包未内置 rootfs.tar.xz：lite 构建等待用户选源下载（开发构建可跳过走 /data/local/tmp 通道） */
     data object NotBundled : ProvisionState
+
+    /** lite 下载中；totalBytes=0 表示服务器没给 Content-Length（进度条转不确定态） */
+    data class Downloading(val doneBytes: Long, val totalBytes: Long, val bytesPerSecond: Long = 0) : ProvisionState
 
     /** 磁盘余量不足（roadmap 硬校验：≥2GB） */
     data class LowDisk(val freeBytes: Long) : ProvisionState
@@ -39,13 +42,15 @@ sealed interface ProvisionState {
 }
 
 /**
- * 首启解压流水线：assets 的 rootfs.tar.xz → 内部存储 files/rootfs
+ * 首启解压流水线：assets 的 rootfs.tar.xz（完整版）或用户下载的 rootfs.tar.xz（lite）→ 内部存储 files/rootfs
  *
  * - **必须内部 filesDir**：/sdcard 模拟存储不支持符号链接（ubuntu-base 有 740 个），
  *   且 noexec；内部 filesDir 是 Spike A 实证 proot 可用的位置（targetSdk 35）。
- * - 版本闸门：assets 侧 `rootfs/BUILD_MANIFEST` 与 marker `files/rootfs/.provisioned`
- *   对版本号；不一致（或 python3  sanity 不过）就重解。升级=换新包重解，不做增量。
+ * - 版本闸门：包侧 `BUILD_MANIFEST`（完整版=assets，lite=下载落盘）与 marker
+ *   `files/rootfs/.provisioned` 对版本号；不一致（或 python3 sanity 不过）就重解。升级=换新包重解，不做增量。
  * - 落盘走 `rootfs.tmp` 解完再换名，半途失败不留半拉子正式目录。
+ * - lite（未内置构建）：已装（完整版覆盖安装）→ 直接 Ready；否则进 [ProvisionState.NotBundled]
+ *   等用户选源，[startDownload] 下载完走与资产解压同一条 extract→sanity→marker 流水线。
  * - busybox tar 解 ubuntu-base 硬链接前向引用必炸（M1-d 坑②），故用纯 Java
  *   commons-compress + tukaani xz 流式解；硬链接物化成副本，符号链接走 [Os.symlink]。
  */
@@ -61,7 +66,11 @@ class RootfsProvisioner(
 
     private val rootDir: File get() = File(app.filesDir, "rootfs")
     private val tmpDir: File get() = File(app.filesDir, "rootfs.tmp")
+    private val downloadDir: File get() = File(app.filesDir, "rootfs-download")
     private val markerFile: File get() = File(rootDir, MARKER_NAME)
+
+    // lazy：构造期不碰 app.filesDir（单测塞 relaxed mock 时 File(mock, child) 会 NPE）
+    private val downloader: RootfsDownloader by lazy { RootfsDownloader(downloadDir) }
 
     fun start() {
         if (running.compareAndSet(false, true)) {
@@ -83,7 +92,33 @@ class RootfsProvisioner(
         try {
             bundled = bundledVersion()
             if (bundled == null) {
-                Timber.w("rootfs archive not bundled in this build")
+                // lite 构建：覆盖安装到已有完整版数据的设备直接复用已装环境
+                if (isInstalledAny()) {
+                    Timber.i("rootfs already provisioned, lite build reuses it")
+                    _state.value = ProvisionState.Ready
+                    return@withContext
+                }
+                // 上次下载完成后解压失败的重试：不再问源，直接续解压（tmpDir 有半成品也一并复用）
+                downloadedPackage()?.let { (version, archive) ->
+                    Timber.i("resuming extraction of downloaded rootfs $version")
+                    val ready = try {
+                        extractAndFinalize(version, ArchiveInput.Local(archive), skipDiskGate = isExtractComplete(tmpDir, version))
+                    } catch (e: Exception) {
+                        // 包解不开多半是包本身坏（镜像截断等）：弃包，重试回下载源选择，避免死循环
+                        Timber.e(e, "extracting downloaded rootfs failed, discarding package")
+                        runCatching { downloader.clear() }
+                        throw e
+                    }
+                    if (ready) downloader.clear()
+                    return@withContext
+                }
+                val free = app.filesDir.let { it.mkdirs(); it.usableSpace }
+                if (free < MIN_FREE_BYTES) {
+                    Timber.w("low disk: ${free / 1_000_000}MB free, need ${MIN_FREE_BYTES / 1_000_000}MB")
+                    _state.value = ProvisionState.LowDisk(free)
+                    return@withContext
+                }
+                Timber.w("rootfs archive not bundled in this build, waiting for user download")
                 _state.value = ProvisionState.NotBundled
                 return@withContext
             }
@@ -101,16 +136,7 @@ class RootfsProvisioner(
                 return@withContext
             }
 
-            extract(bundled)
-
-            // 解完 sanity：解释器在且可执行，版本以镜像内清单为准
-            val python = File(rootDir, PYTHON_REL)
-            check(python.isFile && python.canExecute()) { "$PYTHON_REL missing or not executable" }
-            val installed = readExtractedVersion(rootDir) ?: bundled
-            markerFile.writeText(installed)
-            File(rootDir, COMPLETE_MARKER).delete()
-            Timber.i("rootfs $installed provisioned")
-            _state.value = ProvisionState.Ready
+            extractAndFinalize(bundled, ArchiveInput.Bundled(app), skipDiskGate = alreadyExtracted)
         } catch (e: Exception) {
             Timber.e(e, "rootfs provision failed")
             // 保护：若 tmpDir 已经完整解压完毕，保留以供重试秒级换名，不白费几十秒
@@ -123,6 +149,120 @@ class RootfsProvisioner(
         }
     }
 
+    /** 用户选定下载源后触发（lite 构建）；下载产物走与内置资产同一条 extract→sanity→marker 流水线 */
+    fun startDownload(source: RootfsDownloadSource) {
+        if (running.compareAndSet(false, true)) {
+            scope.launch { runDownload(source) }
+        }
+    }
+
+    private suspend fun runDownload(source: RootfsDownloadSource) = withContext(Dispatchers.IO) {
+        _state.value = ProvisionState.Checking
+        cleanupTrashDirs()
+        try {
+            val candidates = source.candidateUrls()
+            val usable = candidates.filter { RootfsSourceValidator.validate(it) is RootfsSourceValidator.Result.Valid }
+            if (usable.isEmpty()) {
+                // UI 层已先拦非法源，这里是直调兜底；镜像个别非法不拦，合法子集照常尝试
+                val reason = candidates.firstNotNullOfOrNull {
+                    (RootfsSourceValidator.validate(it) as? RootfsSourceValidator.Result.Rejected)?.reason
+                }
+                _state.value = ProvisionState.Failed(rejectionMessage(reason))
+                return@withContext
+            }
+
+            // 下载 + 解压都吃 filesDir，同一条 ≥2GB 硬校验
+            val free = app.filesDir.let { it.mkdirs(); it.usableSpace }
+            if (free < MIN_FREE_BYTES) {
+                Timber.w("low disk: ${free / 1_000_000}MB free, need ${MIN_FREE_BYTES / 1_000_000}MB")
+                _state.value = ProvisionState.LowDisk(free)
+                return@withContext
+            }
+
+            downloader.clear()
+            // 先清单后包：marker 版本以下载到的 BUILD_MANIFEST 为准（与完整版 provision 同源）
+            val manifest = downloader.download(MANIFEST_NAME, usable.map { RootfsSource.manifestUrl(it) }) { }
+            val version = parseVersion(manifest.readText())
+                ?: error("BUILD_MANIFEST missing rootfs_version")
+            val archive = downloader.download(ARCHIVE_NAME, usable) { progress ->
+                _state.value = ProvisionState.Downloading(progress.doneBytes, progress.totalBytes, progress.bytesPerSecond)
+            }
+            checkXzMagic(archive)
+            Timber.i("downloaded rootfs $version, starting extraction")
+            extractAndFinalize(version, ArchiveInput.Local(archive), skipDiskGate = isExtractComplete(tmpDir, version))
+                .also { ready -> if (ready) scope.launch(Dispatchers.IO) { runCatching { downloader.clear() } } }
+        } catch (e: Exception) {
+            Timber.e(e, "rootfs download provision failed")
+            // 新下载的包解不开多半是包本身坏（镜像截断、假直链等）：弃包，重试回下载源选择
+            runCatching { downloader.clear() }
+            _state.value = ProvisionState.Failed(e.message ?: e.javaClass.simpleName)
+        } finally {
+            running.set(false)
+        }
+    }
+
+    /** 解压 + sanity + marker + Ready；内置资产与下载包共用这最后一公里。返回是否完成部署 */
+    private fun extractAndFinalize(version: String, archive: ArchiveInput, skipDiskGate: Boolean): Boolean {
+        if (!skipDiskGate) {
+            val free = app.filesDir.let { it.mkdirs(); it.usableSpace }
+            if (free < MIN_FREE_BYTES) {
+                Timber.w("low disk: ${free / 1_000_000}MB free, need ${MIN_FREE_BYTES / 1_000_000}MB")
+                _state.value = ProvisionState.LowDisk(free)
+                return false
+            }
+        }
+        extract(version, archive)
+
+        // 解完 sanity：解释器在且可执行，版本以镜像内清单为准
+        val python = File(rootDir, PYTHON_REL)
+        check(python.isFile && python.canExecute()) { "$PYTHON_REL missing or not executable" }
+        val installed = readExtractedVersion(rootDir) ?: version
+        markerFile.writeText(installed)
+        File(rootDir, COMPLETE_MARKER).delete()
+        Timber.i("rootfs $installed provisioned")
+        _state.value = ProvisionState.Ready
+        return true
+    }
+
+    /** lite 覆盖安装：不比版本号，marker 在且 python3 可执行就当已装 */
+    private fun isInstalledAny(): Boolean =
+        markerFile.isFile && File(rootDir, PYTHON_REL).let { it.isFile && it.canExecute() }
+
+    /** 下载目录里是否有下载完成的完整包（重试续解压入口；非 xz 的残次品一律视为没有） */
+    internal fun downloadedPackage(): Pair<String, File>? = downloadedPackage(downloadDir)
+
+    internal fun downloadedPackage(dir: File): Pair<String, File>? {
+        val manifest = File(dir, MANIFEST_NAME)
+        val archive = File(dir, ARCHIVE_NAME)
+        if (!manifest.isFile || !archive.isFile || archive.length() <= 0L) return null
+        if (!hasXzMagic(archive)) return null
+        val version = parseVersion(runCatching { manifest.readText() }.getOrNull() ?: return null) ?: return null
+        return version to archive
+    }
+
+    private fun rejectionMessage(reason: RootfsSourceValidator.Reason?): String = when (reason) {
+        RootfsSourceValidator.Reason.BLOCKED_ALAS_SOURCE ->
+            "download source is an ALAS git mirror and cannot serve the runtime package"
+        else -> "download source URL is invalid"
+    }
+
+    private fun checkXzMagic(file: File) {
+        check(hasXzMagic(file)) { "downloaded file is not a xz archive: ${file.name}" }
+    }
+
+    private fun hasXzMagic(file: File): Boolean = runCatching {
+        file.inputStream().use { input ->
+            val head = ByteArray(XZ_MAGIC.size)
+            var off = 0
+            while (off < head.size) {
+                val n = input.read(head, off, head.size - off)
+                if (n < 0) break
+                off += n
+            }
+            off == XZ_MAGIC.size && head.contentEquals(XZ_MAGIC)
+        }
+    }.getOrDefault(false)
+
     private fun isInstalled(bundled: String): Boolean =
         installedVersion() == bundled &&
                 File(rootDir, PYTHON_REL).let { it.isFile && it.canExecute() }
@@ -132,12 +272,13 @@ class RootfsProvisioner(
                 File(dir, PYTHON_REL).let { it.isFile && it.canExecute() } &&
                 readExtractedVersion(dir) == expectedVersion
 
-    /** 内置包版本；资产缺任一件都视为未内置 */
+    /** 内置包版本；资产缺任一件（清单或压缩包）都视为未内置 */
     private fun bundledVersion(): String? = runCatching {
-        parseVersion(app.assets.open(ASSET_MANIFEST).bufferedReader().use { it.readText() })
-    }.getOrNull().also { version ->
-        if (version != null) app.assets.open(ASSET_ARCHIVE).use { }
-    }
+        val version = parseVersion(app.assets.open(ASSET_MANIFEST).bufferedReader().use { it.readText() })
+            ?: return@runCatching null
+        app.assets.open(ASSET_ARCHIVE).use { }
+        version
+    }.getOrNull()
 
     internal fun readExtractedVersion(dir: File = rootDir): String? = runCatching {
         parseVersion(File(dir, MANIFEST_REL).readText())
@@ -148,20 +289,36 @@ class RootfsProvisioner(
 
     // ── 解压 ──
 
-    private fun extract(bundled: String) {
+    /** 解压输入：内置资产流或下载落盘的本地文件，同一套流式解压管线消费 */
+    private sealed interface ArchiveInput {
+        /** 返回 (输入流, 进度分母总长)；流由解压侧 use 链关闭（一路带到资产 fd） */
+        fun open(): Pair<InputStream, Long>
+
+        class Bundled(private val app: Application) : ArchiveInput {
+            override fun open(): Pair<InputStream, Long> {
+                // openFd 拿未压缩资产的真实长度做进度分母（noCompress "xz" 已配）
+                val afd = app.assets.openFd(ASSET_ARCHIVE)
+                return afd.createInputStream().buffered(BUFFER_SIZE) to afd.length
+            }
+        }
+
+        class Local(private val file: File) : ArchiveInput {
+            override fun open(): Pair<InputStream, Long> = file.inputStream().buffered(BUFFER_SIZE) to file.length()
+        }
+    }
+
+    private fun extract(version: String, archive: ArchiveInput) {
         killResidualProcesses()
 
-        if (isExtractComplete(tmpDir, bundled)) {
-            Timber.i("Valid extracted rootfs found in $tmpDir (version $bundled), skipping extraction")
+        if (isExtractComplete(tmpDir, version)) {
+            Timber.i("Valid extracted rootfs found in $tmpDir (version $version), skipping extraction")
         } else {
             tmpDir.deleteRecursively()
             check(tmpDir.mkdirs()) { "cannot create $tmpDir" }
 
-            // openFd 拿未压缩资产的真实长度做进度分母（noCompress "xz" 已配）
-            val afd = app.assets.openFd(ASSET_ARCHIVE)
-            val total = afd.length
+            val (input, total) = archive.open()
             val startedAt = System.nanoTime()
-            val counting = CountingInputStream(afd.createInputStream().buffered(BUFFER_SIZE)) { read ->
+            val counting = CountingInputStream(input) { read ->
                 val seconds = ((System.nanoTime() - startedAt) / 1_000_000_000.0).coerceAtLeast(0.001)
                 _state.value = ProvisionState.Extracting(read, total, (read / seconds).toLong())
             }
@@ -173,7 +330,6 @@ class RootfsProvisioner(
                     extractEntry(tar, entry, extracted, deferredLinks)
                 }
             }
-            afd.close()
 
             // 硬链接前向引用兜底：解完全量后目标必然在（否则包本身坏）
             for ((name, linkName) in deferredLinks) {
@@ -358,6 +514,8 @@ class RootfsProvisioner(
     private companion object {
         const val ASSET_ARCHIVE = "rootfs/rootfs.tar.xz"
         const val ASSET_MANIFEST = "rootfs/BUILD_MANIFEST"
+        const val ARCHIVE_NAME = "rootfs.tar.xz"
+        const val MANIFEST_NAME = "BUILD_MANIFEST"
         const val MANIFEST_REL = "opt/alas/BUILD_MANIFEST"
         const val PYTHON_REL = "usr/bin/python3"
         const val MARKER_NAME = ".provisioned"
@@ -365,6 +523,8 @@ class RootfsProvisioner(
         const val TRASH_PREFIX = "rootfs.trash."
         const val MIN_FREE_BYTES = 2L * 1024 * 1024 * 1024
         const val BUFFER_SIZE = 256 * 1024
+        /** xz 文件头 6 字节魔数；拦「自定义直链 200 回了一页 HTML」这类假包 */
+        val XZ_MAGIC = byteArrayOf(0xFD.toByte(), 0x37, 0x7A, 0x58, 0x5A, 0x00)
         val VERSION_KEY = Regex(""""rootfs_version"\s*:\s*"([^"]+)"""")
     }
 }

@@ -2,11 +2,14 @@ package com.aliothmoon.maafw.ui.setup
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -17,22 +20,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import com.aliothmoon.maafw.R
+import com.aliothmoon.maafw.provision.ProvisionIntent
 import com.aliothmoon.maafw.provision.ProvisionState
+import com.aliothmoon.maafw.provision.RootfsDownloadUiState
+import com.aliothmoon.maafw.provision.RootfsSourceKind
+import com.aliothmoon.maafw.provision.RootfsSourceValidator
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaTheme
-import com.aliothmoon.maafw.ui.components.MaaButton
 import com.aliothmoon.maafw.ui.alas.formatTransferBytes
+import com.aliothmoon.maafw.ui.components.ITextField
+import com.aliothmoon.maafw.ui.components.MaaButton
+import com.aliothmoon.maafw.ui.components.MaaFieldLabel
+import com.aliothmoon.maafw.ui.components.MaaSingleChoiceFlow
+import com.aliothmoon.maafw.ui.components.MaaSwitch
 
 /**
  * 首启 rootfs 部署页：未完成时整屏接管（AppRoot 的门）
  *
- * 全程唯一动作是「等」；失败/低磁盘/未内置给原因与重试，跳过只留给开发包
+ * 完整版全程唯一动作是「等」；lite 版（未内置构建）在 NotBundled 停下让用户选源下载；
+ * 失败/低磁盘给原因与重试，跳过只留给开发包
  */
 @Composable
 fun ProvisionScreen(
     state: ProvisionState,
     onRetry: () -> Unit,
     onSkip: (() -> Unit)?,
+    downloadState: RootfsDownloadUiState?,
+    onDownloadIntent: (ProvisionIntent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -42,6 +56,7 @@ fun ProvisionScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(MaaTheme.style.cardInnerPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -64,6 +79,8 @@ fun ProvisionScreen(
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                     StatusLine(stringResource(R.string.provision_checking))
                 }
+
+                is ProvisionState.Downloading -> DownloadingSection(state)
 
                 is ProvisionState.Extracting -> {
                     val progress =
@@ -98,11 +115,15 @@ fun ProvisionScreen(
                 }
 
                 ProvisionState.NotBundled -> {
-                    StatusLine(
-                        stringResource(R.string.provision_not_bundled),
-                        isError = true,
-                    )
-                    RetryButton(onRetry)
+                    if (downloadState != null) {
+                        DownloadSourcePicker(downloadState, onDownloadIntent)
+                    } else {
+                        StatusLine(
+                            stringResource(R.string.provision_not_bundled),
+                            isError = true,
+                        )
+                        RetryButton(onRetry)
+                    }
                     if (onSkip != null) {
                         Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
                         MaaButton(onClick = onSkip) {
@@ -122,6 +143,117 @@ fun ProvisionScreen(
                 ProvisionState.Ready -> Unit // 门已开，本页不再渲染
             }
         }
+    }
+}
+
+/** lite 首启下载进度：分母可用走确定进度，拿不到（chunked）转不确定态只报已下载量 */
+@Composable
+private fun DownloadingSection(state: ProvisionState.Downloading) {
+    if (state.totalBytes > 0) {
+        val progress = state.doneBytes.toFloat() / state.totalBytes
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        StatusLine(
+            stringResource(
+                R.string.provision_downloading,
+                (progress * 100).toInt(),
+                state.doneBytes / 1_000_000,
+                state.totalBytes / 1_000_000,
+            )
+        )
+    } else {
+        LinearProgressIndicator(Modifier.fillMaxWidth())
+        StatusLine(stringResource(R.string.provision_downloaded_unknown, state.doneBytes / 1_000_000))
+    }
+    Text(
+        stringResource(R.string.provision_download_throughput, formatTransferBytes(state.bytesPerSecond)),
+        style = MaterialTheme.typography.bodySmall,
+    )
+}
+
+/** lite 构建的首启下载源选择：GitHub Release（可挂镜像）或自定义直链 */
+@Composable
+private fun DownloadSourcePicker(
+    ui: RootfsDownloadUiState,
+    onIntent: (ProvisionIntent) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.provision_lite_intro),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+    )
+    Spacer(Modifier.height(MaaDesignTokens.Spacing.lg))
+
+    MaaFieldLabel(stringResource(R.string.provision_download_source), Modifier.fillMaxWidth())
+    Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+    MaaSingleChoiceFlow(
+        options = listOf(
+            RootfsSourceKind.GITHUB to stringResource(R.string.provision_source_github),
+            RootfsSourceKind.CUSTOM to stringResource(R.string.provision_source_custom),
+        ),
+        selected = ui.sourceKind,
+        onSelect = { onIntent(ProvisionIntent.SetSourceKind(it)) },
+    )
+
+    Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
+    when (ui.sourceKind) {
+        RootfsSourceKind.GITHUB -> {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(stringResource(R.string.provision_use_mirror), style = MaterialTheme.typography.bodyMedium)
+                MaaSwitch(
+                    checked = ui.useMirror,
+                    onCheckedChange = { onIntent(ProvisionIntent.SetUseMirror(it)) },
+                )
+            }
+            if (ui.useMirror) {
+                Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+                ui.mirrors.forEachIndexed { index, prefix ->
+                    ITextField(
+                        value = prefix,
+                        onValueChange = { onIntent(ProvisionIntent.SetMirror(index, it)) },
+                        label = stringResource(R.string.provision_mirror_label, index + 1),
+                        singleLine = true,
+                    )
+                    Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+                }
+            }
+        }
+
+        RootfsSourceKind.CUSTOM -> {
+            ITextField(
+                value = ui.customUrl,
+                onValueChange = { onIntent(ProvisionIntent.SetCustomUrl(it)) },
+                placeholder = stringResource(R.string.provision_custom_url_placeholder),
+                singleLine = true,
+            )
+        }
+    }
+
+    ui.rejection?.let { reason ->
+        Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+        Text(
+            text = stringResource(
+                when (reason) {
+                    RootfsSourceValidator.Reason.BLOCKED_ALAS_SOURCE -> R.string.provision_error_blocked_source
+                    else -> R.string.provision_error_invalid_url
+                }
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center,
+        )
+    }
+
+    Spacer(Modifier.height(MaaDesignTokens.Spacing.lg))
+    MaaButton(onClick = { onIntent(ProvisionIntent.StartDownload) }) {
+        Text(stringResource(R.string.provision_download))
     }
 }
 

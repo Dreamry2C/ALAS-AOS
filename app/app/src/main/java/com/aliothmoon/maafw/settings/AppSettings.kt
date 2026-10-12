@@ -57,4 +57,20 @@ data class AppSettings(
     @PrefKey(default = "master")
     val updateBranch: String = "master",
 
+    /** [com.aliothmoon.maafw.provision.RootfsSourceKind] 的 name；lite 构建首启 rootfs 下载源 */
+    @PrefKey(default = "GITHUB")
+    val rootfsSourceKind: String = "GITHUB",
+
+    /** 自定义 rootfs 下载直链；仅 sourceKind=CUSTOM 时生效 */
+    @PrefKey(default = "")
+    val rootfsCustomUrl: String = "",
+
+    /** GitHub 源是否走镜像前缀加速（Moontier 同款前缀拼接） */
+    @PrefKey(default = "false")
+    val rootfsUseMirror: String = "false",
+
+    /** 镜像前缀列表，逗号分隔按序尝试；默认值与 Moontier DEFAULT_CORE_DOWNLOAD_PROXIES 同款（与 RootfsSource.DEFAULT_MIRRORS_JOINED 保持一致） */
+    @PrefKey(default = "https://ghfast.top/,https://gh-proxy.com/,https://mirror.ghproxy.com/")
+    val rootfsMirrors: String = com.aliothmoon.maafw.provision.RootfsSource.DEFAULT_MIRRORS_JOINED,
+
 )
