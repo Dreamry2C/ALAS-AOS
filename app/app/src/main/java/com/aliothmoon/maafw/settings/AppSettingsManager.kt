@@ -9,6 +9,8 @@ import com.aliothmoon.maafw.MaaDispatchers
 import com.aliothmoon.maafw.domain.OverlayControlMode
 import com.aliothmoon.maafw.domain.RemoteBackend
 import com.aliothmoon.maafw.domain.RunMode
+import com.aliothmoon.maafw.provision.RootfsSource
+import com.aliothmoon.maafw.provision.RootfsSourceKind
 import com.aliothmoon.maafw.theme.ThemeStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -80,6 +82,18 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     private val _updateBranch = MutableStateFlow(defaults.updateBranch)
     override val updateBranch: StateFlow<String> = _updateBranch.asStateFlow()
 
+    private val _rootfsSourceKind = MutableStateFlow(parseRootfsSourceKind(defaults.rootfsSourceKind))
+    override val rootfsSourceKind: StateFlow<RootfsSourceKind> = _rootfsSourceKind.asStateFlow()
+
+    private val _rootfsCustomUrl = MutableStateFlow(defaults.rootfsCustomUrl)
+    override val rootfsCustomUrl: StateFlow<String> = _rootfsCustomUrl.asStateFlow()
+
+    private val _rootfsUseMirror = MutableStateFlow(defaults.rootfsUseMirror.toBoolean())
+    override val rootfsUseMirror: StateFlow<Boolean> = _rootfsUseMirror.asStateFlow()
+
+    private val _rootfsMirrors = MutableStateFlow(parseMirrors(defaults.rootfsMirrors))
+    override val rootfsMirrors: StateFlow<List<String>> = _rootfsMirrors.asStateFlow()
+
     init {
         // 一处 collect 铺开到各字段，而不是每个字段各起一条 stateIn：
         // 那样 loaded 置位与各字段拿到首值是两件并发的事，早读的人仍可能读到默认值
@@ -95,6 +109,10 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
                 _themeStyle.value = parseThemeStyle(s.themeStyle)
                 _updateSource.value = s.updateSource
                 _updateBranch.value = s.updateBranch
+                _rootfsSourceKind.value = parseRootfsSourceKind(s.rootfsSourceKind)
+                _rootfsCustomUrl.value = s.rootfsCustomUrl
+                _rootfsUseMirror.value = s.rootfsUseMirror.toBoolean()
+                _rootfsMirrors.value = parseMirrors(s.rootfsMirrors)
                 // 必须是最后一行：置位即宣告上面全部就位
                 _loaded.value = true
             }
@@ -119,6 +137,24 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
 
     override suspend fun setUpdateBranch(branch: String): Unit = with(AppSettingsSchema) {
         context.dataStore.edit { it[updateBranch] = branch.trim() }
+    }
+
+    override suspend fun setRootfsSourceKind(kind: RootfsSourceKind): Unit = with(AppSettingsSchema) {
+        context.dataStore.edit { it[rootfsSourceKind] = kind.name }
+    }
+
+    override suspend fun setRootfsCustomUrl(url: String): Unit = with(AppSettingsSchema) {
+        context.dataStore.edit { it[rootfsCustomUrl] = url.trim() }
+    }
+
+    override suspend fun setRootfsUseMirror(enabled: Boolean): Unit = with(AppSettingsSchema) {
+        context.dataStore.edit { it[rootfsUseMirror] = enabled.toString() }
+    }
+
+    override suspend fun setRootfsMirrors(mirrors: List<String>): Unit = with(AppSettingsSchema) {
+        context.dataStore.edit {
+            it[rootfsMirrors] = mirrors.joinToString(com.aliothmoon.maafw.provision.RootfsSource.MIRROR_SEPARATOR) { m -> m.trim() }
+        }
     }
 
     override suspend fun setRunMode(mode: RunMode): Unit = with(AppSettingsSchema) {
@@ -153,4 +189,11 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
 
     private fun parseThemeStyle(raw: String): ThemeStyle =
         ThemeStyle.fromPreference(raw)
+
+    private fun parseRootfsSourceKind(raw: String): RootfsSourceKind =
+        runCatching { RootfsSourceKind.valueOf(raw) }.getOrDefault(RootfsSourceKind.GITHUB)
+
+    /** 盘上镜像列表为空时回落默认三件套，避免「清空了所有框又存盘」把默认值永久抹掉 */
+    private fun parseMirrors(raw: String): List<String> =
+        RootfsSource.splitMirrors(raw).ifEmpty { RootfsSource.splitMirrors(defaults.rootfsMirrors) }
 }
