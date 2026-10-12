@@ -73,6 +73,7 @@ import com.aliothmoon.maafw.log.LogExportKind
 import com.aliothmoon.maafw.privileged.PermissionManager
 import com.aliothmoon.maafw.proot.ProotHost
 import com.aliothmoon.maafw.provision.ProvisionState
+import com.aliothmoon.maafw.provision.ProvisionViewModel
 import com.aliothmoon.maafw.provision.RootfsProvisioner
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.SettingsViewModel
@@ -144,6 +145,7 @@ fun AppRoot(
     settingsViewModel: SettingsViewModel = koinViewModel(),
     permissionManager: PermissionManager = koinInject(),
     provisioner: RootfsProvisioner = koinInject(),
+    provisionViewModel: ProvisionViewModel = koinViewModel(),
 ) {
     val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val readiness by permissionManager.readiness.collectAsStateWithLifecycle()
@@ -151,6 +153,7 @@ fun AppRoot(
 
     // 首启 rootfs 部署的门：未 Ready 时整屏接管，tab/二级页都在门内
     val provisionState by provisioner.state.collectAsStateWithLifecycle()
+    val provisionDownloadState by provisionViewModel.downloadState.collectAsStateWithLifecycle()
     var provisionSkipped by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { provisioner.start() }
     val showProvision = provisionState !is ProvisionState.Ready && !provisionSkipped
@@ -223,6 +226,8 @@ fun AppRoot(
                 } else {
                     null
                 },
+                downloadState = provisionDownloadState,
+                onDownloadIntent = provisionViewModel::onIntent,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
