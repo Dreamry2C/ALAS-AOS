@@ -16,7 +16,7 @@
 
 -  **免 root**：提权只靠 [Shizuku](https://github.com/RikkaApps/Shizuku)，不解 BL、不刷机、不折腾。
 -  **后台挂机**：游戏运行在独立的后台虚拟屏（1280×720），主屏该干嘛干嘛。
--  **一键安装**：一个 APK 全搞定——内置 Ubuntu 运行环境（Python 3.12 + ALAS 官方版 + OCR 模型），首次打开自动部署，装完即用。
+-  **两种安装包**：Full 内置完整运行环境；Lite 安装包更小，首次启动下载完整运行环境（Linux、Python、依赖及 ALAS）。
 -  **开屏热更新**：每次启动自动检查 ALAS 上游更新，秒级快进；断网/超时自动跳过，绝不卡启动。
 -  **本机直控**：截图与触控走手机本机的特权桥，不用电脑、不插线、不开 adb。
 -  **悬浮窗面板**：App 不在前台也能随时启停挂机、盯实时日志。
@@ -34,8 +34,7 @@
 │  后台虚拟屏 + 截屏/触控注入                       │
 │  桥服务 :22300（ping/screencap/click/swipe/shell）│
 ├─ proot Ubuntu 环境（App 私有目录，免 root）──────┤
-│  wrapper.py 监管 → runner（ALAS 调度器）          │
-│                  → gui.py（WebUI）               │
+│  wrapper.py 监管 → gui.py（WebUI + 原生调度器）  │
 │  ALAS ──桥──> 虚拟屏里的游戏                      │
 └─────────────────────────────────────────────────┘
 ```
@@ -61,9 +60,11 @@ Shizuku 是开源的特权桥接工具，让普通 App 也能使用系统级能�
 
 ### 第 2 步：安装 ALAS-AOS
 
-1. 到 [Release 页](https://github.com/Dreamry2C/ALAS-AOS/releases) 下载 `ALAS-AOS-v<版本号>-arm64-v8a-release.apk`（约 230MB，运行环境已内置，所以这么大）。
-2. 安装并打开，按引导完成 **Shizuku 授权**，如有授权root则直接使用root模式即可。
+1. 到 [Release 页](https://github.com/Dreamry2C/ALAS-AOS/releases) 选择 **Full**：`ALAS-AOS-v<版本号>-arm64-v8a-release.apk`（约 230 MB，内置运行环境），或 **Lite**：`ALAS-AOS-v<版本号>-arm64-v8a-lite-release.apk`（约 9 MB）。Lite 首启从 GitHub Release（可用镜像加速）下载约 220 MB 完整运行环境，也支持自定义环境包文件直链；同目录需有 `BUILD_MANIFEST`。
+2. 安装并打开，按引导完成 **Shizuku 授权**。Root 模式仅在 **AOS 已获得 Root 权限**后可选；未授权时会显示提示，可在 Root 管理器中授权后点击检查按钮。
 3. 耐心等待首启部署（解压运行环境 + 热更新检查），完成后自动进入主页。🎊
+
+Lite 首启下载的 **rootfs 运行环境包**与日常 **ALAS 源码更新**是两个流程。部署后默认使用国内源检查和下载 ALAS 源码更新，不会通过该源下载或更新 rootfs。设置页可更换 ALAS 更新源和分支；环境包自定义直链不是 ALAS Git 仓库地址。Full 和 Lite 使用同一签名，可相互覆盖安装并保留已部署环境与配置。
 
 ## 🚀 使用
 
