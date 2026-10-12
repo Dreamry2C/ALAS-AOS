@@ -7,11 +7,14 @@ on:
       - 'app/**'
       # rootfs.tar.xz 是 GHA rootfs 流水线的产物落点，随包构建只在本地做，不算 app 改动
       - '!app/app/src/main/assets/rootfs/**'
+      # rootfs 侧资产改动同样触发（双源 diff 门禁守着「改了 rootfs/ 忘同步 app assets」）
+      - 'rootfs/**'
       - '.github/workflows/app.yml'
   pull_request:
     paths:
       - 'app/**'
       - '!app/app/src/main/assets/rootfs/**'
+      - 'rootfs/**'
 
 concurrency:
   group: app-${{ github.ref }}

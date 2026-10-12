@@ -3,7 +3,7 @@
 # AlasAos · ALAS CDN pack 更新通道（上游 deploy/git_over_cdn/client.py 的零依赖复刻）
 #
 # 协议（与上游逐条对齐）：
-#   1. GET {base}/latest.json（超时 3s，两个 base 轮试）→ {"commit": <sha>}
+#   1. GET {base}/latest.json（超时 3s，各 base 轮试）→ {"commit": <sha>}
 #   2. latest == current → UPTODATE
 #   3. GET {base}/{latest}/{current}.zip（读超时 20s）→ pack-{latest}.pack/.idx
 #   4. 解进 .git/objects/pack/（先 .tmp 后 os.replace）→ 写 refs/remotes/origin/master
@@ -31,6 +31,8 @@ import zipfile
 BASE_URLS = [
     'https://1818706573.cdn.123clouddisk.com/1818706573/pack/LmeSzinc_AzurLaneAutoScript_master',
     'https://vip.123pan.cn/1818706573/pack/LmeSzinc_AzurLaneAutoScript_master',
+    # 上游 deploy/git.py goc_client 新增的第 3 回退源（提交 70e72f69 Upd: fallback goc url）
+    'https://alas-goc-1254325529.cos.ap-shanghai.myqcloud.com/LmeSzinc_AzurLaneAutoScript_master',
 ]
 
 # 与上游同：latest.json 3s、pack 读 20s（socket 级读超时，非全程总超时）
@@ -41,7 +43,7 @@ SHA_RE = re.compile(r'[0-9a-f]{40}')
 
 
 def fetch_latest():
-    """两个 CDN base 轮试 latest.json；返回 (base, sha) 或 (None, '')。"""
+    """各 CDN base 轮试 latest.json；返回 (base, sha) 或 (None, '')。"""
     for base in BASE_URLS:
         url = base + '/latest.json'
         print(f'cdn| Fetch url: {url}')

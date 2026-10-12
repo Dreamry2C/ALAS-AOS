@@ -102,6 +102,59 @@ def patch_alasaos_scheduler_lock():
 patch_alasaos_scheduler_lock()
 
 
+def patch_alasaos_external_runner():
+    """
+    AlasAos: Let the WebUI overview see the wrapper-managed runner.
+
+    Upstream ProcessManager.alive only knows the GUI's own child (_process).
+    AlasAos spawns the runner via wrapper.py (thin HTTP surface), so the
+    overview never showed a running task and dumped everything into the
+    queue. Patch alive to fall back to a /proc scan for the wrapper's spawn
+    shape `runner.py <config>` — tools (`runner.py <config> <tool>`) carry
+    an extra trailing arg and don't false-positive.
+
+    Read-only patch: start/stop stay locked by patch_alasaos_scheduler_lock
+    (wrapper is the only scheduler surface). The log view (renderables) is
+    intentionally untouched — wrapper /logs and on-disk logs remain the
+    log surface.
+
+    Self-executed at import: module.webui.app imports this module at startup.
+    """
+    import os
+    from module.webui.process_manager import ProcessManager
+
+    def _external_runner_alive(config_name):
+        try:
+            pids = os.listdir('/proc')
+        except OSError:
+            return False
+        want = config_name.encode('utf-8', errors='replace')
+        for pid in pids:
+            if not pid.isdigit():
+                continue
+            try:
+                with open(f'/proc/{pid}/cmdline', 'rb') as f:
+                    raw = f.read()
+            except OSError:
+                continue
+            parts = [p for p in raw.split(b'\x00') if p]
+            if len(parts) >= 2 and parts[-1] == want and any(
+                p.endswith(b'runner.py') for p in parts[:-1]
+            ):
+                return True
+        return False
+
+    def _alive(self):
+        if self._process is not None:
+            return self._process.is_alive()
+        return _external_runner_alive(self.config_name)
+
+    ProcessManager.alive = property(_alive)
+
+
+patch_alasaos_external_runner()
+
+
 def fix_py37_subprocess_communicate():
     """
     Monkey patch for subprocess.Popen._communicate on Windows Python 3.7

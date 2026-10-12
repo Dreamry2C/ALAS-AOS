@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-**ALAS-AOS**（ALAS 的 AndroidOS 版，2026-09-20 由 MaaAL 更名）：仓库 [github.com/Shinarin/ALAS-AOS](https://github.com/Shinarin/ALAS-AOS)，包名 `io.github.shinarin.alasaos`，最新发布 **v0.1.5**；本地 main 已领先 13 个 commit（2026-09-25 大扫除，**未 push 未发版**，等用户授权）。
+**ALAS-AOS**（ALAS 的 AndroidOS 版，2026-09-20 由 MaaAL 更名）：仓库 [github.com/Shinarin/ALAS-AOS](https://github.com/Shinarin/ALAS-AOS)，包名 `io.github.shinarin.alasaos`，最新发布 **v0.1.6**。上游 ALAS 适配钉版 `7d6a415e`（2026-10-08 HEAD，审查见 `docs/upstream-sync-2026-10-12.md`）。
 
 已交付功能：三 tab（挂机=游戏画面+操作面板 / ALAS WebUI / 设置）、悬浮窗控制面板（调度器状态 + 开始/停止挂机 + 半透明日志板，唯一控制面）、半自动点击与活动剧情（工具类，不入挂机队列）、开屏热更新（CDN pack 通道，git:// 兜底）、i18n（跟随系统/简体中文/English，切换会重建项目）、主题（跟随系统/浅色/深色 + 默认/Semi Design）、日志区（启动器/ALAS 日志查看、两类导出、冷启自动清理）、启动模式（Shizuku / Root）。
 
@@ -28,8 +28,8 @@
   - `src/main/assets/alas/` overlay 双源之一（wrapper/runner/seeds/patches/azur_lane OCR 模型），与 `rootfs/` 侧同内容，CI diff 门禁守着
   - `src/main/assets/rootfs/`：`BUILD_MANIFEST` 入库；`rootfs.tar.xz` gitignore，构建前手动放（来源=GHA rootfs.yml artifact）
   - `proguard-rules.pro`：每条 keep 注明调用方；`verifyReleaseR8Keeps` 任务随 assembleRelease 跑
-- `rootfs/` — rootfs 侧资产：`build/build-rootfs.sh`（GHA ARM64）、`patches/`（含 `module/device/method/alasaos.py` 桥客户端）、`overlays/`（wrapper.py / runner.py / rpc.py / models）、`seeds/`（deploy.yaml 七锁 / seed_config.py / alasaos_update.sh）
-- `.github/workflows/` — `app.yml`（App CI：testDebugUnitTest → assembleDebug → overlay/patches/seeds 双源 diff → i18n 校验；`fetch-depth: 0` 因 GitVersion 靠 git describe）、`rootfs.yml`（rootfs 构建，手动触发，`ALAS_REF` 默认 master 浮动，manifest 记录解析后 commit）
+- `rootfs/` — rootfs 侧资产：`build/build-rootfs.sh`（GHA ARM64）、`patches/`（含 `module/device/method/alasaos.py` 桥客户端；`module/webui/patch.py` 承载两件 AlasAos 私货——调度锁 `patch_alasaos_scheduler_lock`（启停只走 wrapper，防双头）与外置 runner 感知 `patch_alasaos_external_runner`（webui 概览「运行中」认 /proc 里的 `runner.py <config>` 进程））、`overlays/`（wrapper.py / runner.py / rpc.py / models）、`seeds/`（deploy.yaml 七锁 / seed_config.py / alasaos_update.sh）
+- `.github/workflows/` — `app.yml`（App CI：testDebugUnitTest → assembleDebug → overlay/patches/seeds 双源 diff → i18n 校验；触发含 `rootfs/**`；`fetch-depth: 0` 因 GitVersion 靠 git describe）、`rootfs.yml`（rootfs 构建，push `rootfs/**` 或手动触发，`ALAS_REF` 默认钉版 sha，manifest 记录解析后 commit；钉版只定烘焙起点，设备由热更新带到上游最新）
 - `docs/` — `roadmap-v3.md`、`cleanup-consensus-2026-09-25.md`、`stage2-maafwapp-inventory.md`、`spike-d-wrapper-surface.md`、`logging-dev.md`、`rom-matrix.md`
 - `spike/` — 阶段〇存档（`a-proot-exec/` Spike A/C；`e-adb-virtual-display/` Spike E/B′）
 - `m0-archive/`（gitignore，本地只读）— m0 全部成果归档；MaaFwApp fork 基线在 `m0-archive/vendor/MaaFwApp` @ b2b0f54
@@ -65,7 +65,8 @@ cmd //c 'gradlew.bat testDebugUnitTest --console=plain' # 20 tests（src/test 6 
 
 ### rootfs（`rootfs/`）
 
-- GHA `rootfs.yml` 手动触发；产物 `rootfs.tar.xz` + BUILD_MANIFEST。下次运行会首验 G2 新增断言（azur_lane numpy 引擎 `proxy._al is not None`），失败第一嫌疑是 chroot 内 cv2/numpy 环境。
+- GHA `rootfs.yml`（push `rootfs/**` 或手动触发）；产物 `rootfs.tar.xz` + BUILD_MANIFEST（manifest 回流入库）。下次运行会首验 G2 新增断言（azur_lane numpy 引擎 `proxy._al is not None`），失败第一嫌疑是 chroot 内 cv2/numpy 环境。
+- **rootfs_version 抬号规则**：仅当 python 依赖 / 系统层 / overlay 机制变化时才抬（0.1.0→0.1.1）。抬号 = 所有升级设备首启全量重解 `/opt/alas`（用户 ALAS 配置与热更新状态被清，等同重装机）；仅跟进上游 ALAS 代码**不抬号**——热更新通道会把设备带到同一版本。
 
 ### 真机调试闭环
 

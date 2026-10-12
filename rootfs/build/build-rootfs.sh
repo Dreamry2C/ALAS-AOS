@@ -8,7 +8,7 @@
 # Windows 无这些语义；本机只做 `bash -n` 语法检查与 rootfs/ 资产 curated。
 #
 # 环境变量（均可 export 覆盖，冒号后为默认值）：
-#   ALAS_REF        master                          ALAS 分支/tag；传 40 位 commit sha 则按 commit 浅 fetch
+#   ALAS_REF        7d6a415e…（钉版 sha，见第 0 节）  ALAS 分支/tag；传 40 位 commit sha 则按 commit 浅 fetch
 #   ALAS_REPO       https://github.com/LmeSzinc/AzurLaneAutoScript.git
 #   ROOTFS_VERSION  0.1.0                           写入 BUILD_MANIFEST.rootfs_version
 #   UBUNTU_BASE     https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz
@@ -21,7 +21,10 @@
 set -euo pipefail
 
 # ---------- 0. 变量、提权、前置检查 ----------
-ALAS_REF="${ALAS_REF:-master}"
+# 钉版：2026-10-08 上游 master HEAD（39 commit 适配审查零冲突，见 docs/upstream-sync-2026-10-12.md）。
+# 跟进上游 = 改此默认值 + push 触发 rootfs.yml 重烘。钉版只定烘焙起点；运行时热更新
+# （seeds/alasaos_update.sh）不读本变量，设备照常吃到上游最新。
+ALAS_REF="${ALAS_REF:-7d6a415e3ef5ed049fd7024311c16158fcd2af28}"
 ALAS_REPO="${ALAS_REPO:-https://github.com/LmeSzinc/AzurLaneAutoScript.git}"
 # 注：GHA runner 在海外，GitHub 原生最快；gitee 同名镜像对匿名克隆要凭证（401→挂凭证提示），勿用。
 # 国内本地复现构建时可 export ALAS_REPO=<可达镜像>；runtime 更新镜像由 deploy.yaml 的 fullcn 配置管，与此无关。
@@ -68,6 +71,7 @@ require_file "$ASSETS/build/spike-f-ocr-gate.py"
 require_file "$ASSETS/patches/assets_fix.py"
 require_file "$ASSETS/seeds/deploy.yaml"
 require_file "$ASSETS/seeds/alasaos_update.sh"
+require_file "$ASSETS/seeds/cdn_update.py"
 require_file "$ASSETS/seeds/regen_args.py"
 require_file "$ASSETS/shims/jellyfish.py"
 require_file "$ASSETS/models/ocr/det.onnx"
@@ -206,6 +210,11 @@ install -D -m 0644 "$ASSETS/seeds/seed_config.py" "$ROOTFS_DIR/opt/alas/seeds/se
 # 阶段三 App 侧 AlasUpdater 经 proot 拉起；协议见脚本头注释
 install -D -m 0755 "$ASSETS/seeds/alasaos_update.sh" "$ROOTFS_DIR/opt/alas/seeds/alasaos_update.sh"
 
+# CDN pack 支路 + assets 漂移自检：生产上由 APK overlay 铺放（AlasOverlay MAPPINGS），
+# 此处补进烘焙 tar——纯 rootfs（无 App）环境下 CDN 通道与 assets_fix 自检也能用
+install -D -m 0644 "$ASSETS/seeds/cdn_update.py" "$ROOTFS_DIR/opt/alas/seeds/cdn_update.py"
+install -D -m 0644 "$ASSETS/patches/assets_fix.py" "$ROOTFS_DIR/opt/alas/seeds/assets_fix.py"
+
 # args 现场再生器：args.json/argument.yaml 不补丁化，每次启动重跑 ALAS 生成链
 # 并补回 alasaos 桥选项（活动列表永不冻结）；App 侧 ProotHost 经 proot 拉起
 install -D -m 0755 "$ASSETS/seeds/regen_args.py" "$ROOTFS_DIR/opt/alas/seeds/regen_args.py"
@@ -283,7 +292,7 @@ manifest = {
     "build_time_utc": e["BUILD_TIME_UTC"],
     "alas_repo": e["ALAS_REPO"],
     "alas_commit": e["PINNED_COMMIT"],
-    "patches_source": f"m0-archive/termux/patches @ repo commit {e['REPO_COMMIT']}",
+    "patches_source": f"rootfs/patches @ repo commit {e['REPO_COMMIT']}",
     "ocr_models": {
         "det.onnx": e["DET_SHA"],
         "rec.onnx": e["REC_SHA"],
