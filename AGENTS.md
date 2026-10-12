@@ -101,7 +101,7 @@
 
 - **ALAS 上游代码红线（2026-09-18 用户指令）**：没有用户明确指令，不得改动 ALAS 上游源代码（rootfs 内 `/opt/alas` 的上游跟踪文件，含「临时改一下再改回」）。ALAS-AOS 的职责是为 ALAS 构筑可跑通的环境，修复一律走 ALAS-AOS 自有机制（overlay / patches / seeds / 环境钉版），不越俎代庖改上游；桌面 ALAS（`C:\other\AzurLaneAutoScript`）只读。
 - 临时文件一律放 `.tmp/`（已 gitignore），不入系统临时目录。
-- 不做 git 提交 / push / 发版（用户决策，红线见「通用 Agent 约束」第六节）。
+- 提交、push、发版须有用户授权。用户说“升级版本号”（如 0.1.10 → 0.1.11）即授权完整发版：维护 README/CHANGELOG、构建验证、提交并推送 alas-aos、创建对应 v 标签与 Release、上传 Full/Lite APK 和配套 rootfs。构建验证失败不发布；versionCode 等内部构建号滚动不触发 Release。
 - MaaFwApp fork 基线：`m0-archive/vendor/MaaFwApp` @ b2b0f54（阶段二复活做减法；归档只读）。
 - 本机工具链：系统 SDK/adb 在 `C:\Users\da270\AppData\Local\Android\Sdk`；便携工具链（JDK17/21、SDK 含 ndk/build-tools、gradle 缓存）在 `D:\VSCodeCache\shizku-m\build-env\`（**只读**复用，构建时 GRADLE_USER_HOME 等写目录指向本仓 `.tmp/`）。
 - 真机调试闭环：设备 `AVAY025422002864`，adb shell 命令前必须 `export MSYS_NO_PATHCONV=1`；Windows 侧 adb/python 只吃 Windows 路径。
