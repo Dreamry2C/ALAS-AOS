@@ -117,6 +117,8 @@ def main():
     parser.add_argument('--expected-sha256', required=True)
     parser.add_argument('--work', required=True, type=Path)
     parser.add_argument('--dist', required=True, type=Path)
+    parser.add_argument('--plain-tar', action='store_true',
+                        help='Validated intermediate for native slimming; compress only the final image')
     args = parser.parse_args()
     if os.name != 'posix' or os.geteuid() != 0 or os.uname().machine != 'aarch64':
         parser.error('Use a disposable Linux ARM64 runner with root privileges')
@@ -173,8 +175,9 @@ def main():
     finally:
         for target in reversed(mounted):
             subprocess.run(['umount', str(target)], check=True)
-    report = trim_archive(args.input, dist / 'rootfs.tar.xz')
-    verification = trim_archive(dist / 'rootfs.tar.xz')
+    output = dist / ('rootfs.tar' if args.plain_tar else 'rootfs.tar.xz')
+    report = trim_archive(args.input, output, compress=not args.plain_tar)
+    verification = trim_archive(output)
     if verification['alas_tree_sha256'] != report['alas_tree_sha256'] or verification['removed']:
         raise ValueError('Final archive integrity or trim idempotence failed')
     (dist / 'TRIM_REPORT.json').write_text(json.dumps(report, indent=2), encoding='utf-8')

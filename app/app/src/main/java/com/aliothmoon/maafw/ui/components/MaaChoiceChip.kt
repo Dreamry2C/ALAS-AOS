@@ -106,6 +106,7 @@ fun <T> MaaSingleChoiceFlow(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    optionEnabled: (T) -> Boolean = { true },
 ) {
     FlowRow(
         modifier = modifier
@@ -118,7 +119,7 @@ fun <T> MaaSingleChoiceFlow(
             MaaChoiceChip(
                 label = label,
                 selected = selected == value,
-                enabled = enabled,
+                enabled = enabled && optionEnabled(value),
                 role = Role.RadioButton,
                 onClick = { onSelect(value) },
             )

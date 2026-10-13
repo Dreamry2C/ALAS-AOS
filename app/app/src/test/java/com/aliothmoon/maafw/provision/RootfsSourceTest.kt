@@ -62,19 +62,18 @@ class RootfsSourceTest {
     }
 
     @Test
-    fun `validator blocks official ALAS domestic git source`() {
+    fun `validator has no host specific restriction for domestic sources`() {
         for (url in listOf(
             "https://git.lyoko.io/AzurLaneAutoScript",
             "http://git.lyoko.io/AzurLaneAutoScript/archive/master.tar.gz",
         )) {
             val result = RootfsSourceValidator.validate(url)
-            assertTrue("should block $url", result is RootfsSourceValidator.Result.Rejected)
-            assertEquals(RootfsSourceValidator.Reason.BLOCKED_ALAS_SOURCE, (result as RootfsSourceValidator.Result.Rejected).reason)
+            assertTrue("valid HTTP URL: $url", result is RootfsSourceValidator.Result.Valid)
         }
     }
 
     @Test
-    fun `validator blocks ALAS git repositories on github and gitee`() {
+    fun `validator checks URL structure rather than repository names`() {
         for (url in listOf(
             "https://github.com/LmeSzinc/AzurLaneAutoScript",
             "https://github.com/LmeSzinc/AzurLaneAutoScript.git",
@@ -86,8 +85,7 @@ class RootfsSourceTest {
             "https://codeload.github.com/LmeSzinc/AzurLaneAutoScript/tar.gz/refs/tags/master",
         )) {
             val result = RootfsSourceValidator.validate(url)
-            assertTrue("should block $url", result is RootfsSourceValidator.Result.Rejected)
-            assertEquals(RootfsSourceValidator.Reason.BLOCKED_ALAS_SOURCE, (result as RootfsSourceValidator.Result.Rejected).reason)
+            assertTrue("valid HTTP URL: $url", result is RootfsSourceValidator.Result.Valid)
         }
     }
 

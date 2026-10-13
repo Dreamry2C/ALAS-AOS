@@ -249,6 +249,7 @@ class PermissionManager(
     override fun unbindService() = servicePort.unbind()
 
     override suspend fun setBackend(backend: RemoteBackend) {
+        if (!accessPort.refresh().canSelect(backend)) return
         if (appSettings.startupBackend.value == backend) return
         appSettings.setStartupBackend(backend)
     }
@@ -283,7 +284,7 @@ class PermissionManager(
                 probeShizukuStage(launchPackage, remoteState.shizukuAvailable)
             }
         }
-        return ShizukuReadiness(stage = stage, canSwitchToRoot = remoteState.rootAvailable)
+        return ShizukuReadiness(stage = stage, canSwitchToRoot = remoteState.canSelect(RemoteBackend.ROOT))
     }
 
     /**

@@ -87,7 +87,7 @@ def identity(path):
                 'sha256': hashlib.file_digest(f, 'sha256').hexdigest()}
 
 
-def trim_archive(source, output=None, groups=GROUPS, xz_preset=DEFAULT_XZ_PRESET):
+def trim_archive(source, output=None, groups=GROUPS, xz_preset=DEFAULT_XZ_PRESET, compress=True):
     if xz_preset not in XZ_DICTIONARY_BYTES:
         raise ValueError('Select a supported XZ preset (6, 7 or 8)')
     groups = set(groups)
@@ -107,7 +107,7 @@ def trim_archive(source, output=None, groups=GROUPS, xz_preset=DEFAULT_XZ_PRESET
     try:
         if partial:
             partial.parent.mkdir(parents=True, exist_ok=True)
-            compressed = lzma.open(partial, 'xb', preset=xz_preset)
+            compressed = lzma.open(partial, 'xb', preset=xz_preset) if compress else partial.open('xb')
             archive_out = tarfile.open(fileobj=compressed, mode='w|', format=tarfile.PAX_FORMAT)
         with tarfile.open(source, 'r|*') as archive:
             for member in archive:
@@ -151,10 +151,11 @@ def trim_archive(source, output=None, groups=GROUPS, xz_preset=DEFAULT_XZ_PRESET
     if output:
         partial.rename(output)
         report['output'] = identity(output)
-        report['compression'] = {'format': 'xz', 'preset': xz_preset,
-                                 'dictionary_bytes': XZ_DICTIONARY_BYTES[xz_preset]}
+        report['compression'] = ({'format': 'xz', 'preset': xz_preset,
+                                  'dictionary_bytes': XZ_DICTIONARY_BYTES[xz_preset]}
+                                 if compress else {'format': 'tar'})
         with source.open('rb') as f:
-            if f.read(6) == b'\xfd7zXZ\x00':
+            if compress and f.read(6) == b'\xfd7zXZ\x00':
                 report['compressed_saved_bytes'] = report['input']['bytes'] - report['output']['bytes']
     return report
 
