@@ -47,7 +47,7 @@ import org.koin.compose.koinInject
 private const val ALAS_WEBUI_URL = "http://127.0.0.1:22267"
 
 /**
- * 本机（HONOR PPG-AN00, WebView 151）实测 `vh` 单位恒为 0：页面的 layout viewport
+ * 部分 WebView 的 `vh` 单位可能为 0：页面的 layout viewport
  * 错位成 0 高，所有 `100vh`（pywebio 脚手架 `#pywebio-scope-ROOT` 的高度）塌成 0，
  * 整页只画顶部一条标题带。`innerHeight` 正常，所以注入同值像素覆盖即可恢复。
  * 规则挂在 head 上对 JS 后续创建的 scope 元素同样生效；vh 正常的设备上本规则
@@ -169,7 +169,7 @@ fun AlasScreen(
                             canGoBack = view.canGoBack()
                             // 主文档失败不算就绪（onReceivedError 已置位），开屏就不淡出
                             if (!loadFailed) pageReady = true
-                            // 见 SCOPE_HEIGHT_FIX_JS：本机 vh=0，补像素高度
+                            // 见 SCOPE_HEIGHT_FIX_JS：vh=0 时补像素高度
                             view.evaluateJavascript(SCOPE_HEIGHT_FIX_JS, null)
                             // 见 IDLE_SPINNER_FIX_JS：闲置环停转，fill 态专用
                             view.evaluateJavascript(IDLE_SPINNER_FIX_JS, null)

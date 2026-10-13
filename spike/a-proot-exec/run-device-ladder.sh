@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Spike A on-device ladder runner (MaaAL, roadmap v3).
+# Spike A on-device ladder runner (MaaAL).
 #
-# Usage:  bash run-device-ladder.sh [device-serial]
+# Usage:  bash run-device-ladder.sh <device-serial>
 # Needs:  adb reachable device (USB-debug authorized), dist/*.apk already built.
 # Output: dist/logs/<tag>.logcat.txt + dist/logs/<tag>.spikea.log + dist/logs/device-facts.txt
 set -u
@@ -9,8 +9,8 @@ set -u
 # adb shell args must not be path-mangled by MSYS
 export MSYS_NO_PATHCONV=1
 
-ADB="${ADB:-/c/Users/da270/AppData/Local/Android/Sdk/platform-tools/adb.exe}"
-SERIAL="${1:-AVAY025422002864}"
+ADB="${ADB:-adb}"
+SERIAL="${1:?device serial required}"
 PKG=com.maaal.spikea
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"

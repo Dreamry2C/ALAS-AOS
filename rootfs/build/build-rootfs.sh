@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AlasAos 阶段一 M1 · build-rootfs.sh
+# ALAS-AOS · build-rootfs.sh
 # 烘焙 Ubuntu ARM64 rootfs：ubuntu-base 24.04 + ALAS（钉版）+ PP-OCR（in-proc onnxruntime）+ wrapper
 #
 # 运行环境：GitHub Actions `ubuntu-24.04-arm` runner（原生 aarch64，chroot 无需 qemu）。
@@ -50,11 +50,11 @@ if [[ "$(uname -m)" != "aarch64" ]]; then
   log "WARNING: 宿主架构 $(uname -m) 非 aarch64；本脚本设计运行于 GHA ubuntu-24.04-arm，chroot 预计将失败"
 fi
 
-# fail-fast：overlays（in-proc OCR rpc.py / wrapper / runner）由并行任务提供，
+# fail-fast：检查构建所需的运行资产，
 # 缺任何一个都不许开构建——在下载与 apt 之前先验，省一次白跑
 require_file() {
   if [[ ! -f "$1" ]]; then
-    echo "::error::必需资产缺失: $1（由并行任务提供，请先落地该文件再触发构建）"
+    echo "::error::必需资产缺失: $1（请先准备该文件再触发构建）"
     exit 1
   fi
 }
@@ -195,12 +195,12 @@ install -D -m 0644 "$ASSETS/shims/jellyfish.py" "$ROOTFS_DIR$PY_PURELIB/jellyfis
 # deploy.yaml：更新器七键全锁（AutoUpdate:false 是保住钉版 commit 的唯一闸门，详见文件头注释）
 install -D -m 0644 "$ASSETS/seeds/deploy.yaml" "$ROOTFS_DIR/opt/alas/config/deploy.yaml"
 
-# 实例配置生成器：运行时实例播种由阶段三调用（ALAS CWD=仓库根；脚本内 ALAS 根取
+# 实例配置生成器：运行时实例播种由宿主调用（ALAS CWD=仓库根；脚本内 ALAS 根取
 # ALASAOS_ALAS_ROOT 环境变量，调用方需 export ALASAOS_ALAS_ROOT=/opt/alas）
 install -D -m 0644 "$ASSETS/seeds/seed_config.py" "$ROOTFS_DIR/opt/alas/seeds/seed_config.py"
 
 # ALAS 热更新脚本：设备端唯一更新通道（内置更新器已被 AutoUpdate:false 锁死），
-# 阶段三 App 侧 AlasUpdater 经 proot 拉起；协议见脚本头注释
+# App 侧 AlasUpdater 经 proot 拉起；协议见脚本头注释
 install -D -m 0755 "$ASSETS/seeds/alasaos_update.sh" "$ROOTFS_DIR/opt/alas/seeds/alasaos_update.sh"
 
 # args 现场再生器：args.json/argument.yaml 不补丁化，每次启动重跑 ALAS 生成链
@@ -218,7 +218,7 @@ install -D -m 0644 "$ASSETS/models/ocr/det.onnx"  "$ROOTFS_DIR/opt/alas/models/o
 install -D -m 0644 "$ASSETS/models/ocr/rec.onnx"  "$ROOTFS_DIR/opt/alas/models/ocr/rec.onnx"
 install -D -m 0644 "$ASSETS/models/ocr/keys.txt"  "$ROOTFS_DIR/opt/alas/models/ocr/keys.txt"
 
-# ---------- 7. wrapper / runner / Spike F 门禁（并行任务产物，fail-fast 已在开头验过） ----------
+# ---------- 7. wrapper / runner / Spike F 门禁（所需文件已在开头检查） ----------
 # 门禁脚本也装进 /opt/alas：workflow 的 Spike F gate step 直接在 chroot 里跑它，
 # 设备端日后也可用同一入口复跑 OCR 自检
 cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" \

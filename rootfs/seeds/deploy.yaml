@@ -11,20 +11,20 @@ Deploy:
     GitExecutable: /usr/bin/git
     GitProxy: null
     SSLVerify: true
-    # 锁定①：禁止启动时 git pull，保住钉版 commit
+    # 禁止启动时 git pull，保住钉版 commit
     AutoUpdate: false
 
   Python:
     # rootfs 内 /usr/local/bin/python → python3 软链（build-rootfs.sh 建立）
     PythonExecutable: python
     PypiMirror: https://mirrors.aliyun.com/pypi/simple
-    # 锁定②：依赖在构建期已装好，禁止启动时 pip install
+    # 依赖在构建期已装好，禁止启动时 pip install
     InstallDependencies: false
     RequirementsFile: ./deploy/headless/requirements.txt
 
   Adb:
     AdbExecutable: /usr/bin/adb
-    # 锁定③④：不替换/不暴连 adb；真机连接由 wrapper 负责
+    # 不替换/不暴连 adb；真机连接由 wrapper 负责
     ReplaceAdb: false
     AutoConnect: false
     # 源码里该键为 if False 死键，置 false 表明意图
