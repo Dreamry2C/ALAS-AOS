@@ -284,8 +284,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          mkdir -p .tmp/release
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" \
+            --jq .body > .tmp/release/generated-notes.txt
           python3 app/scripts/prepare_release.py --tag "$RELEASE_TAG" \
-            --apk-dir dist/apk --rootfs-dir .tmp/rootfs-dist --output .tmp/release
+            --apk-dir dist/apk --rootfs-dir .tmp/rootfs-dist --output .tmp/release \
+            --notes-file .tmp/release/generated-notes.txt
           # Start as a draft so a partially uploaded release is never announced.
           if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null); then
             test "$draft" = true || { echo 'Release already published; refusing replacement'; exit 1; }
