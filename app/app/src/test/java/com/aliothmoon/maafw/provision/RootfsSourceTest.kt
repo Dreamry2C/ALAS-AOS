@@ -35,6 +35,16 @@ class RootfsSourceTest {
     }
 
     @Test
+    fun `default runtime URLs use latest version release without a separate prerelease`() {
+        assertEquals("https://github.com/Dreamry2C/ALAS-AOS/releases/latest/download/rootfs.tar.xz",
+            RootfsSource.GITHUB_ARCHIVE_URL)
+        assertEquals("https://github.com/Dreamry2C/ALAS-AOS/releases/latest/download/BUILD_MANIFEST",
+            RootfsSource.GITHUB_MANIFEST_URL)
+        assertEquals(RootfsSource.GITHUB_MANIFEST_URL,
+            RootfsSource.manifestUrl(RootfsSource.GITHUB_ARCHIVE_URL))
+    }
+
+    @Test
     fun `validator accepts custom direct links over http and https`() {
         for (url in listOf(
             "https://mirror.example.com/pkg/rootfs.tar.xz",
@@ -156,9 +166,9 @@ class RootfsSourceTest {
         assertEquals(
             candidates.map { RootfsSource.manifestUrl(it) },
             listOf(
-                "https://ghfast.top/https://github.com/Dreamry2C/ALAS-AOS/releases/download/${RootfsSource.RELEASE_TAG}/BUILD_MANIFEST",
-                "https://gh-proxy.com/https://github.com/Dreamry2C/ALAS-AOS/releases/download/${RootfsSource.RELEASE_TAG}/BUILD_MANIFEST",
-                "https://github.com/Dreamry2C/ALAS-AOS/releases/download/${RootfsSource.RELEASE_TAG}/BUILD_MANIFEST",
+                "https://ghfast.top/${RootfsSource.GITHUB_MANIFEST_URL}",
+                "https://gh-proxy.com/${RootfsSource.GITHUB_MANIFEST_URL}",
+                RootfsSource.GITHUB_MANIFEST_URL,
             ),
         )
     }

@@ -5,7 +5,7 @@ import java.net.URI
 /**
  * lite 构建的 rootfs 下载源模型：源类型 + 自定义直链 + 镜像前缀，纯 JVM 无 Android 依赖
  *
- * - GitHub 源 = 本仓 CI（app.yml 的 lite 发布步骤）滚动维护的 `rootfs-latest` pre-release；
+ * - GitHub 源 = 本仓最新正式版本 Release 的环境包；不依赖额外的预发布；
  * - 自定义直链 = 用户自己给的 http(s) 文件地址；
  * - 镜像只对 GitHub 源生效（Moontier 同款前缀拼接：最终 URL = 镜像前缀 + 原始 URL），
  *   下载时按序尝试，失败自动换下一个，全部失败回落 GitHub 直链
@@ -17,16 +17,16 @@ enum class RootfsSourceKind {
 
 object RootfsSource {
 
-    /** 正式版本发布后刷新附件；仅滚动内部构建号不发布，tag 恒定 */
-    const val RELEASE_TAG = "rootfs-latest"
+    /** GitHub redirects to the latest published, non-prerelease version. */
+    const val GITHUB_DOWNLOAD_BASE = "https://github.com/Dreamry2C/ALAS-AOS/releases/latest/download"
 
     /** GitHub 源的 rootfs 包地址 */
     const val GITHUB_ARCHIVE_URL =
-        "https://github.com/Dreamry2C/ALAS-AOS/releases/download/$RELEASE_TAG/rootfs.tar.xz"
+        "$GITHUB_DOWNLOAD_BASE/rootfs.tar.xz"
 
     /** GitHub 源的构建清单地址（解压版本闸门的 marker 版本来源） */
     const val GITHUB_MANIFEST_URL =
-        "https://github.com/Dreamry2C/ALAS-AOS/releases/download/$RELEASE_TAG/BUILD_MANIFEST"
+        "$GITHUB_DOWNLOAD_BASE/BUILD_MANIFEST"
 
     /** 镜像前缀默认值，与 Moontier 的 DEFAULT_CORE_DOWNLOAD_PROXIES 同款 */
     const val DEFAULT_MIRRORS_JOINED = "https://ghfast.top/,https://gh-proxy.com/,https://mirror.ghproxy.com/"
