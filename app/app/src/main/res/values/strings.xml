@@ -357,6 +357,9 @@
     <!-- 提权授权（首页权限卡 + Shizuku 引导） -->
     <string name="permission_section">权限管理</string>
     <string name="permission_backend">启动模式</string>
+    <string name="root_permission_required">AOS 尚未获得 Root 权限，Root 模式暂不可选。请在 Root 管理器中授权 AOS，然后重新检查。</string>
+    <string name="root_unavailable">AOS 无法使用 Root 权限。设备或 ADB 拥有 Root 不代表 AOS 已获授权；可以使用 Shizuku 模式。</string>
+    <string name="root_check_permission">检查并申请 Root 权限</string>
     <string name="permission_granted">已授权</string>
     <string name="permission_request">请求权限</string>
     <string name="permission_quick_grant">快捷授权</string>
@@ -660,7 +663,7 @@
     <string name="provision_extracting">解压中 %1$d%%（%2$d / %3$d MB）</string>
     <string name="provision_low_disk">磁盘空间不足：仅剩 %1$d MB，需要至少 2 GB 余量</string>
     <string name="provision_not_bundled">此安装包未内置运行环境</string>
-    <string name="provision_lite_intro">此安装包为轻量版，首次启动需下载约 220 MB 运行环境（仅需一次）。首次拉取请使用上方「GitHub Release（推荐）+ 镜像加速」，不要直接填写国内 Git 代码源；部署完成后，日常更新将自动切换为国内源。</string>
+    <string name="provision_lite_intro">轻量版首次启动下载完整运行环境（rootfs，约 220 MB），包含 Linux、Python、依赖及 ALAS，并非只下载 ALAS。环境包来自 GitHub Release（可用镜像加速）或自定义文件直链。部署完成后，ALAS 源码默认通过国内更新源检查和下载；该更新源不用于下载或更新 rootfs。</string>
     <string name="provision_download_source">下载源</string>
     <string name="provision_source_github">GitHub Release（推荐）</string>
     <string name="provision_source_custom">自定义直链</string>
@@ -672,7 +675,6 @@
     <string name="provision_downloaded_unknown">已下载 %1$d MB</string>
     <string name="provision_download_throughput">下载速度：%1$s/s</string>
     <string name="provision_error_invalid_url">链接无效，请填写 http(s) 文件直链</string>
-    <string name="provision_error_blocked_source">该地址为 ALAS 代码更新源（Git），无法提供首次运行所需的完整环境包。首启请使用 GitHub 源（支持镜像加速），部署完成后日常更新仍会自动使用国内源。</string>
     <string name="provision_failed">部署失败：%1$s</string>
     <string name="provision_retry">重试</string>
     <string name="provision_skip">跳过（仅调试用）</string>
@@ -708,4 +710,5 @@
     <string name="alas_config_delete_running">请先停止正在使用此配置的任务</string>
     <string name="alas_config_delete_last">至少需要保留一个配置</string>
     <string name="alas_config_delete_failed">删除失败，请刷新页面后重试</string>
+    <string name="provision_archive_url_hint">填写 rootfs.tar.xz 文件直链；同目录需有 BUILD_MANIFEST。ALAS Git 仓库地址不是环境包。</string>
 </resources>

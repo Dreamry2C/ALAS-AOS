@@ -33,6 +33,8 @@ import androidx.compose.ui.res.stringResource
 import com.aliothmoon.maafw.BuildConfig
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.domain.RemoteBackend
+import com.aliothmoon.maafw.privileged.RemoteAccessPort
+import com.aliothmoon.maafw.privileged.PermissionManager
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import com.aliothmoon.maafw.domain.ThemeMode
@@ -266,14 +268,36 @@ private fun LogCard(
  */
 @Composable
 private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
+    val accessPort = koinInject<RemoteAccessPort>()
+    val permissionManager = koinInject<PermissionManager>()
+    val scope = rememberCoroutineScope()
+    var checkingRoot by remember { mutableStateOf(false) }
     MaaCard(title = stringResource(R.string.settings_section_other), collapsible = true) {
         MaaFieldLabel(stringResource(R.string.permission_backend))
         MaaSingleChoiceFlow(
-            // 对齐 MaaMeow：只列后端名，不展示「可用/不可用」——选哪个都行，可用性交给连接流程判
             options = RemoteBackend.entries.map { it to it.display },
             selected = state.remoteAccess.configuredBackend,
             onSelect = { onIntent(SettingsIntent.SetBackend(it)) },
+            optionEnabled = { state.remoteAccess.canSelect(it) && !checkingRoot },
         )
+        if (!state.remoteAccess.rootGranted) {
+            Text(
+                text = stringResource(if (state.remoteAccess.rootAvailable)
+                    R.string.root_permission_required else R.string.root_unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(
+                enabled = !checkingRoot,
+                onClick = {
+                    checkingRoot = true
+                    scope.launch {
+                        try { accessPort.request(RemoteBackend.ROOT) }
+                        finally { checkingRoot = false; permissionManager.refresh() }
+                    }
+                },
+            ) { Text(stringResource(if (checkingRoot) R.string.permission_requesting else R.string.root_check_permission)) }
+        }
     }
 }
 

@@ -9,6 +9,9 @@ data class RemoteAccessState(
     val rootGranted: Boolean = false,
     val configuredBackend: RemoteBackend = RemoteBackend.SHIZUKU,
 ) {
+    /** Mode selection requires App authorization, not merely a su binary. */
+    fun canSelect(backend: RemoteBackend): Boolean = backend != RemoteBackend.ROOT || rootGranted
+
     fun isAvailable(backend: RemoteBackend): Boolean {
         return when (backend) {
             RemoteBackend.SHIZUKU -> shizukuAvailable
