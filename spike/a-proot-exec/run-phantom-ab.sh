@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Spike C on-device runner: Phantom Process Killer A/B/A' round driver (MaaAL, roadmap v3).
+# Spike C on-device runner: Phantom Process Killer A/B/A' round driver (MaaAL).
 #
 # Usage:  bash run-phantom-ab.sh <round> [windowSec]
 #   rounds: A   = mitigation OFF  (true defaults: monitor unset, cap unset=32, legacy keys cleared)
@@ -19,13 +19,13 @@
 set -u
 
 export MSYS_NO_PATHCONV=1
-ADB="${ADB:-/c/Users/da270/AppData/Local/Android/Sdk/platform-tools/adb.exe}"
-SERIAL="${SERIAL:-AVAY025422002864}"
+ADB="${ADB:-adb}"
+SERIAL="${SERIAL:?set SERIAL to the target device}"
 ROUND="${1:?round required: A|B|A2|B1|B2|final}"
 WINDOW="${2:-}"
 
 PKG=com.maaal.spikea
-UID_NUM="${UID_NUM:-10301}"
+UID_NUM="${UID_NUM:?set UID_NUM to the target application UID}"
 COUNT="${COUNT:-48}"
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"

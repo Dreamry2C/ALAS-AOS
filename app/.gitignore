@@ -44,7 +44,7 @@ versioncode.txt
 
 # build_agent_bundle.py 的工作目录：下载的 agent 内核、解包结果与 pip 缓存
 /.maafw/
-# 出内核用的下载缓存；内核脚本不在本仓库，这条只为本机残留的目录留着
+# 构建工具下载缓存
 .agent-runtime-cache/
 
 # Kotlin 2.x 的构建缓存目录

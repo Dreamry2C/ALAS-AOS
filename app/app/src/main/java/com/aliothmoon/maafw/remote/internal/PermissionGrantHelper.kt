@@ -133,7 +133,7 @@ object PermissionGrantHelper {
             return true
         }
         return try {
-            // Spike C（2026-09-15 真机实证）：主手段=关整条"扫描+记帐+裁剪"链；
+            // 关闭整条"扫描+记帐+裁剪"链；
             // 副手段=裁剪阈值顶到天花板。旧键 settings_config_disable_monitor_phantom_procs /
             // phantom_process_killer_enable 实测无效（开跑 2 秒即被裁），不再写
             RemoteUtils.shellExec("settings put global settings_enable_monitor_phantom_procs false")

@@ -27,7 +27,7 @@ sealed interface ProvisionState {
     /** 安装包未内置 rootfs.tar.xz（开发构建走 M1-d 的 /data/local/tmp 通道时可跳过） */
     data object NotBundled : ProvisionState
 
-    /** 磁盘余量不足（roadmap 硬校验：≥2GB） */
+    /** 磁盘余量不足（最低要求：≥2GB） */
     data class LowDisk(val freeBytes: Long) : ProvisionState
 
     /** 解压中；进度按压缩字节读数 / 资产总长（流式解压拿不到的解压后总量不用） */
@@ -42,7 +42,7 @@ sealed interface ProvisionState {
  * 首启解压流水线：assets 的 rootfs.tar.xz → 内部存储 files/rootfs
  *
  * - **必须内部 filesDir**：/sdcard 模拟存储不支持符号链接（ubuntu-base 有 740 个），
- *   且 noexec；内部 filesDir 是 Spike A 实证 proot 可用的位置（targetSdk 35）。
+ *   且 noexec；内部 filesDir 可供 proot 使用（targetSdk 35）。
  * - 版本闸门：assets 侧 `rootfs/BUILD_MANIFEST` 与 marker `files/rootfs/.provisioned`
  *   对版本号；不一致（或 python3  sanity 不过）就重解。升级=换新包重解，不做增量。
  * - 落盘走 `rootfs.tmp` 解完再换名，半途失败不留半拉子正式目录。
@@ -210,7 +210,7 @@ class RootfsProvisioner(
                 target.outputStream().buffered(BUFFER_SIZE).use { out ->
                     tar.copyTo(out, BUFFER_SIZE)
                 }
-                // 可执行位必须保：proot/python/busybox 全靠它（Spike A：缺 +x 报 Permission denied 极易误判）
+                // 可执行位必须保：proot/python/busybox 全靠它（缺少可执行权限会导致 Permission denied）
                 if (entry.mode and 0b001_001_001 != 0) target.setExecutable(true, false)
                 extracted[name] = target
             }

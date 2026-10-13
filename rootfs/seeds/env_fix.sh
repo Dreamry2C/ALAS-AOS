@@ -4,8 +4,7 @@
 #
 # 职责（全幂等，失败只告警不阻塞启动）：
 # 1) imageio 钉回上游 requirements.txt 的 2.27.0：imageio 2.35+ 把 P 模式 GIF 统一
-#    解码成 RGB 3 通道，campaign 选关模板匹配时 cv2 通道断言直接崩（T2 真机根因 =
-#    环境未按上游钉版，非 ALAS 代码问题）。已部署 rootfs 靠本脚本就地降级，不必
+#    解码成 RGB 3 通道，campaign 选关模板匹配时 cv2 通道断言直接崩，因此需要按上游版本固定依赖。已部署 rootfs 靠本脚本就地降级，不必
 #    重烘焙；烘焙侧 build-rootfs.sh 已同步钉版（'imageio==2.27.0'）。
 # 2) 把被旧构建补丁盖过的 module/base/template.py 用 git 还原成钉版上游原版
 #    （烘焙是深度 1 克隆，本地含 commit 对象，离线字节级还原；补丁机制此后不再
@@ -43,7 +42,7 @@ fi
 now="$(python3 -c 'import imageio; print(imageio.__version__)' 2>/dev/null)"
 [ "$now" = "$WANT" ] || mark "WARN imageio verify = ${now:-missing}"
 
-# 白名单还原：仅 module/base/template.py（T2 旧补丁从资产中删除后，设备上遗留的覆盖件）
+# 白名单还原：仅 module/base/template.py（旧补丁从资产中删除后，设备上遗留的覆盖件）
 tstate="skip(no .git)"
 if [ -d .git ]; then
   if git -c safe.directory='*' diff --quiet HEAD -- module/base/template.py 2>/dev/null; then

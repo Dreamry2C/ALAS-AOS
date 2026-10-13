@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit
 /**
  * proot 会话宿主：以 App 进程为父，拉起 rootfs 内的 wrapper.py（WebUI 由 wrapper 监管）
  *
- * 链路（roadmap 阶段三第 3 条）：
+ * 运行链路：
  * 自愈清锁 → 铺 overlay → 播种实例配置 → 热更新（降级不阻塞）→ 必要时重放补丁
  * → ProcessBuilder 拉起 proot 长跑会话 → 崩溃/退出带退避重拉
  *
@@ -211,7 +211,7 @@ class ProotHost(
         return proc
     }
 
-    /** proot 进程环境：与 Spike A 实证的同一套（nld 即 LD_LIBRARY_PATH） */
+    /** proot 进程环境与原生库搜索路径 */
     private fun baseEnv(): Map<String, String> = mapOf(
         "LD_LIBRARY_PATH" to nativeLibDir,
         "PROOT_LOADER" to File(nativeLibDir, "libproot-loader.so").absolutePath,
@@ -247,7 +247,7 @@ class ProotHost(
     /** 崩溃/退出重拉：退避 3s 翻倍至 60s；wantRunning 撤了就不拉。
      *  熔断：会话连续秒退（<QUICK_DEATH_MS）MAX_RAPID_DEATHS 次即放弃——典型诱因是
      *  端口被同机旧装 App 的残留会话占用，此时 awaitServices 会被占位者喂成假 RUNNING，
-     *  不退熔断就是 3s 一轮的无限崩溃循环（21:16 真机事故） */
+     *  不退熔断就是 3s 一轮的无限崩溃循环 */
     private fun supervise(first: Process) {
         supervisorJob?.cancel()
         supervisorJob = scope.launch(MaaDispatchers.IO) {
