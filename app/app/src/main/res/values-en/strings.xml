@@ -668,7 +668,7 @@
     <string name="provision_extracting">Extracting %1$d%% (%2$d / %3$d MB)</string>
     <string name="provision_low_disk">Not enough storage: only %1$d MB left, at least 2 GB required</string>
     <string name="provision_not_bundled">This build does not bundle the runtime environment</string>
-    <string name="provision_lite_intro">Lite downloads the complete runtime (rootfs, about 220 MB), including Linux, Python, dependencies and ALAS. Choose GitHub Release, optionally via a mirror, or a custom file URL. After deployment, ALAS source-code updates use the domestic source by default; that source does not download or update rootfs.</string>
+    <string name="provision_lite_intro">Lite downloads the complete runtime (rootfs, about 220 MB), including Linux, Python, dependencies and ALAS. Choose the latest stable GitHub Release, optionally via a mirror, or a direct runtime archive URL. Do not enter an ALAS repository URL during initial setup. After deployment, the domestic source checks and downloads ALAS source-code updates, not rootfs updates.</string>
     <string name="provision_download_source">Download source</string>
     <string name="provision_source_github">GitHub Release (recommended)</string>
     <string name="provision_source_custom">Custom URL</string>
@@ -715,5 +715,5 @@
     <string name="alas_config_delete_running">Stop the task using this configuration first</string>
     <string name="alas_config_delete_last">Keep at least one configuration</string>
     <string name="alas_config_delete_failed">Could not delete configuration. Refresh the page and try again</string>
-    <string name="provision_archive_url_hint">Enter a direct rootfs.tar.xz URL with BUILD_MANIFEST in the same directory. An ALAS Git repository URL is not a runtime archive.</string>
+    <string name="provision_archive_url_hint">Do not enter an ALAS repository URL during initial setup, including domestic, GitHub or Gitee repositories. Enter a direct rootfs.tar.xz runtime archive URL with BUILD_MANIFEST in the same directory.</string>
 </resources>
