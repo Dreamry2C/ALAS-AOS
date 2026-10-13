@@ -28,7 +28,7 @@ class PrepareReleaseTests(unittest.TestCase):
             z.writestr('classes.dex', b'dex')
 
     def prepare(self, tag='v0.1.11'):
-        release.prepare(tag, '0.1.11', '# Changes\n\n## v0.1.11\n\n- 新改动\n\n## v0.1.10\n旧改动\n',
+        release.prepare(tag, '0.1.11', '# Changes\n\n## v0.1.11（2026-10-13）\n\n- 新改动\n\n## v0.1.10\n旧改动\n',
                         self.root, self.root, self.root / 'output')
 
     def test_matching_pair_generates_only_current_notes_and_all_checksums(self):
@@ -44,6 +44,15 @@ class PrepareReleaseTests(unittest.TestCase):
         (self.root / 'rootfs.tar.xz').write_bytes(b'different archive')
         with self.assertRaisesRegex(ValueError, 'runtime differs'):
             self.prepare()
+
+    def test_generated_notes_do_not_require_a_tracked_changelog(self):
+        release.prepare('v0.1.11', '0.1.11', '', self.root, self.root,
+                        self.root / 'output', notes_override='Generated release changes')
+        self.assertIn('Generated release changes',
+                      (self.root / 'output/notes.md').read_text(encoding='utf-8'))
+        with self.assertRaisesRegex(ValueError, 'empty'):
+            release.prepare('v0.1.11', '0.1.11', '', self.root, self.root,
+                            self.root / 'empty', notes_override='  ')
 
     def test_missing_changelog_or_bundled_lite_refuses_release(self):
         with self.assertRaises(ValueError):

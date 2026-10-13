@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def release_notes(changelog, tag):
     sections = re.split(r'(?=^## v)', changelog, flags=re.MULTILINE)
-    matches = [s for s in sections if re.match(rf'^## {re.escape(tag)}(?:\s|$)', s)]
+    matches = [s for s in sections if re.match(rf'^## {re.escape(tag)}(?:\s|[（(]|$)', s)]
     if len(matches) != 1:
         raise ValueError('CHANGELOG must contain exactly one section for this release')
     return matches[0].strip() + '\n'
@@ -21,7 +21,7 @@ def digest(stream):
     return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def prepare(tag, version, changelog, apk_dir, rootfs_dir, output):
+def prepare(tag, version, changelog, apk_dir, rootfs_dir, output, notes_override=None):
     if tag != f'v{version}' or not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
         raise ValueError('Release tag must match app.versionName')
     names = [f'ALAS-AOS-v{version}-arm64-v8a-release.apk',
@@ -41,7 +41,9 @@ def prepare(tag, version, changelog, apk_dir, rootfs_dir, output):
                 raise ValueError('Full APK runtime differs from the release archive')
         if full.read('assets/rootfs/BUILD_MANIFEST') != manifest.read_bytes():
             raise ValueError('Full APK manifest differs from the release manifest')
-    notes = release_notes(changelog, tag)
+    notes = release_notes(changelog, tag) if notes_override is None else notes_override.strip()
+    if not notes:
+        raise ValueError('Release notes must not be empty')
     notes += ('\n- Full：内置运行环境，适合离线部署。\n'
               '- Lite：小安装包，首次启动下载完整运行环境。\n'
               '- 仅支持 64 位 ARM / arm64-v8a、Android 9 及以上。\n')
@@ -60,12 +62,13 @@ def main():
     parser.add_argument('--apk-dir', type=Path, required=True)
     parser.add_argument('--rootfs-dir', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--notes-file', type=Path, required=True)
     args = parser.parse_args()
     props = dict(line.strip().split('=', 1) for line in
                  (ROOT / 'app/gradle.properties').read_text(encoding='utf-8').splitlines()
                  if '=' in line and not line.lstrip().startswith('#'))
-    prepare(args.tag, props['app.versionName'], (ROOT / 'CHANGELOG.md').read_text(encoding='utf-8'),
-            args.apk_dir, args.rootfs_dir, args.output)
+    prepare(args.tag, props['app.versionName'], '', args.apk_dir, args.rootfs_dir, args.output,
+            notes_override=args.notes_file.read_text(encoding='utf-8'))
     print('RELEASE_INPUTS_VERIFIED', args.tag)
 
 
