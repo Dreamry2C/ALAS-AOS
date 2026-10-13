@@ -361,6 +361,9 @@
     <!-- Privileged access (home permission card + Shizuku guidance) -->
     <string name="permission_section">Permissions</string>
     <string name="permission_backend">Startup mode</string>
+    <string name="root_permission_required">AOS has not been granted root access. Authorize AOS in your root manager, then check again to enable Root mode.</string>
+    <string name="root_unavailable">AOS cannot use root access. Device or ADB root does not grant root to AOS. You can use Shizuku mode.</string>
+    <string name="root_check_permission">Check and request root access</string>
     <string name="permission_granted">Granted</string>
     <string name="permission_request">Request</string>
     <string name="permission_quick_grant">Quick grant</string>
@@ -665,7 +668,7 @@
     <string name="provision_extracting">Extracting %1$d%% (%2$d / %3$d MB)</string>
     <string name="provision_low_disk">Not enough storage: only %1$d MB left, at least 2 GB required</string>
     <string name="provision_not_bundled">This build does not bundle the runtime environment</string>
-    <string name="provision_lite_intro">This is a lite build requiring a one-time download of the runtime package (~220 MB). Please use the GitHub source (with mirror acceleration) for initial setup; daily updates will automatically use the domestic source after deployment.</string>
+    <string name="provision_lite_intro">Lite downloads the complete runtime (rootfs, about 220 MB), including Linux, Python, dependencies and ALAS. Choose GitHub Release, optionally via a mirror, or a custom file URL. After deployment, ALAS source-code updates use the domestic source by default; that source does not download or update rootfs.</string>
     <string name="provision_download_source">Download source</string>
     <string name="provision_source_github">GitHub Release (recommended)</string>
     <string name="provision_source_custom">Custom URL</string>
@@ -677,7 +680,6 @@
     <string name="provision_downloaded_unknown">Downloaded %1$d MB</string>
     <string name="provision_download_throughput">Download speed: %1$s/s</string>
     <string name="provision_error_invalid_url">Invalid URL. Enter a direct http(s) file link</string>
-    <string name="provision_error_blocked_source">This URL is an ALAS Git code repository, not a full runtime package. Please use GitHub Release (or mirrors) for initial setup; daily updates will use the domestic source automatically after deployment.</string>
     <string name="provision_failed">Setup failed: %1$s</string>
     <string name="provision_retry">Retry</string>
     <string name="provision_skip">Skip (debug only)</string>
@@ -713,4 +715,5 @@
     <string name="alas_config_delete_running">Stop the task using this configuration first</string>
     <string name="alas_config_delete_last">Keep at least one configuration</string>
     <string name="alas_config_delete_failed">Could not delete configuration. Refresh the page and try again</string>
+    <string name="provision_archive_url_hint">Enter a direct rootfs.tar.xz URL with BUILD_MANIFEST in the same directory. An ALAS Git repository URL is not a runtime archive.</string>
 </resources>

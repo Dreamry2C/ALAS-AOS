@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compare a real replacement against an unchanged ARM64 rootfs before packaging."""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,16 @@ from profile_bundle import identity
 from slim_opencv_backends import slim
 from trim_rootfs import trim_archive
 from validate_trim import materialize_alas_tree, strip_alas_tree, tree_identity, unpack_archive
+
+
+def compress_controls(raw_archives, dist):
+    # Separate tar inputs and outputs; liblzma releases the GIL. Preserve both
+    # preset-8 controls and their exact bytes while using two runner cores.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        pending = {name: pool.submit(trim_archive, raw, dist / f'{name}.tar.xz',
+                                     groups=(), xz_preset=8)
+                   for name, raw in raw_archives.items()}
+        return {name: future.result() for name, future in pending.items()}
 
 
 def run_smoke(root, output):
@@ -92,11 +103,13 @@ def main():
     # the full tree and silently undo the image-side slimming.
     for root in roots.values():
         strip_alas_tree(root)
-    archives = {}
+    raw_archives = {}
     for name, root in roots.items():
         raw = work / f'{name}.tar'
         subprocess.run(['tar', '--sort=name', '-cf', str(raw), '-C', str(root), '.'], check=True)
-        report = trim_archive(raw, dist / f'{name}.tar.xz', groups=(), xz_preset=8)
+        raw_archives[name] = raw
+    archives = {}
+    for name, report in compress_controls(raw_archives, dist).items():
         (dist / f'{name}-archive.json').write_text(json.dumps(report, indent=2) + '\n')
         archives[name] = report['output']
     saved = archives['baseline']['bytes'] - archives['candidate']['bytes']

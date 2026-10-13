@@ -88,9 +88,10 @@ class RootfsProvisioner(
     private suspend fun run() = withContext(Dispatchers.IO) {
         _state.value = ProvisionState.Checking
         cleanupTrashDirs()
-        var bundled: String? = null
+        var expectedVersion: String? = null
         try {
-            bundled = bundledVersion()
+            val bundled = bundledVersion()
+            expectedVersion = bundled
             if (bundled == null) {
                 // lite 构建：覆盖安装到已有完整版数据的设备直接复用已装环境
                 if (isInstalledAny()) {
@@ -100,13 +101,14 @@ class RootfsProvisioner(
                 }
                 // 上次下载完成后解压失败的重试：不再问源，直接续解压（tmpDir 有半成品也一并复用）
                 downloadedPackage()?.let { (version, archive) ->
+                    expectedVersion = version
                     Timber.i("resuming extraction of downloaded rootfs $version")
                     val ready = try {
                         extractAndFinalize(version, ArchiveInput.Local(archive), skipDiskGate = isExtractComplete(tmpDir, version))
                     } catch (e: Exception) {
                         // 包解不开多半是包本身坏（镜像截断等）：弃包，重试回下载源选择，避免死循环
                         Timber.e(e, "extracting downloaded rootfs failed, discarding package")
-                        runCatching { downloader.clear() }
+                        if (!isExtractComplete(tmpDir, version)) runCatching { downloader.clear() }
                         throw e
                     }
                     if (ready) downloader.clear()
@@ -140,7 +142,8 @@ class RootfsProvisioner(
         } catch (e: Exception) {
             Timber.e(e, "rootfs provision failed")
             // 保护：若 tmpDir 已经完整解压完毕，保留以供重试秒级换名，不白费几十秒
-            if (bundled == null || !isExtractComplete(tmpDir, bundled)) {
+            val retainedVersion = expectedVersion
+            if (retainedVersion == null || !isExtractComplete(tmpDir, retainedVersion)) {
                 tmpDir.deleteRecursively()
             }
             _state.value = ProvisionState.Failed(e.message ?: e.javaClass.simpleName)
@@ -159,15 +162,13 @@ class RootfsProvisioner(
     private suspend fun runDownload(source: RootfsDownloadSource) = withContext(Dispatchers.IO) {
         _state.value = ProvisionState.Checking
         cleanupTrashDirs()
+        var downloadedVersion: String? = null
         try {
             val candidates = source.candidateUrls()
             val usable = candidates.filter { RootfsSourceValidator.validate(it) is RootfsSourceValidator.Result.Valid }
             if (usable.isEmpty()) {
                 // UI 层已先拦非法源，这里是直调兜底；镜像个别非法不拦，合法子集照常尝试
-                val reason = candidates.firstNotNullOfOrNull {
-                    (RootfsSourceValidator.validate(it) as? RootfsSourceValidator.Result.Rejected)?.reason
-                }
-                _state.value = ProvisionState.Failed(rejectionMessage(reason))
+                _state.value = ProvisionState.Failed("download source URL is invalid")
                 return@withContext
             }
 
@@ -180,21 +181,37 @@ class RootfsProvisioner(
             }
 
             downloader.clear()
-            // 先清单后包：marker 版本以下载到的 BUILD_MANIFEST 为准（与完整版 provision 同源）
-            val manifest = downloader.download(MANIFEST_NAME, usable.map { RootfsSource.manifestUrl(it) }) { }
-            val version = parseVersion(manifest.readText())
-                ?: error("BUILD_MANIFEST missing rootfs_version")
-            val archive = downloader.download(ARCHIVE_NAME, usable) { progress ->
-                _state.value = ProvisionState.Downloading(progress.doneBytes, progress.totalBytes, progress.bytesPerSecond)
+            // A mirror can serve a stale manifest: retry the entire pair on one source.
+            var downloaded: Pair<String, File>? = null
+            var lastError: Exception? = null
+            for (url in usable) {
+                try {
+                    downloader.clear()
+                    val manifest = downloader.download(MANIFEST_NAME, listOf(RootfsSource.manifestUrl(url))) { }
+                    val version = parseVersion(manifest.readText())
+                        ?: throw IOException("BUILD_MANIFEST missing rootfs_version")
+                    val archive = downloader.download(ARCHIVE_NAME, listOf(url)) { progress ->
+                        _state.value = ProvisionState.Downloading(progress.doneBytes, progress.totalBytes, progress.bytesPerSecond)
+                    }
+                    checkXzMagic(archive)
+                    downloaded = version to archive
+                    break
+                } catch (e: IOException) {
+                    lastError = e
+                }
             }
-            checkXzMagic(archive)
+            val (version, archive) = downloaded ?: throw (lastError ?: IOException("all download sources failed"))
+            downloadedVersion = version
             Timber.i("downloaded rootfs $version, starting extraction")
             extractAndFinalize(version, ArchiveInput.Local(archive), skipDiskGate = isExtractComplete(tmpDir, version))
                 .also { ready -> if (ready) scope.launch(Dispatchers.IO) { runCatching { downloader.clear() } } }
         } catch (e: Exception) {
             Timber.e(e, "rootfs download provision failed")
             // 新下载的包解不开多半是包本身坏（镜像截断、假直链等）：弃包，重试回下载源选择
-            runCatching { downloader.clear() }
+            val retainedVersion = downloadedVersion
+            if (retainedVersion == null || !isExtractComplete(tmpDir, retainedVersion)) {
+                runCatching { downloader.clear() }
+            }
             _state.value = ProvisionState.Failed(e.message ?: e.javaClass.simpleName)
         } finally {
             running.set(false)
@@ -240,14 +257,8 @@ class RootfsProvisioner(
         return version to archive
     }
 
-    private fun rejectionMessage(reason: RootfsSourceValidator.Reason?): String = when (reason) {
-        RootfsSourceValidator.Reason.BLOCKED_ALAS_SOURCE ->
-            "download source is an ALAS git mirror and cannot serve the runtime package"
-        else -> "download source URL is invalid"
-    }
-
     private fun checkXzMagic(file: File) {
-        check(hasXzMagic(file)) { "downloaded file is not a xz archive: ${file.name}" }
+        if (!hasXzMagic(file)) throw IOException("downloaded file is not a xz archive: ${file.name}")
     }
 
     private fun hasXzMagic(file: File): Boolean = runCatching {
@@ -341,6 +352,7 @@ class RootfsProvisioner(
             check(File(tmpDir, PYTHON_REL).let { it.isFile && it.canExecute() }) {
                 "$PYTHON_REL missing or not executable in extracted rootfs"
             }
+            check(readExtractedVersion(tmpDir) == version) { "archive and BUILD_MANIFEST versions differ" }
             File(tmpDir, COMPLETE_MARKER).createNewFile()
         }
 
@@ -375,19 +387,18 @@ class RootfsProvisioner(
         val dstConfig = File(dstDir, "opt/alas/config")
         if (!srcConfig.isDirectory) return
         dstConfig.mkdirs()
-        runCatching {
-            srcConfig.listFiles()?.forEach { file ->
-                if (!file.isFile) return@forEach
-                val name = file.name
-                val isUserConfig = (name.endsWith(".json") && !name.startsWith("template.")) ||
-                        name == "deploy.yaml" ||
-                        name.startsWith(".alasaos")
-                if (isUserConfig) {
-                    file.copyTo(File(dstConfig, name), overwrite = true)
-                    Timber.i("Preserved user config during provision: $name")
-                }
+        val configs = srcConfig.listFiles() ?: throw IOException("cannot read user configuration directory")
+        configs.forEach { file ->
+            if (!file.isFile) return@forEach
+            val name = file.name
+            val isUserConfig = (name.endsWith(".json") && !name.startsWith("template.")) ||
+                    name == "deploy.yaml" ||
+                    name.startsWith(".alasaos")
+            if (isUserConfig) {
+                file.copyTo(File(dstConfig, name), overwrite = true)
+                Timber.i("Preserved user config during provision: $name")
             }
-        }.onFailure { Timber.w(it, "Failed to preserve user configs during provision") }
+        }
     }
 
     /** 终结同 UID 下遗留的孤儿进程（proot/python 等），防止写文件导致换名/删除锁死 */
