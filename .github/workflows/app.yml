@@ -278,7 +278,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Publish versioned Release and refresh Lite runtime downloads
+      - name: Publish versioned Release with Lite runtime downloads
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
@@ -301,11 +301,4 @@ jobs:
           gh release upload "$RELEASE_TAG" dist/apk/*.apk \
             .tmp/rootfs-dist/rootfs.tar.xz .tmp/rootfs-dist/BUILD_MANIFEST .tmp/release/SHA256SUMS --clobber
           gh release edit "$RELEASE_TAG" --draft=false --latest
-          # Lite's stable URL must receive the same verified image as this release.
-          if ! gh release view rootfs-latest >/dev/null 2>&1; then
-            gh release create rootfs-latest --target "$GITHUB_SHA" --prerelease \
-              --title 'Lite runtime downloads' --notes 'Runtime archive for the latest ALAS-AOS version.'
-          fi
-          gh release upload rootfs-latest .tmp/rootfs-dist/rootfs.tar.xz \
-            .tmp/rootfs-dist/BUILD_MANIFEST --clobber
 

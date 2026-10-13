@@ -663,7 +663,7 @@
     <string name="provision_extracting">解压中 %1$d%%（%2$d / %3$d MB）</string>
     <string name="provision_low_disk">磁盘空间不足：仅剩 %1$d MB，需要至少 2 GB 余量</string>
     <string name="provision_not_bundled">此安装包未内置运行环境</string>
-    <string name="provision_lite_intro">轻量版首次启动下载完整运行环境（rootfs，约 220 MB），包含 Linux、Python、依赖及 ALAS，并非只下载 ALAS。环境包来自 GitHub Release（可用镜像加速）或自定义文件直链。部署完成后，ALAS 源码默认通过国内更新源检查和下载；该更新源不用于下载或更新 rootfs。</string>
+    <string name="provision_lite_intro">轻量版首次启动下载完整运行环境（rootfs，约 220 MB），包含 Linux、Python、依赖及 ALAS，并非只下载 ALAS。请选择 GitHub 最新正式版本 Release（可用镜像加速），或填写环境包文件直链。首次下载不要输入 ALAS 仓库链接。部署完成后，默认国内源用于检查和下载 ALAS 源码更新，不用于下载或更新 rootfs。</string>
     <string name="provision_download_source">下载源</string>
     <string name="provision_source_github">GitHub Release（推荐）</string>
     <string name="provision_source_custom">自定义直链</string>
@@ -710,5 +710,5 @@
     <string name="alas_config_delete_running">请先停止正在使用此配置的任务</string>
     <string name="alas_config_delete_last">至少需要保留一个配置</string>
     <string name="alas_config_delete_failed">删除失败，请刷新页面后重试</string>
-    <string name="provision_archive_url_hint">填写 rootfs.tar.xz 文件直链；同目录需有 BUILD_MANIFEST。ALAS Git 仓库地址不是环境包。</string>
+    <string name="provision_archive_url_hint">首次下载不要输入 ALAS 仓库链接（国内源、GitHub 或 Gitee 仓库均不适用）。请填写 rootfs.tar.xz 环境包文件直链；同目录需有 BUILD_MANIFEST。</string>
 </resources>
