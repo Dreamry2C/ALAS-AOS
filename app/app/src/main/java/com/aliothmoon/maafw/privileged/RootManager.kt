@@ -48,6 +48,8 @@ object RootManager : RemoteAccessPermissionBackend {
 
     override suspend fun requestPermission(): Boolean = withContext(MaaDispatchers.IO) {
         val granted = runCatching {
+            // A denied non-root shell must not make a later grant stay invisible.
+            Shell.getCachedShell()?.takeIf { !it.isRoot }?.close()
             Shell.getShell().isRoot
         }.onFailure {
             Timber.e(it, "request root permission failed")

@@ -17,7 +17,7 @@ enum class RootfsSourceKind {
 
 object RootfsSource {
 
-    /** CI 每次成功构建 lite 都会重建这个 pre-release（删旧建新），tag 恒定 */
+    /** 正式版本发布后刷新附件；仅滚动内部构建号不发布，tag 恒定 */
     const val RELEASE_TAG = "rootfs-latest"
 
     /** GitHub 源的 rootfs 包地址 */
@@ -48,13 +48,7 @@ object RootfsSource {
     fun manifestUrl(archiveUrl: String): String = archiveUrl.substringBeforeLast('/') + "/BUILD_MANIFEST"
 }
 
-/**
- * URL 合法性校验（纯函数，可单测）
- *
- * 红线：ALAS 官方国内 git 源（git.lyoko.io）与各处 AzurLaneAutoScript git 仓库
- * （github / gitee 的仓库本身及其 raw 域）都是 git 镜像，给不出 rootfs.tar.xz 文件，
- * 必须明确拒绝而不是让下载白转一圈再以 404/HTML 报错
- */
+/** Validate HTTP(S) file URLs; archive contents are checked after download. */
 object RootfsSourceValidator {
 
     sealed interface Result {
@@ -71,15 +65,7 @@ object RootfsSourceValidator {
         /** 协议不是 http/https */
         UNSUPPORTED_SCHEME,
 
-        /** ALAS git 源地址：无法提供运行环境包 */
-        BLOCKED_ALAS_SOURCE,
     }
-
-    private val BLOCKED_HOSTS = setOf("git.lyoko.io")
-
-    private val GIT_MIRROR_HOSTS = setOf("github.com", "gitee.com", "raw.githubusercontent.com", "codeload.github.com")
-
-    private const val ALAS_REPO_SEGMENT = "azurlaneautoscript"
 
     fun validate(rawUrl: String): Result {
         val trimmed = rawUrl.trim()
@@ -93,26 +79,9 @@ object RootfsSourceValidator {
         val host = uri.host?.lowercase()
         if (host.isNullOrEmpty()) return Result.Rejected(Reason.INVALID_URL)
 
-        if (isAlasGitSource(host, uri.path)) {
-            return Result.Rejected(Reason.BLOCKED_ALAS_SOURCE)
-        }
         return Result.Valid(trimmed)
     }
 
-    /**
-     * 拦截 ALAS Git 源码仓库/克隆地址（无法提供首启运行环境大包）。
-     * 若地址为正规的 Release 资产文件直链（如 /releases/download/...），即使仓库名包含 AzurLaneAutoScript 也不拦截。
-     */
-    private fun isAlasGitSource(host: String, path: String?): Boolean {
-        if (host in BLOCKED_HOSTS) return true
-        if (path.isNullOrEmpty() || host !in GIT_MIRROR_HOSTS) return false
-
-        // Release 附件文件直链放行（避免用户自己的 fork 仓库名带 AzurLaneAutoScript 被误伤）
-        if (path.contains("/releases/download/")) return false
-
-        val segments = path.split('/').filter { it.isNotEmpty() }
-        return segments.any { it.removeSuffix(".git").equals(ALAS_REPO_SEGMENT, ignoreCase = true) }
-    }
 }
 
 /** 用户在首启页配置好的下载源；[candidateUrls] 给出按序尝试的完整候选 */

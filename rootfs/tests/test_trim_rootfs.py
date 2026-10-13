@@ -104,6 +104,31 @@ class TrimRootfsTest(unittest.TestCase):
         with tarfile.open(dest) as t:
             self.assertEqual(t.extractfile('usr/share/man/foo').read(), b'doc')
 
+    def test_plain_intermediate_matches_existing_xz_payload_exactly(self):
+        source = self.archive([('opt/alas/original', b'original' * 1024),
+                               ('usr/share/man/foo', b'doc'),
+                               ('usr/lib/alias', (tarfile.LNKTYPE, 'opt/alas/original'))])
+        plain, compressed = self.path / 'trimmed.tar', self.path / 'trimmed.tar.xz'
+        left = trim.trim_archive(source, plain, compress=False)
+        right = trim.trim_archive(source, compressed)
+        self.assertEqual(plain.read_bytes(), lzma.decompress(compressed.read_bytes()))
+        self.assertEqual(left['alas_tree_sha256'], right['alas_tree_sha256'])
+        self.assertEqual(left['removed'], right['removed'])
+        self.assertEqual(left['compression'], {'format': 'tar'})
+
+    def test_parallel_native_controls_keep_the_exact_sequential_xz_bytes(self):
+        sys.path.insert(0, str(ROOT / 'rootfs/build'))
+        try:
+            from validate_slim_opencv import compress_controls
+            source = self.archive([('opt/alas/original', b'original' * 1024)])
+            sequential = self.path / 'sequential.tar.xz'
+            trim.trim_archive(source, sequential, groups=())
+            reports = compress_controls({'baseline': source, 'candidate': source}, self.path)
+            for name in reports:
+                self.assertEqual((self.path / f'{name}.tar.xz').read_bytes(), sequential.read_bytes())
+        finally:
+            sys.path.pop(0)
+
     def test_compression_presets_preserve_the_same_tar_with_bounded_decoder_memory(self):
         source = self.archive([('opt/alas/original', b'original bytes' * 4096),
                                ('usr/lib/libfoo.so', (tarfile.SYMTYPE, 'libfoo.so.1'))])
