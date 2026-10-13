@@ -47,7 +47,10 @@ jobs:
         env:
           ROOTFS_PLAIN_TAR: '1'
           WORK_DIR: ${{ github.workspace }}/.tmp/rootfs-build
-        run: bash rootfs/build/build-rootfs.sh
+        run: |
+          # Create the runner-owned parent before the script elevates to sudo.
+          mkdir -p .tmp/native-slim
+          bash rootfs/build/build-rootfs.sh
 
       - name: Install shared image-codec build dependencies
         run: |
