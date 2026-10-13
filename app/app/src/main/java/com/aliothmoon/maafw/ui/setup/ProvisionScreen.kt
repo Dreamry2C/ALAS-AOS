@@ -233,18 +233,18 @@ private fun DownloadSourcePicker(
                 placeholder = stringResource(R.string.provision_custom_url_placeholder),
                 singleLine = true,
             )
+            Text(
+                text = stringResource(R.string.provision_archive_url_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 
-    ui.rejection?.let { reason ->
+    ui.rejection?.let {
         Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
         Text(
-            text = stringResource(
-                when (reason) {
-                    RootfsSourceValidator.Reason.BLOCKED_ALAS_SOURCE -> R.string.provision_error_blocked_source
-                    else -> R.string.provision_error_invalid_url
-                }
-            ),
+            text = stringResource(R.string.provision_error_invalid_url),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
             textAlign = TextAlign.Center,

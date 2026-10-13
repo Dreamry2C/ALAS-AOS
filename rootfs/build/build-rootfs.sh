@@ -138,8 +138,8 @@ mount_bind /sys "$ROOTFS_DIR/sys"
 # opencv-headless 运行只需 glib/gomp 级系统库；不装 Qt/X11
 # 原版 OCR：mxnet 的 libmxnet.so 链 libopenblas.so.0 + OpenCV4.6(so.406)，用 apt 补运行时库；
 # binutils 供构建末尾 strip libmxnet.so 瘦身
-chroot_run apt-get update
-chroot_run apt-get install -y --no-install-recommends \
+chroot_run apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 update
+chroot_run apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 install -y --no-install-recommends \
   python3 python3-pip python3-venv git ca-certificates \
   libglib2.0-0t64 libgomp1 curl xz-utils binutils \
   libopenblas0-pthread libopencv-core406t64 libopencv-imgproc406t64 libopencv-imgcodecs406t64
@@ -406,7 +406,11 @@ RAW_TAR="$WORK_DIR/rootfs-before-trim.tar"
 tar --one-file-system -C "$ROOTFS_DIR" -cf "$RAW_TAR" .
 RAW_SHA="$(sha256sum "$RAW_TAR" | awk '{print $1}')"
 python3 "$ASSETS/build/validate_trim.py" --input "$RAW_TAR" --expected-sha256 "$RAW_SHA" \
-  --work "$WORK_DIR/trim-validation" --dist "$DIST_DIR"
+  --work "$WORK_DIR/trim-validation" --dist "$DIST_DIR" ${ROOTFS_PLAIN_TAR:+--plain-tar}
+if [[ -n "${ROOTFS_PLAIN_TAR:-}" ]]; then
+  log "Validated intermediate: $DIST_DIR/rootfs.tar (final XZ follows native validation)"
+  exit 0
+fi
 SIZE="$(stat -c %s "$OUT")"
 SHA="$(sha256sum "$OUT" | awk '{print $1}')"
 log "rootfs.tar.xz: $SIZE bytes"

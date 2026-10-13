@@ -64,6 +64,9 @@ class RootfsDownloader(private val workDir: File) {
                     }
                 }
             }
+            if (contentLength >= 0 && partFile.length() != contentLength) {
+                throw IOException("incomplete download: ${partFile.length()} of $contentLength bytes")
+            }
         } finally {
             connection.disconnect()
         }
@@ -72,7 +75,7 @@ class RootfsDownloader(private val workDir: File) {
         }
         val finalFile = File(dir, fileName)
         finalFile.delete()
-        check(partFile.renameTo(finalFile)) { "rename ${partFile.name} -> $fileName failed" }
+        if (!partFile.renameTo(finalFile)) throw IOException("rename ${partFile.name} -> $fileName failed")
         Timber.i("rootfs download done: %s (%d bytes)", fileName, finalFile.length())
         return finalFile
     }

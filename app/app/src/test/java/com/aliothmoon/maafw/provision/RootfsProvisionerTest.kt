@@ -61,6 +61,19 @@ class RootfsProvisionerTest {
     }
 
     @Test
+    fun `backup failure aborts migration and retains the original configuration`() {
+        val old = File(tempDir, "old").apply { mkdirs() }
+        val config = File(old, "opt/alas/config").apply { mkdirs() }
+        File(config, "alas.json").writeText("user data")
+        val replacement = File(tempDir, "replacement").apply { mkdirs() }
+        File(replacement, "opt").writeText("blocks destination directory")
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            provisioner.backupUserConfigs(old, replacement)
+        }
+        assertEquals("user data", File(config, "alas.json").readText())
+    }
+
+    @Test
     fun `isExtractComplete validates marker python and manifest version`() {
         val testRoot = File(tempDir, "mock_tmp").apply { mkdirs() }
         val expectedVersion = "0.2.0-ocr"
