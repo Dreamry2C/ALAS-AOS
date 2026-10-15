@@ -18,6 +18,8 @@ import com.aliothmoon.maafw.settings.AppSettingsManager
 import com.aliothmoon.maafw.ui.AppRoot
 import com.aliothmoon.maafw.ui.alas.AlasWebViewHolder
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import com.aliothmoon.maafw.ui.components.showArchitectureReadinessDialog
 import org.koin.android.ext.android.inject
 
 class MainActivity : AppCompatActivity() {
@@ -29,7 +31,6 @@ class MainActivity : AppCompatActivity() {
         val splash = installSplashScreen()
         splash.setKeepOnScreenCondition { !appSettings.loaded.value }
         super.onCreate(savedInstanceState)
-
         // 挂机/工具运行期间保持屏幕唤醒（App 退到后台或用户手动息屏时仍允许锁屏）
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -43,9 +44,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        setContent {
-            AppRoot(onDarkThemeChanged = ::applyEdgeToEdge)
+        lifecycleScope.launch {
+            appSettings.loaded.first { it }
+            val deviceAbi = com.aliothmoon.maafw.provision.RuntimeArchitecture.deviceAbi(
+                java.io.File("/system/bin/app_process64"), Build.SUPPORTED_ABIS.toList())
+            if (!appSettings.skipArchitectureCheck.value &&
+                !com.aliothmoon.maafw.provision.RuntimeArchitecture.supportsPackage(BuildConfig.RUNTIME_ABI, deviceAbi)) {
+                showArchitectureReadinessDialog(this@MainActivity, BuildConfig.RUNTIME_ABI, deviceAbi,
+                    onNeverShowAgain = { lifecycleScope.launch { appSettings.setSkipArchitectureCheck(true) } },
+                    onContinue = ::showApp)
+            } else showApp()
         }
+    }
+
+    private fun showApp() {
+        setContent { AppRoot(onDarkThemeChanged = ::applyEdgeToEdge) }
     }
 
     override fun onStart() {

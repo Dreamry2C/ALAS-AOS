@@ -24,7 +24,7 @@ class ProvisionViewModel(
     private val appSettings: AppSettingsGateway,
 ) : ViewModel() {
 
-    private val draft = MutableStateFlow(RootfsDownloadUiState())
+    private val draft = MutableStateFlow(RootfsDownloadUiState(abi = provisioner.runtimeAbi))
     val downloadState: StateFlow<RootfsDownloadUiState> = draft.asStateFlow()
 
     init {
@@ -40,6 +40,7 @@ class ProvisionViewModel(
                     customUrl = customUrl,
                     useMirror = useMirror,
                     mirrors = mirrors,
+                    abi = draft.value.abi,
                 )
             }.first()
             draft.value = seed
@@ -48,6 +49,7 @@ class ProvisionViewModel(
 
     fun onIntent(intent: ProvisionIntent) {
         when (intent) {
+            is ProvisionIntent.SetArchitecture -> draft.update { it.copy(abi = intent.abi) }
             is ProvisionIntent.SetSourceKind -> draft.update {
                 it.copy(sourceKind = intent.kind, rejection = null)
             }
@@ -73,7 +75,7 @@ class ProvisionViewModel(
 
     private fun startDownload() {
         val state = draft.value
-        val source = RootfsDownloadSource(state.sourceKind, state.customUrl.trim(), state.useMirror, state.mirrors)
+        val source = RootfsDownloadSource(state.sourceKind, state.customUrl.trim(), state.useMirror, state.mirrors, state.abi)
         // GitHub 源是仓库自有 Release，固定合法；自定义直链先过红线校验，拒绝就留在本页提示
         val validation = RootfsSourceValidator.validate(source.customUrl)
         if (source.kind == RootfsSourceKind.CUSTOM && validation is RootfsSourceValidator.Result.Rejected) {
@@ -86,13 +88,15 @@ class ProvisionViewModel(
             appSettings.setRootfsCustomUrl(state.customUrl.trim())
             appSettings.setRootfsUseMirror(state.useMirror)
             appSettings.setRootfsMirrors(state.mirrors)
+            appSettings.setRootfsRuntimeAbi(state.abi)
+            provisioner.startDownload(source)
         }
-        provisioner.startDownload(source)
     }
 }
 
 /** 下载源选择页的聚合态 */
 data class RootfsDownloadUiState(
+    val abi: String = "arm64-v8a",
     val sourceKind: RootfsSourceKind = RootfsSourceKind.GITHUB,
     val customUrl: String = "",
     val useMirror: Boolean = false,
@@ -102,6 +106,7 @@ data class RootfsDownloadUiState(
 )
 
 sealed interface ProvisionIntent {
+    data class SetArchitecture(val abi: String) : ProvisionIntent
     data class SetSourceKind(val kind: RootfsSourceKind) : ProvisionIntent
 
     data class SetCustomUrl(val url: String) : ProvisionIntent

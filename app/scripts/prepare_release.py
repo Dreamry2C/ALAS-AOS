@@ -21,32 +21,38 @@ def digest(stream):
     return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def prepare(tag, version, changelog, apk_dir, rootfs_dir, output, notes_override=None):
+def prepare(tag, version, changelog, apk_dir, rootfs_dir, output, notes_override=None, abis=('arm64-v8a',)):
     if tag != f'v{version}' or not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
         raise ValueError('Release tag must match app.versionName')
-    names = [f'ALAS-AOS-v{version}-arm64-v8a-release.apk',
-             f'ALAS-AOS-v{version}-arm64-v8a-lite-release.apk']
-    apks = [apk_dir / name for name in names]
-    archive, manifest = rootfs_dir / 'rootfs.tar.xz', rootfs_dir / 'BUILD_MANIFEST'
-    files = [*apks, archive, manifest]
-    if not all(p.is_file() and p.stat().st_size > 0 for p in files):
-        raise ValueError('Both APK editions, runtime archive and manifest are required')
-    with archive.open('rb') as stream:
-        rootfs_sha = digest(stream)
-    with zipfile.ZipFile(apks[0]) as full, zipfile.ZipFile(apks[1]) as lite:
-        if any(n.startswith('assets/rootfs/') for n in lite.namelist()):
-            raise ValueError('Lite APK must not bundle runtime assets')
-        with full.open('assets/rootfs/rootfs.tar.xz') as stream:
-            if digest(stream) != rootfs_sha:
-                raise ValueError('Full APK runtime differs from the release archive')
-        if full.read('assets/rootfs/BUILD_MANIFEST') != manifest.read_bytes():
-            raise ValueError('Full APK manifest differs from the release manifest')
+    files = []
+    for abi in abis:
+        if abi not in ('arm64-v8a', 'x86_64'):
+            raise ValueError('Unsupported release ABI')
+        apks = [apk_dir / f'ALAS-AOS-v{version}-{abi}-release.apk',
+                apk_dir / f'ALAS-AOS-v{version}-universal-lite-release.apk']
+        suffix = '-amd64' if abi == 'x86_64' else ''
+        archive, manifest = rootfs_dir / f'rootfs{suffix}.tar.xz', rootfs_dir / f'BUILD_MANIFEST{suffix}'
+        inputs = [*apks, archive, manifest]
+        if not all(p.is_file() and p.stat().st_size > 0 for p in inputs):
+            raise ValueError('Both APK editions, runtime archive and manifest are required for ' + abi)
+        with archive.open('rb') as stream:
+            rootfs_sha = digest(stream)
+        with zipfile.ZipFile(apks[0]) as full, zipfile.ZipFile(apks[1]) as lite:
+            if any(n.startswith('assets/rootfs/') for n in lite.namelist()):
+                raise ValueError('Lite APK must not bundle runtime assets')
+            with full.open('assets/rootfs/rootfs.tar.xz') as stream:
+                if digest(stream) != rootfs_sha:
+                    raise ValueError('Full APK runtime differs from the release archive')
+            if full.read('assets/rootfs/BUILD_MANIFEST') != manifest.read_bytes():
+                raise ValueError('Full APK manifest differs from the release manifest')
+        files.extend(inputs)
     notes = release_notes(changelog, tag) if notes_override is None else notes_override.strip()
     if not notes:
         raise ValueError('Release notes must not be empty')
     notes += ('\n- Full：内置运行环境，适合离线部署。\n'
               '- Lite：小安装包，首次启动下载完整运行环境。\n'
-              '- 仅支持 64 位 ARM / arm64-v8a、Android 9 及以上。\n')
+              '- 支持 64 位 ARM / arm64-v8a 与 x86_64（amd64）、Android 9 及以上，请按设备架构下载。\n')
+    files = list(dict.fromkeys(files))
     checksums = []
     for p in files:
         with p.open('rb') as stream:
@@ -59,6 +65,7 @@ def prepare(tag, version, changelog, apk_dir, rootfs_dir, output, notes_override
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tag', required=True)
+    parser.add_argument('--abis', default='arm64-v8a')
     parser.add_argument('--apk-dir', type=Path, required=True)
     parser.add_argument('--rootfs-dir', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
@@ -68,7 +75,7 @@ def main():
                  (ROOT / 'app/gradle.properties').read_text(encoding='utf-8').splitlines()
                  if '=' in line and not line.lstrip().startswith('#'))
     prepare(args.tag, props['app.versionName'], '', args.apk_dir, args.rootfs_dir, args.output,
-            notes_override=args.notes_file.read_text(encoding='utf-8'))
+            notes_override=args.notes_file.read_text(encoding='utf-8'), abis=tuple(args.abis.split(',')))
     print('RELEASE_INPUTS_VERIFIED', args.tag)
 
 

@@ -3,6 +3,9 @@ import importlib.util
 import base64
 import hashlib
 import os
+import io
+import struct
+import zipfile
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -14,6 +17,35 @@ spec.loader.exec_module(identity)
 
 
 class ReleaseIdentityTests(unittest.TestCase):
+    @staticmethod
+    def universal_archive(wrong_arch=False, missing=False):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            for abi in ('arm64-v8a', 'x86_64'):
+                for suffix, machine, talloc, shmem in (('arm64', 183, 'libta.so', 'libsa.so'),
+                                                        ('x86_64', 62, 'libtx.so', 'libsx.so')):
+                    for name in (f'libproot_{suffix}.so', f'libproot_loader_{suffix}.so', talloc, shmem):
+                        if missing and abi == 'arm64-v8a' and name == 'libproot_x86_64.so':
+                            continue
+                        header = bytearray(20)
+                        header[:6] = b'\x7fELF\x02\x01'
+                        struct.pack_into('<H', header, 18, 183 if wrong_arch else machine)
+                        data = bytes(header) + talloc.encode() + b'\0' + shmem.encode() + b'\0'
+                        archive.writestr(f'lib/{abi}/{name}', data)
+        return zipfile.ZipFile(buffer)
+
+    def test_universal_contains_both_native_families_in_either_install_directory(self):
+        with self.universal_archive() as archive:
+            identity.verify_universal_proot(archive)
+
+    def test_universal_rejects_missing_alternate_runtime(self):
+        with self.universal_archive(missing=True) as archive, self.assertRaisesRegex(ValueError, 'missing a native runtime'):
+            identity.verify_universal_proot(archive)
+
+    def test_universal_rejects_wrong_machine_in_an_alternate_runtime(self):
+        with self.universal_archive(wrong_arch=True) as archive, self.assertRaisesRegex(ValueError, 'wrong ELF architecture'):
+            identity.verify_universal_proot(archive)
+
     def setUp(self):
         self.sha = hashlib.sha256(b'test certificate').hexdigest()
         self.expected = {'app.signingCertificateSha256': self.sha,

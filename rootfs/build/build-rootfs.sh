@@ -26,7 +26,14 @@ ALAS_REPO="${ALAS_REPO:-https://github.com/LmeSzinc/AzurLaneAutoScript.git}"
 # 注：GHA runner 在海外，GitHub 原生最快；gitee 同名镜像对匿名克隆要凭证（401→挂凭证提示），勿用。
 # 国内本地复现构建时可 export ALAS_REPO=<可达镜像>；runtime 更新镜像由 deploy.yaml 的 fullcn 配置管，与此无关。
 ROOTFS_VERSION="${ROOTFS_VERSION:-0.2.0-ocr}"
-UBUNTU_BASE="${UBUNTU_BASE:-https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz}"
+ROOTFS_ARCH="${ROOTFS_ARCH:-arm64}"
+case "$ROOTFS_ARCH" in
+  arm64) HOST_ARCH=aarch64; GNU_ARCH=aarch64-linux-gnu ;;
+  amd64) HOST_ARCH=x86_64; GNU_ARCH=x86_64-linux-gnu ;;
+  *) echo "Unsupported ROOTFS_ARCH: $ROOTFS_ARCH" >&2; exit 1 ;;
+esac
+export ROOTFS_ARCH
+UBUNTU_BASE="${UBUNTU_BASE:-https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-${ROOTFS_ARCH}.tar.gz}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-$REPO_ROOT}"
@@ -49,8 +56,9 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exec sudo -E bash "$REPO_ROOT/rootfs/build/build-rootfs.sh" "$@"
 fi
 
-if [[ "$(uname -m)" != "aarch64" ]]; then
-  log "WARNING: 宿主架构 $(uname -m) 非 aarch64；本脚本设计运行于 GHA ubuntu-24.04-arm，chroot 预计将失败"
+if [[ "$(uname -m)" != "$HOST_ARCH" ]]; then
+  log "ERROR: host $(uname -m) cannot build native $ROOTFS_ARCH rootfs"
+  exit 1
 fi
 
 # fail-fast：overlays（in-proc OCR rpc.py / wrapper / runner）由并行任务提供，
@@ -79,7 +87,7 @@ require_file "$ASSETS/shims/zzz_alas_shim.pth"
 require_file "$ASSETS/build/trim_rootfs.py"
 require_file "$ASSETS/build/validate_trim.py"
 require_file "$ASSETS/build/runtime_smoke.py"
-require_file "$MXNET_WHL"
+if [[ "$ROOTFS_ARCH" == arm64 ]]; then require_file "$MXNET_WHL"; fi
 
 # chroot 内统一环境：干净 env + 非交互 + C.UTF-8（免 perl locale 警告）
 chroot_run() {
@@ -139,10 +147,18 @@ mount_bind /sys "$ROOTFS_DIR/sys"
 # 原版 OCR：mxnet 的 libmxnet.so 链 libopenblas.so.0 + OpenCV4.6(so.406)，用 apt 补运行时库；
 # binutils 供构建末尾 strip libmxnet.so 瘦身
 chroot_run apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 update
+OCR_APT=()
+if [[ "$ROOTFS_ARCH" == arm64 ]]; then
+  OCR_APT=(libopenblas0-pthread libopencv-core406t64 libopencv-imgproc406t64 libopencv-imgcodecs406t64)
+else
+  # The manylinux wheel bundles BLAS/Fortran, but its Fortran library still
+  # loads the system GCC quad-precision runtime.
+  OCR_APT=(libquadmath0)
+fi
 chroot_run apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 install -y --no-install-recommends \
   python3 python3-pip python3-venv git ca-certificates \
   libglib2.0-0t64 libgomp1 curl xz-utils binutils \
-  libopenblas0-pthread libopencv-core406t64 libopencv-imgproc406t64 libopencv-imgcodecs406t64
+  "${OCR_APT[@]}"
 chroot_run /bin/bash -c 'apt-get clean; rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/cache/apt/*.bin'
 
 # deploy.yaml 里 PythonExecutable: python；ubuntu-base 只有 python3，补软链对齐
@@ -177,14 +193,29 @@ pip_install \
   'numpy==1.26.4' 'scipy==1.13.1' pillow lxml 'opencv-python-headless==4.10.0.84' \
   pywebio uvicorn fastapi aiofiles inflection pyyaml requests tqdm rich 'imageio==2.27.0' \
   'pydantic<2' adbutils uiautomator2 uiautomator2cache websockets pypresence onepush \
-  cached-property
+  cached-property 'graphviz<0.9'
 
 # ALAS 原版 OCR 引擎：mxnet aarch64 轮子（仓库内置，需先拷进 chroot 才能 pip 装）+ cnocr 1.2.2。
 # cnocr 用 --no-deps：其声明依赖会拉 mxnet1.6/gluoncv/matplotlib/pandas 一大坨老死链，
 # 而 AlOcr 推理路径只用 mxnet+numpy（66 实测 INFER_OK），gluoncv 等一概不需要。
+if [[ "$ROOTFS_ARCH" == amd64 ]]; then
+  # The official Linux wheel carries its own native dependencies. Windows DLLs
+  # from a desktop toolkit cannot execute in a glibc rootfs.
+  MXNET_WHL="$WORK_DIR/mxnet-1.9.1-py3-none-manylinux2014_x86_64.whl"
+  python3 - "$MXNET_WHL" <<'PY'
+import hashlib, json, sys, urllib.request
+from pathlib import Path
+metadata = json.load(urllib.request.urlopen('https://pypi.org/pypi/mxnet/1.9.1/json'))
+target = Path(sys.argv[1])
+wheel = next(item for item in metadata['urls'] if item['filename'] == target.name)
+data = urllib.request.urlopen(wheel['url'], timeout=120).read()
+assert hashlib.sha256(data).hexdigest() == '65d5dac162c87a14d138d888b54494d515036d9047ae804ff51f770bd02197a6'
+target.write_bytes(data)
+PY
+fi
 WHL_BASE="$(basename "$MXNET_WHL")"   # 必须保留合法 wheel 文件名，否则 pip 报 "not a valid wheel filename"
 install -D -m 0644 "$MXNET_WHL" "$ROOTFS_DIR/tmp/$WHL_BASE"
-pip_install "/tmp/$WHL_BASE"
+pip_install --no-deps "/tmp/$WHL_BASE"
 pip_install --no-deps cnocr==1.2.2
 rm -f "$ROOTFS_DIR/tmp/$WHL_BASE"
 
@@ -263,6 +294,7 @@ install -D -m 0755 "$ASSETS/seeds/alasaos_restore.sh" "$ROOTFS_DIR/opt/alas/seed
 # strip libmxnet.so 瘦身：whl 内是未 strip 的 aarch64 .so（~102MB）；--strip-unneeded 去掉调试/
 # 符号表但保留动态导出符号（mxnet 靠动态符号加载，安全）。site-packages 内是符号链接，取真实文件。
 MXNET_SO="$(find "$ROOTFS_DIR" -type f -name libmxnet.so | head -1)"
+if [[ "$ROOTFS_ARCH" == arm64 ]]; then
 if [[ -n "$MXNET_SO" ]]; then
   before=$(stat -c %s "$MXNET_SO")
   chroot_run strip --strip-unneeded "${MXNET_SO#"$ROOTFS_DIR"}"
@@ -298,7 +330,7 @@ fi
 # → 放弃空壳，保留真 gdal + proj + gdcm + openexr 等全部编解码依赖；只删 **LLVM(136MB)+mesa(46MB)**——
 # 它们是 GL 软件渲染栈，只被 gdal 的 GL 驱动惰性 dlopen，mxnet 数值 OCR 链永不触发，且 gdal.so 不直链它们。
 # 仅删文件不 apt-remove（免连锁删 opencv）。import 硬门禁验证 mxnet 仍载入；挂则回滚本步。
-GLIBDIR="$ROOTFS_DIR/usr/lib/aarch64-linux-gnu"
+GLIBDIR="$ROOTFS_DIR/usr/lib/$GNU_ARCH"
 GDALSO="$(find "$GLIBDIR" -name 'libgdal.so.34*' -type f | head -1)"
 [[ -n "$GDALSO" ]] && { log "libgdal.so.34 DT_NEEDED 里的 mesa/llvm（应为空才安全）:"; chroot_run bash -c "readelf -d '${GDALSO#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | grep -iE 'mesa|LLVM|gallium' | sed 's/^/  /' || echo '  (无，删除安全)'"; }
 rm -f "$GLIBDIR"/libLLVM*.so* "$GLIBDIR"/libgallium*.so* "$GLIBDIR"/libgbm.so* \
@@ -306,6 +338,7 @@ rm -f "$GLIBDIR"/libLLVM*.so* "$GLIBDIR"/libgallium*.so* "$GLIBDIR"/libgbm.so* \
 rm -rf "$GLIBDIR/dri"
 chroot_run ldconfig 2>/dev/null || true
 log "瘦身手术：删 LLVM+mesa GL 软栈（约 -182MB 解压）；gdal/proj/gdcm/openexr 编解码依赖全保留"
+fi
 
 # ---------- 7. wrapper / runner（并行任务产物，fail-fast 已在开头验过） ----------
 cp "$ASSETS/overlays/wrapper.py" "$ASSETS/overlays/runner.py" "$ASSETS/overlays/alasaos_gui.py" "$ASSETS/overlays/alasaos_control.py" "$ASSETS/overlays/alasaos_u2.py" "$ROOTFS_DIR/opt/alas/"
@@ -351,6 +384,7 @@ import json, os
 e = os.environ
 manifest = {
     "rootfs_version": e["ROOTFS_VERSION"],
+    "architecture": e["ROOTFS_ARCH"],
     "build_time_utc": e["BUILD_TIME_UTC"],
     "alas_repo": e["ALAS_REPO"],
     "alas_commit": e["PINNED_COMMIT"],
@@ -387,6 +421,7 @@ rm -rf "$ROOTFS_DIR/opt/alas/.git/hooks" "$ROOTFS_DIR/opt/alas/.git/logs"
 find "$ROOTFS_DIR/opt/alas/.git" -name '*.lock' -delete 2>/dev/null
 # 与 native-slim 重打包共用剥离入口：补齐恢复 seed、pending 标记后才移除跟踪文件。
 # index、pack 与 config/deploy.yaml、BUILD_MANIFEST、wrapper 等 AOS 自有资产保留。
+if [[ "$ROOTFS_ARCH" == arm64 ]]; then
 python3 - "$ASSETS/build" "$ROOTFS_DIR" <<'PY'
 import sys
 from pathlib import Path
@@ -395,6 +430,7 @@ from validate_trim import strip_alas_tree
 strip_alas_tree(Path(sys.argv[2]))
 PY
 log "ALAS 跟踪工作区已剥离，镜像只带 .git pack + AOS untracked 资产"
+fi
 find "$ROOTFS_DIR" -type d -name __pycache__ -prune -exec rm -rf {} +
 rm -rf "$ROOTFS_DIR/root/.cache" "$ROOTFS_DIR/var/lib/apt/lists"/*
 
@@ -406,7 +442,8 @@ RAW_TAR="$WORK_DIR/rootfs-before-trim.tar"
 tar --one-file-system -C "$ROOTFS_DIR" -cf "$RAW_TAR" .
 RAW_SHA="$(sha256sum "$RAW_TAR" | awk '{print $1}')"
 python3 "$ASSETS/build/validate_trim.py" --input "$RAW_TAR" --expected-sha256 "$RAW_SHA" \
-  --work "$WORK_DIR/trim-validation" --dist "$DIST_DIR" ${ROOTFS_PLAIN_TAR:+--plain-tar}
+  --work "$WORK_DIR/trim-validation" --dist "$DIST_DIR" ${ROOTFS_PLAIN_TAR:+--plain-tar} \
+  $([[ "$ROOTFS_ARCH" == amd64 ]] && echo --no-trim)
 if [[ -n "${ROOTFS_PLAIN_TAR:-}" ]]; then
   log "Validated intermediate: $DIST_DIR/rootfs.tar (final XZ follows native validation)"
   exit 0
@@ -416,7 +453,7 @@ SHA="$(sha256sum "$OUT" | awk '{print $1}')"
 log "rootfs.tar.xz: $SIZE bytes"
 log "rootfs.tar.xz sha256: $SHA"
 # 目标 ~250MB；超 400MB 报警（不 fail，留人审）
-if (( SIZE > 400*1024*1024 )); then
+if [[ "$ROOTFS_ARCH" == arm64 ]] && (( SIZE > 400*1024*1024 )); then
   echo "::warning::rootfs.tar.xz 超 400MB（$SIZE bytes，目标 ~250MB），需要瘦身"
 fi
 log "完成：$OUT"

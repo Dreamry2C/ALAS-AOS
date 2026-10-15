@@ -24,6 +24,8 @@ data class AppSettings(
     /** 用户在引导弹窗上点过「不再提醒」 */
     @PrefKey(default = "false")
     val skipShizukuCheck: String = "false",
+    @PrefKey(default = "false")
+    val skipArchitectureCheck: String = "false",
 
     /** Shizuku 管理器的包名；有 ROM 内置了自己的分发，允许指到别处 */
     @PrefKey(default = SHIZUKU_PACKAGE)
@@ -60,6 +62,9 @@ data class AppSettings(
     /** [com.aliothmoon.maafw.provision.RootfsSourceKind] 的 name；lite 构建首启 rootfs 下载源 */
     @PrefKey(default = "GITHUB")
     val rootfsSourceKind: String = "GITHUB",
+    /** Empty means automatic native device detection; explicit Lite selection survives restart. */
+    @PrefKey(default = "")
+    val rootfsRuntimeAbi: String = "",
 
     /** 自定义 rootfs 下载直链；仅 sourceKind=CUSTOM 时生效 */
     @PrefKey(default = "")

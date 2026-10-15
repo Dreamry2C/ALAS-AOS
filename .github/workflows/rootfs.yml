@@ -31,7 +31,17 @@ env:
 jobs:
   build:
     if: github.event_name != 'workflow_dispatch' || (!inputs.native_slim && inputs.trim_baseline_run == '')
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            artifact: rootfs
+          - arch: amd64
+            runner: ubuntu-24.04
+            artifact: rootfs-amd64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -45,7 +55,8 @@ jobs:
 
       - name: Build rootfs
         env:
-          ROOTFS_PLAIN_TAR: '1'
+          ROOTFS_ARCH: ${{ matrix.arch }}
+          ROOTFS_PLAIN_TAR: ${{ matrix.arch == 'arm64' && '1' || '' }}
           WORK_DIR: ${{ github.workspace }}/.tmp/rootfs-build
         run: |
           # Create the runner-owned parent before the script elevates to sudo.
@@ -53,12 +64,14 @@ jobs:
           bash rootfs/build/build-rootfs.sh
 
       - name: Install shared image-codec build dependencies
+        if: matrix.arch == 'arm64'
         run: |
           sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 update
           sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 install -y --no-install-recommends build-essential cmake ninja-build pkg-config binutils python3 \
             libjpeg-dev libpng-dev libtiff-dev libwebp-dev libopenjp2-7-dev zlib1g-dev
 
       - name: Fingerprint native build environment
+        if: matrix.arch == 'arm64'
         id: native-packages
         run: |
           mkdir -p .tmp/native-slim
@@ -66,14 +79,15 @@ jobs:
           echo "digest=$(sha256sum .tmp/native-slim/host-packages.txt | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
 
       - name: Restore native image-codec build
+        if: matrix.arch == 'arm64'
         id: native-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .tmp/native-slim/native
           key: imgcodecs-${{ runner.os }}-${{ runner.arch }}-${{ env.SOURCE_SHA }}-${{ hashFiles('rootfs/build/build_slim_imgcodecs.sh') }}-${{ steps.native-packages.outputs.digest }}
 
       - name: Build slim native image codecs on cache miss
-        if: steps.native-cache.outputs.cache-hit != 'true'
+        if: matrix.arch == 'arm64' && steps.native-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p .tmp/native-slim
           curl -fL --retry 3 https://codeload.github.com/opencv/opencv/tar.gz/refs/tags/4.6.0 -o .tmp/native-slim/opencv.tar.gz
@@ -82,6 +96,7 @@ jobs:
             --work .tmp/native-slim/build --output .tmp/native-slim/native
 
       - name: Validate slim native image codecs against this run
+        if: matrix.arch == 'arm64'
         run: |
           baseline_sha=$(sha256sum dist/rootfs.tar | cut -d ' ' -f 1)
           sudo python3 rootfs/build/validate_slim_opencv.py \
@@ -108,7 +123,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: rootfs
+          name: ${{ matrix.artifact }}
           compression-level: 0
           path: |
             dist/rootfs.tar.xz
@@ -123,8 +138,11 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: rootfs-native-slim-failure
+          name: rootfs-native-slim-failure-${{ matrix.arch }}
           path: |
+            dist/smoke-*.log
+            dist/VALIDATION.json
+            dist/TRIM_PLAN.json
             .tmp/native-slim/validated/*.json
             .tmp/native-slim/validated/*.log
             .tmp/native-slim/native/OPENCV_BUILD.json
