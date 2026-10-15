@@ -12,8 +12,8 @@ import org.gradle.kotlin.dsl.register
 import java.security.KeyStore
 import java.security.MessageDigest
 
-/** ABIs that ship; a debug build can narrow to one via build.debugAbi to save build time. ALAS-AOS: arm64 only — the bundled rootfs is ARM64 Ubuntu and proot does not emulate, so x86_64 could never run ALAS */
-private val SHIPPED_ABIS = listOf("arm64-v8a")
+/** Native runtime architectures supported by separate APKs. */
+private val SHIPPED_ABIS = listOf("arm64-v8a", "x86_64")
 
 /** The package every build sits under; a profile only appends to it, it never replaces it */
 private const val BASE_APPLICATION_ID = "com.dreamry2c.alasaos"
@@ -54,11 +54,16 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             val android = extensions.getByType<ApplicationExtension>()
             configureAndroidCommon(android)
 
+            val runtimeAbi = providers.gradleProperty("build.runtimeAbi").orElse("arm64-v8a").get()
+            require(runtimeAbi in SHIPPED_ABIS || runtimeAbi == "universal") { "Unsupported runtime ABI: $runtimeAbi" }
+            val runtimeAbis = if (runtimeAbi == "universal") SHIPPED_ABIS else listOf(runtimeAbi)
+            if (runtimeAbi == "universal") configureUniversalProot(android)
             val profile = buildProfile()
             val icon = profile.appIcon?.also { configureProfileIcon(it) }
 
             android.defaultConfig {
                 applicationId = maafwApplicationId()
+                buildConfigField("String", "RUNTIME_ABI", "\"$runtimeAbi\"")
                 targetSdk = TARGET_SDK
                 versionCode = gitVersionCode()
                 versionName = gitVersionName()
@@ -145,7 +150,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     if (variant.name == "release") {
                         variant.outputs.forEach { output ->
                             output.outputFileName.set(output.versionName.map {
-                                "ALAS-AOS-v$it-arm64-v8a-release.apk"
+                                "ALAS-AOS-v$it-$runtimeAbi-release.apk"
                             })
                         }
                         val verify = tasks.register<VerifyR8KeepsTask>("verifyReleaseR8Keeps") {
@@ -160,7 +165,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 }
             }
 
-            val debugAbis = listSetting("build.debugAbi").ifEmpty { SHIPPED_ABIS }
+            val debugAbis = listSetting("build.debugAbi").ifEmpty { runtimeAbis }
             android.buildTypes {
                 getByName("debug") {
                     ndk {
@@ -169,7 +174,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 }
                 getByName("release") {
                     ndk {
-                        abiFilters += SHIPPED_ABIS
+                        abiFilters += runtimeAbis
                     }
                     // Resource shrinking stays off: it is a separate lever with its own
                     // failure mode, and nothing here has measured it yet

@@ -9,7 +9,7 @@ import shutil
 import sys
 
 
-def smoke(alas_root, work):
+def smoke(alas_root, work, basic_codecs=False):
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     sys.dont_write_bytecode = True
     work.mkdir(parents=True, exist_ok=True)
@@ -49,7 +49,9 @@ def smoke(alas_root, work):
     # (the Python wheel carries a separate OpenCV implementation).
     codec_pixels = np.arange(96 * 128 * 3, dtype=np.uint8).reshape((96, 128, 3))
     native_codecs = {}
-    for extension in ('.png', '.jpg', '.bmp', '.tiff', '.webp', '.jp2', '.ppm'):
+    formats = ('.png', '.jpg', '.bmp') if basic_codecs else ('.png', '.jpg', '.bmp', '.tiff', '.webp', '.jp2', '.ppm')
+    for extension in formats:
+        print('NATIVE_DECODE', extension, flush=True)
         ok, buffer = cv2.imencode(extension, codec_pixels)
         assert ok, f'Cannot encode test input: {extension}'
         frame = mx.image.imdecode(buffer.tobytes()).asnumpy()
@@ -91,6 +93,7 @@ def smoke(alas_root, work):
                          'imageio': imageio.__version__},
             'png_sha256': hashlib.sha256(encoded.tobytes()).hexdigest(),
             'native_imgcodecs_sha256': native_codecs,
+            'native_codecs_profile': 'basic' if basic_codecs else 'full',
             'gif_shape': list(decoded.shape), 'imports_ok': True}
 
 
@@ -99,8 +102,10 @@ def main():
     p.add_argument('--alas-root', type=Path, default=Path('/opt/alas'))
     p.add_argument('--work', type=Path, default=Path('/aos-validation/work'))
     p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--basic-codecs', action='store_true',
+                   help='Unmodified official MXNet wheel: common ALAS input formats; no native codec replacement')
     args = p.parse_args()
-    report = smoke(args.alas_root.resolve(), args.work.resolve())
+    report = smoke(args.alas_root.resolve(), args.work.resolve(), args.basic_codecs)
     args.output.write_text(json.dumps(report, indent=2), encoding='utf-8')
     print('RUNTIME_SMOKE_OK', json.dumps(report))
 

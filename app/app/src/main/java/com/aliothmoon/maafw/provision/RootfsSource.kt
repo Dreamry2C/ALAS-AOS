@@ -45,7 +45,12 @@ object RootfsSource {
     }
 
     /** 清单与包同目录：去掉地址最后一段路径接 BUILD_MANIFEST，兼容自定义直链的任意文件名 */
-    fun manifestUrl(archiveUrl: String): String = archiveUrl.substringBeforeLast('/') + "/BUILD_MANIFEST"
+    fun manifestUrl(archiveUrl: String): String {
+        val name = if (archiveUrl.substringAfterLast('/').substringBefore('?') == "rootfs-amd64.tar.xz") {
+            "BUILD_MANIFEST-amd64"
+        } else "BUILD_MANIFEST"
+        return archiveUrl.substringBeforeLast('/') + "/$name"
+    }
 }
 
 /** Validate HTTP(S) file URLs; archive contents are checked after download. */
@@ -90,17 +95,19 @@ data class RootfsDownloadSource(
     val customUrl: String = "",
     val useMirror: Boolean = false,
     val mirrors: List<String> = emptyList(),
+    val abi: String? = null,
 ) {
     /**
      * 依次尝试的下载地址：
      * - GitHub 源勾了镜像 → 镜像候选在前、GitHub 直链兜底；
      * - 自定义直链 → 只有这一个候选（镜像不生效，直链用户自管加速）
      */
-    fun candidateUrls(): List<String> = when (kind) {
+    fun candidateUrls(abi: String = "arm64-v8a"): List<String> = when (kind) {
         RootfsSourceKind.GITHUB -> {
-            val direct = listOf(RootfsSource.GITHUB_ARCHIVE_URL)
+            val archiveUrl = if (abi == "x86_64") "${RootfsSource.GITHUB_DOWNLOAD_BASE}/rootfs-amd64.tar.xz" else RootfsSource.GITHUB_ARCHIVE_URL
+            val direct = listOf(archiveUrl)
             if (useMirror) {
-                mirrors.filter { it.isNotBlank() }.map { RootfsSource.composeMirrorUrl(it, RootfsSource.GITHUB_ARCHIVE_URL) } + direct
+                mirrors.filter { it.isNotBlank() }.map { RootfsSource.composeMirrorUrl(it, archiveUrl) } + direct
             } else {
                 direct
             }
