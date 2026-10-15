@@ -57,6 +57,8 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
 
     private val _skipShizukuCheck = MutableStateFlow(defaults.skipShizukuCheck.toBoolean())
     val skipShizukuCheck: StateFlow<Boolean> = _skipShizukuCheck.asStateFlow()
+    private val _skipArchitectureCheck = MutableStateFlow(defaults.skipArchitectureCheck.toBoolean())
+    val skipArchitectureCheck: StateFlow<Boolean> = _skipArchitectureCheck.asStateFlow()
 
     private val _shizukuLaunchPackage = MutableStateFlow(defaults.shizukuLaunchPackage)
     val shizukuLaunchPackage: StateFlow<String> = _shizukuLaunchPackage.asStateFlow()
@@ -84,6 +86,8 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
 
     private val _rootfsSourceKind = MutableStateFlow(parseRootfsSourceKind(defaults.rootfsSourceKind))
     override val rootfsSourceKind: StateFlow<RootfsSourceKind> = _rootfsSourceKind.asStateFlow()
+    private val _rootfsRuntimeAbi = MutableStateFlow(defaults.rootfsRuntimeAbi)
+    override val rootfsRuntimeAbi: StateFlow<String> = _rootfsRuntimeAbi.asStateFlow()
 
     private val _rootfsCustomUrl = MutableStateFlow(defaults.rootfsCustomUrl)
     override val rootfsCustomUrl: StateFlow<String> = _rootfsCustomUrl.asStateFlow()
@@ -101,6 +105,7 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
             settings.collect { s ->
                 _startupBackend.value = parseBackend(s.startupBackend)
                 _skipShizukuCheck.value = s.skipShizukuCheck.toBoolean()
+                _skipArchitectureCheck.value = s.skipArchitectureCheck.toBoolean()
                 _shizukuLaunchPackage.value = s.shizukuLaunchPackage
                 _runMode.value = parseRunMode(s.runMode)
                 _overlayControlMode.value = parseOverlayMode(s.overlayControlMode)
@@ -110,6 +115,7 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
                 _updateSource.value = s.updateSource
                 _updateBranch.value = s.updateBranch
                 _rootfsSourceKind.value = parseRootfsSourceKind(s.rootfsSourceKind)
+                _rootfsRuntimeAbi.value = s.rootfsRuntimeAbi
                 _rootfsCustomUrl.value = s.rootfsCustomUrl
                 _rootfsUseMirror.value = s.rootfsUseMirror.toBoolean()
                 _rootfsMirrors.value = parseMirrors(s.rootfsMirrors)
@@ -121,6 +127,10 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
 
     suspend fun setStartupBackend(backend: RemoteBackend) = with(AppSettingsSchema) {
         context.dataStore.edit { it[startupBackend] = backend.name }
+    }
+
+    suspend fun setSkipArchitectureCheck(skip: Boolean) = with(AppSettingsSchema) {
+        context.dataStore.edit { it[skipArchitectureCheck] = skip.toString() }
     }
 
     suspend fun setSkipShizukuCheck(skip: Boolean) = with(AppSettingsSchema) {
@@ -141,6 +151,12 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
 
     override suspend fun setRootfsSourceKind(kind: RootfsSourceKind): Unit = with(AppSettingsSchema) {
         context.dataStore.edit { it[rootfsSourceKind] = kind.name }
+    }
+
+    override suspend fun setRootfsRuntimeAbi(abi: String): Unit = with(AppSettingsSchema) {
+        require(abi in listOf("", "arm64-v8a", "x86_64"))
+        context.dataStore.edit { it[rootfsRuntimeAbi] = abi }
+        _rootfsRuntimeAbi.value = abi
     }
 
     override suspend fun setRootfsCustomUrl(url: String): Unit = with(AppSettingsSchema) {

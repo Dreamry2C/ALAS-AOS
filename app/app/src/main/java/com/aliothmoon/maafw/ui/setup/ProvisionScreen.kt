@@ -187,6 +187,15 @@ private fun DownloadSourcePicker(
     )
     Spacer(Modifier.height(MaaDesignTokens.Spacing.lg))
 
+    MaaFieldLabel(stringResource(R.string.provision_runtime_architecture), Modifier.fillMaxWidth())
+    MaaSingleChoiceFlow(
+        options = listOf("arm64-v8a" to "ARM64", "x86_64" to "x86_64 (amd64)"),
+        selected = ui.abi,
+        onSelect = { onIntent(ProvisionIntent.SetArchitecture(it)) },
+    )
+    Text(stringResource(R.string.provision_architecture_hint), style = MaterialTheme.typography.bodySmall)
+    Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
+
     MaaFieldLabel(stringResource(R.string.provision_download_source), Modifier.fillMaxWidth())
     Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
     MaaSingleChoiceFlow(

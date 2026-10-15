@@ -119,9 +119,10 @@ def main():
     parser.add_argument('--dist', required=True, type=Path)
     parser.add_argument('--plain-tar', action='store_true',
                         help='Validated intermediate for native slimming; compress only the final image')
+    parser.add_argument('--no-trim', action='store_true', help='Validate and package the complete amd64 image')
     args = parser.parse_args()
-    if os.name != 'posix' or os.geteuid() != 0 or os.uname().machine != 'aarch64':
-        parser.error('Use a disposable Linux ARM64 runner with root privileges')
+    if os.name != 'posix' or os.geteuid() != 0 or os.uname().machine not in ('aarch64', 'x86_64'):
+        parser.error('Use a disposable native Linux 64-bit runner with root privileges')
     work, dist = args.work.resolve(), args.dist.resolve()
     root = work / 'rootfs'
     if root.exists():
@@ -149,7 +150,7 @@ def main():
             subprocess.run(['mount', '--bind', source, str(target)], check=True)
             mounted.append(target)
         baseline = None
-        for group in ('baseline', *GROUPS):
+        for group in ('baseline', *(() if args.no_trim else GROUPS)):
             action = {'group': group}
             if group != 'baseline':
                 action.update(apply_group(root, plan, group))
@@ -159,8 +160,15 @@ def main():
                        'OPENBLAS_NUM_THREADS=1', 'OMP_NUM_THREADS=1', 'MXNET_CPU_WORKER_NTHREADS=1',
                        'python3', '/aos-validation/runtime_smoke.py',
                        '--output', '/aos-validation/result.json']
+            if args.no_trim:
+                command.append('--basic-codecs')
             with (dist / f'smoke-{group}.log').open('wb') as log:
-                subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=300)
+                try:
+                    subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=300)
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                    log.flush()
+                    print((dist / f'smoke-{group}.log').read_text(encoding='utf-8', errors='replace')[-16000:], flush=True)
+                    raise
             result = json.loads((stage / 'result.json').read_text(encoding='utf-8'))
             if baseline is None:
                 baseline = result
@@ -176,10 +184,19 @@ def main():
         for target in reversed(mounted):
             subprocess.run(['umount', str(target)], check=True)
     output = dist / ('rootfs.tar' if args.plain_tar else 'rootfs.tar.xz')
-    report = trim_archive(args.input, output, compress=not args.plain_tar)
-    verification = trim_archive(output)
-    if verification['alas_tree_sha256'] != report['alas_tree_sha256'] or verification['removed']:
-        raise ValueError('Final archive integrity or trim idempotence failed')
+    if args.no_trim:
+        if args.plain_tar:
+            shutil.copyfile(args.input, output)
+        else:
+            with output.open('wb') as stream:
+                subprocess.run(['xz', '-T2', '-8', '-c', str(args.input)], stdout=stream, check=True)
+        report = {'trimmed': False, 'output': {'bytes': output.stat().st_size,
+                  'sha256': hashlib.sha256(output.read_bytes()).hexdigest()}}
+    else:
+        report = trim_archive(args.input, output, compress=not args.plain_tar)
+        verification = trim_archive(output)
+        if verification['alas_tree_sha256'] != report['alas_tree_sha256'] or verification['removed']:
+            raise ValueError('Final archive integrity or trim idempotence failed')
     (dist / 'TRIM_REPORT.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     shutil.copyfile(root / 'opt/alas/BUILD_MANIFEST', dist / 'BUILD_MANIFEST')
     print('TRIM_VALIDATION_OK', json.dumps(report['output']), flush=True)
