@@ -38,6 +38,8 @@ interface AppSettingsGateway {
     /** lite 构建首启 rootfs 下载源类型 */
     val rootfsSourceKind: StateFlow<RootfsSourceKind>
     suspend fun setRootfsSourceKind(kind: RootfsSourceKind)
+    val rootfsRuntimeAbi: StateFlow<String>
+    suspend fun setRootfsRuntimeAbi(abi: String)
 
     /** 自定义 rootfs 下载直链；仅 CUSTOM 源生效 */
     val rootfsCustomUrl: StateFlow<String>

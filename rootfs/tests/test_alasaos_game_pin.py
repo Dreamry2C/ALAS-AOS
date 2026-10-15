@@ -43,6 +43,12 @@ class GameTaskPlacementTests(unittest.TestCase):
         on_vd = DUMP.replace('mDisplayId=0 stackId=22', 'mDisplayId=3 stackId=22')
         self.assertEqual(placements(on_vd, GAME), [(22, 3)])
 
+    def test_modern_android_task_id_is_a_movable_root_task(self):
+        modern = DUMP.replace('stackId=', 'taskId=')
+        self.assertEqual(placements(modern, GAME), [(22, 0)])
+        self.assertEqual(placements(modern.replace('mDisplayId=0 taskId=22',
+                                                  'mDisplayId=7 taskId=22'), GAME), [(22, 7)])
+
     def test_other_packages_are_ignored(self):
         self.assertEqual(placements(DUMP, HOST), [])
         self.assertEqual(placements(DUMP, 'com.android.settings'), [])

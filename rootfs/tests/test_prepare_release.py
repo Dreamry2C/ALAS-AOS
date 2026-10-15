@@ -20,7 +20,7 @@ class PrepareReleaseTests(unittest.TestCase):
         (self.root / 'rootfs.tar.xz').write_bytes(b'archive')
         (self.root / 'BUILD_MANIFEST').write_bytes(b'manifest')
         self.full = self.root / 'ALAS-AOS-v0.1.11-arm64-v8a-release.apk'
-        self.lite = self.root / 'ALAS-AOS-v0.1.11-arm64-v8a-lite-release.apk'
+        self.lite = self.root / 'ALAS-AOS-v0.1.11-universal-lite-release.apk'
         with zipfile.ZipFile(self.full, 'w') as z:
             z.writestr('assets/rootfs/rootfs.tar.xz', b'archive')
             z.writestr('assets/rootfs/BUILD_MANIFEST', b'manifest')
@@ -61,6 +61,23 @@ class PrepareReleaseTests(unittest.TestCase):
             z.writestr('assets/rootfs/BUILD_MANIFEST', b'manifest')
         with self.assertRaisesRegex(ValueError, 'Lite APK'):
             self.prepare()
+
+    def test_two_full_packages_share_one_lite_and_keep_architecture_pairs(self):
+        (self.root / 'rootfs-amd64.tar.xz').write_bytes(b'amd64 archive')
+        (self.root / 'BUILD_MANIFEST-amd64').write_bytes(b'amd64 manifest')
+        full = self.root / 'ALAS-AOS-v0.1.11-x86_64-release.apk'
+        with zipfile.ZipFile(full, 'w') as z:
+            z.writestr('assets/rootfs/rootfs.tar.xz', b'amd64 archive')
+            z.writestr('assets/rootfs/BUILD_MANIFEST', b'amd64 manifest')
+        release.prepare('v0.1.11', '0.1.11', '', self.root, self.root,
+                        self.root / 'output', notes_override='Changes', abis=('arm64-v8a', 'x86_64'))
+        checksums = (self.root / 'output/SHA256SUMS').read_text().splitlines()
+        self.assertEqual(7, len(checksums))
+        self.assertEqual(1, sum('universal-lite' in line for line in checksums))
+        (self.root / 'rootfs-amd64.tar.xz').write_bytes(b'wrong architecture archive')
+        with self.assertRaisesRegex(ValueError, 'runtime differs'):
+            release.prepare('v0.1.11', '0.1.11', '', self.root, self.root,
+                            self.root / 'bad', notes_override='Changes', abis=('arm64-v8a', 'x86_64'))
 
 
 if __name__ == '__main__':

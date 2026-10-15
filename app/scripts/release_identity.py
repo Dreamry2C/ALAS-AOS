@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import struct
 import subprocess
 import sys
 import zipfile
@@ -27,7 +28,8 @@ def java_tool(name):
 
 def release_apk():
     version = settings()['app.versionName']
-    return ROOT / f'app/app/build/outputs/apk/release/ALAS-AOS-v{version}-arm64-v8a-release.apk'
+    abi = os.environ.get('RUNTIME_ABI', 'arm64-v8a')
+    return ROOT / f'app/app/build/outputs/apk/release/ALAS-AOS-v{version}-{abi}-release.apk'
 
 
 def prepare():
@@ -97,16 +99,39 @@ def verify(apk):
     with zipfile.ZipFile(apk) as archive:
         abis = sorted({name.split('/')[1] for name in archive.namelist()
                        if name.startswith('lib/') and name.endswith('.so')})
-    if abis != ['arm64-v8a']:
-        raise ValueError('APK native ABIs do not match the arm64-v8a package label')
+        if os.environ.get('RUNTIME_ABI') == 'universal':
+            verify_universal_proot(archive)
+    abi = os.environ.get('RUNTIME_ABI', 'arm64-v8a')
+    expected_abis = ['arm64-v8a', 'x86_64'] if abi == 'universal' else [abi]
+    if abis != expected_abis:
+        raise ValueError('APK native ABIs do not match the runtime package label')
     identity['abis'] = abis
     identity['apkBytes'] = apk.stat().st_size
     print(json.dumps(identity, indent=2))
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
             summary.write(f"Release **{identity['versionName']}** (code {identity['versionCode']}), "
-                          "**arm64-v8a / 64-bit ARM only**; "
+                          f"**{os.environ.get('RUNTIME_ABI', 'arm64-v8a')}**; "
                           f"certificate SHA-256: `{identity['certificateSha256']}`.\n\n")
+
+
+def verify_universal_proot(archive):
+    """Both executable families must survive extraction under either app ABI."""
+    for install_abi in ('arm64-v8a', 'x86_64'):
+        for suffix, machine, talloc, shmem in (('arm64', 183, 'libta.so', 'libsa.so'),
+                                                ('x86_64', 62, 'libtx.so', 'libsx.so')):
+            names = (f'libproot_{suffix}.so', f'libproot_loader_{suffix}.so', talloc, shmem)
+            for name in names:
+                path = f'lib/{install_abi}/{name}'
+                try:
+                    data = archive.read(path)
+                except KeyError:
+                    raise ValueError('Universal APK is missing a native runtime: ' + path) from None
+                if (len(data) < 20 or data[:6] != b'\x7fELF\x02\x01'
+                        or struct.unpack_from('<H', data, 18)[0] != machine):
+                    raise ValueError('Universal APK native runtime has the wrong ELF architecture: ' + path)
+                if name == names[0] and any(dep.encode() + b'\0' not in data for dep in (talloc, shmem)):
+                    raise ValueError('Universal APK native runtime dependency aliases differ: ' + path)
 
 
 def main():

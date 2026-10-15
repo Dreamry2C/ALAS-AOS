@@ -1,5 +1,10 @@
 <resources>
     <string name="app_name">ALAS-AOS</string>
+    <string name="runtime_architecture_never_show">以后不再提示架构检查</string>
+    <string name="runtime_architecture_title">安装包架构不匹配</string>
+    <string name="provision_runtime_architecture">运行环境架构</string>
+    <string name="provision_architecture_hint">已自动选择架构；检测不准确时可手动更改，运行环境需与设备匹配。</string>
+    <string name="runtime_architecture_message">此安装包支持 %1$s，设备架构为 %2$s。请安装对应设备架构的 AOS。</string>
 
     <!-- 通用 -->
     <string name="common_close">关闭</string>
@@ -394,21 +399,18 @@
     <string name="home_status_ready">就绪</string>
     <string name="home_service_connect">重新加载服务</string>
     <string name="home_service_disconnect">关闭服务</string>
-    <string name="dialog_shizuku_not_installed_title">未检测到 shizuku-m</string>
-    <string name="dialog_shizuku_not_installed_message">本应用依赖 shizuku-m（修改版 Shizuku）提供的特权服务，检测到设备未安装。请先安装 shizuku-m（获取方式见项目 README），装完后点下方按钮重新检测。</string>
+    <string name="dialog_shizuku_not_installed_title">未检测到 Shizuku</string>
+    <string name="dialog_shizuku_not_installed_message">本应用需要 Shizuku 提供特权服务。请安装官方 Shizuku 或兼容版本，装完后点下方按钮重新检测。</string>
     <string name="dialog_shizuku_install_confirm">我已安装，重新检测</string>
     <string name="dialog_shizuku_switch_to_root">切换至 Root 模式</string>
     <string name="dialog_shizuku_skip_check">跳过检查（不推荐）</string>
     <string name="dialog_shizuku_not_running_title">Shizuku 未启动</string>
-    <string name="dialog_shizuku_not_running_message">检测到 Shizuku 已安装但服务未启动。每次重启手机后都需要重新激活：打开 shizuku-m 点「启动」（无需连接 WLAN 或电脑），启动成功后返回本应用即可自动继续。</string>
+    <string name="dialog_shizuku_not_running_message">检测到 Shizuku 已安装但服务未启动。请打开 Shizuku 启动服务，成功后返回本应用即可自动继续。</string>
     <string name="dialog_shizuku_open_app">打开 Shizuku</string>
     <string name="dialog_sui_detected_title">检测到 Sui</string>
     <string name="dialog_sui_detected_message">当前由 Sui 提供 Shizuku 服务。Sui 以 Root 身份运行，本应用可能无法正常工作，请以实际测试为准。</string>
     <string name="dialog_shizuku_need_auth_title">Shizuku 未授权</string>
     <string name="dialog_shizuku_need_auth_message">Shizuku 服务正在运行但尚未授权本应用，请完成授权。授权成功前会持续提示。</string>
-    <string name="dialog_shizuku_official_conflict_title">检测到官方版 Shizuku</string>
-    <string name="dialog_shizuku_official_conflict_message">本应用配套的特权服务是魔改版 shizuku-m：重启手机后可离线自连，无需 WLAN 或电脑。它与官方 Shizuku 包名相同但签名不同，无法覆盖安装——请先在系统中卸载官方 Shizuku，再安装 shizuku-m（获取方式见项目 README）。卸载官方版不影响本应用的数据。</string>
-    <string name="dialog_shizuku_uninstall_confirm">去卸载官方版</string>
     <string name="common_got_it">知道了</string>
 
     <string name="tasks_log">日志</string>

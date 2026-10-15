@@ -56,7 +56,7 @@ def _game_task_placements(output: str, package: str):
     """Parse `dumpsys window windows`; return [(stack_id, display_id), ...] owned by package.
 
     Each `  Window #N Window{... pkg/activity}:` block carries one
-    `mDisplayId=<id> stackId=<id>` line. Multiple windows of the same task
+    `mDisplayId=<id> stackId=<id>` (or modern `taskId=<id>`) line. Multiple windows of the same task
     collapse to one entry.
     """
     placements = []
@@ -71,7 +71,7 @@ def _game_task_placements(output: str, package: str):
         if owner is None:
             continue
         placement = re.search(
-            r'^[ \t]+mDisplayId=(\d+)[ \t]+stackId=(\d+)\b',
+            r'^[ \t]+mDisplayId=(\d+)[ \t]+(?:stackId|taskId)=(\d+)\b',
             block, re.MULTILINE)
         if placement is None:
             continue

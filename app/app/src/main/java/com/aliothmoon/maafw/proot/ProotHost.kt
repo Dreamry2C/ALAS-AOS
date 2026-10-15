@@ -1,6 +1,9 @@
 package com.aliothmoon.maafw.proot
 
 import android.app.Application
+import android.os.Build
+import com.aliothmoon.maafw.BuildConfig
+import com.aliothmoon.maafw.provision.RuntimeArchitecture
 import com.aliothmoon.maafw.MaaDispatchers
 import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.service.RunForegroundService
@@ -73,6 +76,13 @@ class ProotHost(
     private val prootShmDir: File get() = File(prootTmpDir, "shm")
     private val sessionLog: File get() = File(AppPaths.LOG_DIR, "proot/session.log")
     private val nativeLibDir: String get() = app.applicationInfo.nativeLibraryDir
+    private val runtimeAbi: String get() = RuntimeArchitecture.runtimeAbi(BuildConfig.RUNTIME_ABI,
+        RuntimeArchitecture.deviceAbi(File("/system/bin/app_process64"), Build.SUPPORTED_ABIS.toList()),
+        settings.rootfsRuntimeAbi.value)
+    private val prootFile: File get() = File(nativeLibDir,
+        RuntimeArchitecture.prootFileName(runtimeAbi, BuildConfig.RUNTIME_ABI == "universal"))
+    private val loaderFile: File get() = File(nativeLibDir,
+        RuntimeArchitecture.prootFileName(runtimeAbi, BuildConfig.RUNTIME_ABI == "universal", loader = true))
 
     // ------------------------------------------------------------------ 对外入口
 
@@ -231,11 +241,11 @@ class ProotHost(
             fail("rootfs 未部署（python3 缺失）")
             return false
         }
-        if (!File(nativeLibDir, "libproot.so").exists()) {
+        if (!prootFile.exists()) {
             fail("libproot.so 缺失（当前 ABI 不支持？）")
             return false
         }
-        if (!File(nativeLibDir, "libproot-loader.so").exists()) {
+        if (!loaderFile.exists()) {
             fail("libproot-loader.so 缺失")
             return false
         }
@@ -281,7 +291,7 @@ class ProotHost(
         check(prootShmDir.isDirectory || prootShmDir.mkdirs()) { "Cannot prepare proot shared memory" }
         sessionLog.parentFile?.mkdirs()
         val cmd = listOf(
-            File(nativeLibDir, "libproot.so").absolutePath,
+            prootFile.absolutePath,
             // glibc sem_open uses hard links, forbidden in Android app_data_file.
             "--link2symlink",
             "-w", GUEST_ALAS_ROOT,
@@ -304,7 +314,7 @@ class ProotHost(
     /** proot 进程环境：与 Spike A 实证的同一套（nld 即 LD_LIBRARY_PATH） */
     private fun baseEnv(): Map<String, String> = mapOf(
         "LD_LIBRARY_PATH" to nativeLibDir,
-        "PROOT_LOADER" to File(nativeLibDir, "libproot-loader.so").absolutePath,
+        "PROOT_LOADER" to loaderFile.absolutePath,
         "PROOT_TMP_DIR" to prootTmpDir.absolutePath,
         "TMPDIR" to prootTmpDir.absolutePath,
         "HOME" to app.filesDir.absolutePath,
@@ -463,7 +473,7 @@ class ProotHost(
         prootTmpDir.mkdirs()
         check(prootShmDir.isDirectory || prootShmDir.mkdirs()) { "Cannot prepare proot shared memory" }
         val cmd = listOf(
-            File(nativeLibDir, "libproot.so").absolutePath,
+            prootFile.absolutePath,
             "--link2symlink",
             "-w", GUEST_ALAS_ROOT,
             "-r", rootfsDir.absolutePath,
