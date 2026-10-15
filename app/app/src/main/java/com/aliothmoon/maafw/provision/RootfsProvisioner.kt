@@ -1,7 +1,9 @@
 package com.aliothmoon.maafw.provision
 
 import android.app.Application
+import android.os.Build
 import android.system.Os
+import com.aliothmoon.maafw.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,6 +59,7 @@ sealed interface ProvisionState {
 class RootfsProvisioner(
     private val app: Application,
     private val scope: CoroutineScope,
+    private val selectedRuntimeAbi: () -> String = { "" },
 ) {
 
     private val _state = MutableStateFlow<ProvisionState>(ProvisionState.Checking)
@@ -68,6 +71,8 @@ class RootfsProvisioner(
     private val tmpDir: File get() = File(app.filesDir, "rootfs.tmp")
     private val downloadDir: File get() = File(app.filesDir, "rootfs-download")
     private val markerFile: File get() = File(rootDir, MARKER_NAME)
+    val runtimeAbi: String get() = RuntimeArchitecture.runtimeAbi(BuildConfig.RUNTIME_ABI,
+        RuntimeArchitecture.deviceAbi(File("/system/bin/app_process64"), Build.SUPPORTED_ABIS.toList()), selectedRuntimeAbi())
 
     // lazy：构造期不碰 app.filesDir（单测塞 relaxed mock 时 File(mock, child) 会 NPE）
     private val downloader: RootfsDownloader by lazy { RootfsDownloader(downloadDir) }
@@ -94,7 +99,7 @@ class RootfsProvisioner(
             expectedVersion = bundled
             if (bundled == null) {
                 // lite 构建：覆盖安装到已有完整版数据的设备直接复用已装环境
-                if (isInstalledAny()) {
+                if (isInstalledAny() && runCatching { validateArchitecture(rootDir) }.isSuccess) {
                     Timber.i("rootfs already provisioned, lite build reuses it")
                     _state.value = ProvisionState.Ready
                     return@withContext
@@ -164,7 +169,7 @@ class RootfsProvisioner(
         cleanupTrashDirs()
         var downloadedVersion: String? = null
         try {
-            val candidates = source.candidateUrls()
+            val candidates = source.candidateUrls(source.abi ?: runtimeAbi)
             val usable = candidates.filter { RootfsSourceValidator.validate(it) is RootfsSourceValidator.Result.Valid }
             if (usable.isEmpty()) {
                 // UI 层已先拦非法源，这里是直调兜底；镜像个别非法不拦，合法子集照常尝试
@@ -188,6 +193,8 @@ class RootfsProvisioner(
                 try {
                     downloader.clear()
                     val manifest = downloader.download(MANIFEST_NAME, listOf(RootfsSource.manifestUrl(url))) { }
+                    val selectedAbi = source.abi ?: runtimeAbi
+                    RuntimeArchitecture.requireCompatible(selectedAbi, listOf(selectedAbi), manifest.readText())
                     val version = parseVersion(manifest.readText())
                         ?: throw IOException("BUILD_MANIFEST missing rootfs_version")
                     val archive = downloader.download(ARCHIVE_NAME, listOf(url)) { progress ->
@@ -229,6 +236,7 @@ class RootfsProvisioner(
             }
         }
         extract(version, archive)
+        validateArchitecture(rootDir)
 
         // 解完 sanity：解释器在且可执行，版本以镜像内清单为准
         val python = File(rootDir, PYTHON_REL)
@@ -246,7 +254,12 @@ class RootfsProvisioner(
         markerFile.isFile && File(rootDir, PYTHON_REL).let { it.isFile && it.canExecute() }
 
     /** 下载目录里是否有下载完成的完整包（重试续解压入口；非 xz 的残次品一律视为没有） */
-    internal fun downloadedPackage(): Pair<String, File>? = downloadedPackage(downloadDir)
+    internal fun downloadedPackage(): Pair<String, File>? {
+        if (!runCatching {
+                RuntimeArchitecture.requireCompatible(runtimeAbi, listOf(runtimeAbi), File(downloadDir, MANIFEST_NAME).readText())
+            }.isSuccess) return null
+        return downloadedPackage(downloadDir)
+    }
 
     internal fun downloadedPackage(dir: File): Pair<String, File>? {
         val manifest = File(dir, MANIFEST_NAME)
@@ -276,7 +289,8 @@ class RootfsProvisioner(
 
     private fun isInstalled(bundled: String): Boolean =
         installedVersion() == bundled &&
-                File(rootDir, PYTHON_REL).let { it.isFile && it.canExecute() }
+                File(rootDir, PYTHON_REL).let { it.isFile && it.canExecute() } &&
+                runCatching { validateArchitecture(rootDir) }.isSuccess
 
     internal fun isExtractComplete(dir: File, expectedVersion: String): Boolean =
         File(dir, COMPLETE_MARKER).isFile &&
@@ -284,12 +298,19 @@ class RootfsProvisioner(
                 readExtractedVersion(dir) == expectedVersion
 
     /** 内置包版本；资产缺任一件（清单或压缩包）都视为未内置 */
-    private fun bundledVersion(): String? = runCatching {
-        val version = parseVersion(app.assets.open(ASSET_MANIFEST).bufferedReader().use { it.readText() })
-            ?: return@runCatching null
-        app.assets.open(ASSET_ARCHIVE).use { }
-        version
-    }.getOrNull()
+    private fun bundledVersion(): String? {
+        val manifest = runCatching {
+            app.assets.open(ASSET_ARCHIVE).use { }
+            app.assets.open(ASSET_MANIFEST).bufferedReader().use { it.readText() }
+        }.getOrNull() ?: return null
+        RuntimeArchitecture.requireCompatible(runtimeAbi, listOf(runtimeAbi), manifest)
+        return parseVersion(manifest) ?: error("BUILD_MANIFEST missing rootfs_version")
+    }
+
+    private fun validateArchitecture(dir: File) {
+        RuntimeArchitecture.requireCompatible(runtimeAbi, listOf(runtimeAbi),
+            File(dir, MANIFEST_REL).readText(), File(dir, PYTHON_REL))
+    }
 
     internal fun readExtractedVersion(dir: File = rootDir): String? = runCatching {
         parseVersion(File(dir, MANIFEST_REL).readText())
@@ -321,7 +342,7 @@ class RootfsProvisioner(
     private fun extract(version: String, archive: ArchiveInput) {
         killResidualProcesses()
 
-        if (isExtractComplete(tmpDir, version)) {
+        if (isExtractComplete(tmpDir, version) && runCatching { validateArchitecture(tmpDir) }.isSuccess) {
             Timber.i("Valid extracted rootfs found in $tmpDir (version $version), skipping extraction")
         } else {
             tmpDir.deleteRecursively()
@@ -353,6 +374,7 @@ class RootfsProvisioner(
                 "$PYTHON_REL missing or not executable in extracted rootfs"
             }
             check(readExtractedVersion(tmpDir) == version) { "archive and BUILD_MANIFEST versions differ" }
+            validateArchitecture(tmpDir)
             File(tmpDir, COMPLETE_MARKER).createNewFile()
         }
 

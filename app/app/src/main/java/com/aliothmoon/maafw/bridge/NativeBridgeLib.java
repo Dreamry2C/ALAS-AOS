@@ -12,7 +12,7 @@ public class NativeBridgeLib {
 
     static {
         try {
-            System.loadLibrary("bridge");
+            NativeBridgeLoader.load(NativeBridgeLib.class.getClassLoader());
             LOADED = true;
         } catch (Throwable e) {
             LOADED = false;

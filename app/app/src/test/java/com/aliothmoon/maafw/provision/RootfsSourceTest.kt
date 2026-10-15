@@ -28,6 +28,16 @@ class RootfsSourceTest {
     // ── URL 红线校验 ──
 
     @Test
+    fun `x86 Lite downloads its own runtime and paired manifest`() {
+        val urls = RootfsDownloadSource(RootfsSourceKind.GITHUB).candidateUrls("x86_64")
+        assertEquals(listOf("${RootfsSource.GITHUB_DOWNLOAD_BASE}/rootfs-amd64.tar.xz"), urls)
+        assertEquals("${RootfsSource.GITHUB_DOWNLOAD_BASE}/BUILD_MANIFEST-amd64", RootfsSource.manifestUrl(urls.single()))
+        val custom = RootfsDownloadSource(RootfsSourceKind.CUSTOM, "https://example.com/custom.tar.xz")
+        assertEquals(listOf(custom.customUrl), custom.candidateUrls("x86_64"))
+        assertEquals("https://example.com/BUILD_MANIFEST", RootfsSource.manifestUrl(custom.customUrl))
+    }
+
+    @Test
     fun `validator accepts github release of this repository`() {
         val result = RootfsSourceValidator.validate(RootfsSource.GITHUB_ARCHIVE_URL)
         assertTrue(result is RootfsSourceValidator.Result.Valid)
