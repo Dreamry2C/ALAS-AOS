@@ -14,6 +14,36 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 
+def normalize_config_target(config_name, mod_name='alas'):
+    """Treat uploaded/new-config .json suffixes as filenames, not submodules."""
+    if mod_name == 'json':
+        mod_name = 'alas'
+    if mod_name == 'alas':
+        while config_name.endswith('.json'):
+            config_name = config_name[:-5]
+    if not config_name or any(char in config_name for char in '.\\/:*?"\'<>|\x00'):
+        raise ValueError('Invalid configuration name')
+    return config_name, mod_name
+
+
+def install_config_writer():
+    from module.config.config_updater import ConfigUpdater
+
+    original_write = ConfigUpdater.write_file
+
+    @functools.wraps(original_write)
+    def write(config_name, data, mod_name='alas'):
+        name, mod = normalize_config_target(config_name, mod_name)
+        if (name, mod) != (config_name, mod_name):
+            from module.config.utils import filepath_config
+            # An invalid filename must not silently overwrite another instance.
+            if Path(filepath_config(name, mod)).exists():
+                raise ValueError('Configuration already exists')
+        return original_write(name, data, mod)
+
+    ConfigUpdater.write_file = staticmethod(write)
+
+
 class Control:
     def __init__(self, managers, state, console_factory):
         self.managers = managers
@@ -36,6 +66,35 @@ class Control:
             self.last_config = running[0].config_name
         return self.managers.get_manager(self.last_config)
 
+    def usable_configs(self):
+        """Count configurations the GUI can open, not arbitrary *.json files."""
+        out = []
+        names = self.configs()
+        for name in names:
+            path = Path('config') / (name + '.json')
+            if path.is_symlink() or path.resolve().parent != Path('config').resolve():
+                continue
+            if '.' in name:
+                instance, mod = name.rsplit('.', 1)
+                from module.submodule.utils import get_available_mod, get_mod_dir
+                if mod not in get_available_mod() or not Path('submodule', get_mod_dir(mod)).is_dir():
+                    continue
+            else:
+                instance, mod = name, 'alas'
+            # Upstream indexes mod instances by the base name alone; a malformed
+            # sibling can shadow an otherwise valid ordinary configuration.
+            if sum(other.split('.', 1)[0] == instance for other in names) != 1:
+                continue
+            try:
+                if normalize_config_target(instance, mod) != (instance, mod):
+                    continue
+                if not isinstance(json.loads(path.read_text(encoding='utf-8')), dict):
+                    continue
+            except (OSError, ValueError):
+                continue
+            out.append(name)
+        return out
+
     def delete_config(self, config):
         # Shared with native WebUI starts/stops: a running configuration cannot
         # disappear between the alive check and the atomic move.
@@ -49,7 +108,7 @@ class Control:
             instance = config.rsplit('.', 1)[0] if '.' in config else config
             if any(m.config_name in (config, instance) for m in self.managers.running_instances()):
                 raise ValueError('configuration_running')
-            remaining = [name for name in self.configs() if name != config]
+            remaining = [name for name in self.usable_configs() if name != config]
             if not remaining:
                 raise ValueError('last_configuration')
             # Keep a private recovery copy, outside the list of selectable JSONs.
@@ -146,6 +205,8 @@ def install():
     from module.webui.setting import State
     from module.webui.process_manager import ProcessManager
     from rich.console import Console
+
+    install_config_writer()
 
     from module.webui.widgets import RichLog
     RichLog.render = render_log
