@@ -5,6 +5,9 @@ import tempfile
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
+from types import ModuleType
+from unittest.mock import patch
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -115,6 +118,56 @@ class SharedControlTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'last_configuration'):
             self.control.delete_config('alas')
 
+    def test_double_json_and_broken_files_do_not_allow_deleting_last_usable_config(self):
+        self.prepare_configs()
+        Path('config/other.json').unlink()
+        Path('config/qingao.json.json').write_text('{"Alas": {}}')
+        Path('config/broken.json').write_text('{')
+        Path('config/list.json').write_text('[]')
+        mods = ModuleType('module.submodule.utils')
+        mods.get_available_mod = lambda: {'maa', 'fpy'}
+        mods.get_mod_dir = lambda name: {'maa': 'AlasMaaBridge', 'fpy': 'AlasFpyBridge'}.get(name)
+        Path('config/only.maa.json').write_text('{}')  # No installed mod directory.
+        with patch.dict(sys.modules, {'module.submodule.utils': mods}):
+            with self.assertRaisesRegex(ValueError, 'last_configuration'):
+                self.control.delete_config('alas')
+        self.assertTrue(Path('config/alas.json').is_file())
+        self.assertFalse(Path('config/.alasaos-deleted').exists())
+
+    def test_delete_current_falls_back_to_usable_config_not_malformed_filename(self):
+        self.prepare_configs()
+        Path('config/a.json.json').write_text('{}')
+        mods = ModuleType('module.submodule.utils')
+        mods.get_available_mod = lambda: set()
+        mods.get_mod_dir = lambda name: None
+        self.control.last_config = 'other'
+        with patch.dict(sys.modules, {'module.submodule.utils': mods}):
+            self.control.delete_config('other')
+        self.assertEqual(self.control.last_config, 'alas')
+
+    def test_malformed_mod_sibling_does_not_count_as_a_usable_fallback(self):
+        self.prepare_configs()
+        Path('config/other.json.json').write_text('{}')
+        mods = ModuleType('module.submodule.utils')
+        mods.get_available_mod = lambda: set()
+        mods.get_mod_dir = lambda name: None
+        with patch.dict(sys.modules, {'module.submodule.utils': mods}):
+            with self.assertRaisesRegex(ValueError, 'last_configuration'):
+                self.control.delete_config('alas')
+        self.assertTrue(Path('config/alas.json').is_file())
+
+    def test_installed_known_mod_counts_as_a_usable_configuration(self):
+        self.prepare_configs()
+        Path('config/other.json').unlink()
+        Path('config/bridge.maa.json').write_text('{}')
+        Path('submodule/AlasMaaBridge').mkdir(parents=True)
+        mods = ModuleType('module.submodule.utils')
+        mods.get_available_mod = lambda: {'maa'}
+        mods.get_mod_dir = lambda name: 'AlasMaaBridge'
+        with patch.dict(sys.modules, {'module.submodule.utils': mods}):
+            self.control.delete_config('alas')
+        self.assertEqual(self.control.configs(), ['bridge.maa'])
+
     def test_delete_rejects_traversal_unknown_and_template(self):
         self.prepare_configs()
         Path('config/template.json').write_text('{}')
@@ -135,6 +188,59 @@ class SharedControlTests(unittest.TestCase):
             self.control.set_theme('blue')
         self.control.state.theme = 'dark'
         self.assertEqual(self.control.status()['theme'], 'dark')
+
+class ConfigWriterTests(unittest.TestCase):
+    def setUp(self):
+        base = ROOT / '.tmp/control-tests'
+        base.mkdir(parents=True, exist_ok=True)
+        self.temp = tempfile.TemporaryDirectory(dir=base)
+        self.addCleanup(self.temp.cleanup)
+        previous = os.getcwd()
+        os.chdir(self.temp.name)
+        self.addCleanup(os.chdir, previous)
+        Path('config').mkdir()
+        utils = ModuleType('module.config.utils')
+        utils.filepath_config = lambda name, mod: str(Path('config') / (
+            name + ('' if mod == 'alas' else '.' + mod) + '.json'))
+        self.calls = []
+        self.updater = type('ConfigUpdater', (), {'write_file': staticmethod(
+            lambda name, data, mod='alas': self.calls.append((name, data, mod)))})
+        config = ModuleType('module.config.config_updater')
+        config.ConfigUpdater = self.updater
+        self.modules = patch.dict(sys.modules, {'module.config.utils': utils,
+            'module.config.config_updater': config})
+        self.modules.start()
+        self.addCleanup(self.modules.stop)
+        module.install_config_writer()
+
+    def test_double_extension_new_name_and_import_are_canonicalized(self):
+        self.updater.write_file('qingao.json.json', {'keep': True})
+        # Importing qingao.json.txt makes upstream pass name=qingao, mod=json.
+        self.updater.write_file('qingao', {'keep': True}, 'json')
+        self.assertEqual(self.calls, [('qingao', {'keep': True}, 'alas'),
+                                      ('qingao', {'keep': True}, 'alas')])
+
+    def test_normal_names_mods_and_templates_keep_original_write_semantics(self):
+        for name, mod in [('alas', 'alas'), ('中文配置', 'alas'), ('template', 'alas'),
+                          ('other', 'maa'), ('other', 'fpy')]:
+            self.updater.write_file(name, {}, mod)
+        self.assertEqual([(name, mod) for name, _, mod in self.calls],
+                         [('alas', 'alas'), ('中文配置', 'alas'), ('template', 'alas'),
+                          ('other', 'maa'), ('other', 'fpy')])
+
+    def test_canonicalization_never_overwrites_an_existing_configuration(self):
+        Path('config/qingao.json').write_text('original')
+        with self.assertRaisesRegex(ValueError, 'already exists'):
+            self.updater.write_file('qingao.json', {'different': True})
+        self.assertEqual(Path('config/qingao.json').read_text(), 'original')
+        self.assertEqual(self.calls, [])
+
+    def test_invalid_target_never_reaches_the_writer(self):
+        for name in ('', '.json', '../other', 'a.b', 'bad/name', '\x00'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                self.updater.write_file(name, {})
+        self.assertEqual(self.calls, [])
+
 
 class BridgeShellTests(unittest.TestCase):
     def setUp(self):
