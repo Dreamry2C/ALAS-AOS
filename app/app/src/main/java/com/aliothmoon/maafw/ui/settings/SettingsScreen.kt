@@ -400,7 +400,7 @@ private fun UpdateCard() {
         Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
         MaaFieldLabel(stringResource(R.string.settings_update_branch))
         ITextField(value = branchDraft, onValueChange = { if (!busy) branchDraft = it },
-            placeholder = "master / cloud", singleLine = true)
+            placeholder = "master", singleLine = true)
         TextButton(enabled = !busy && snapshot != null, onClick = {
             val expected = snapshot ?: return@TextButton
             busy = true
