@@ -15,6 +15,19 @@ PACKAGES = {
 }
 FILES = {'bin/proot': 'libproot.so', 'libexec/proot/loader': 'libproot-loader.so',
          'lib/libtalloc.so.2.5.0': 'libtalloc.so', 'lib/libandroid-shmem.so': 'libandroid-shmem.so'}
+# Exact outputs of the checksum-pinned archives above, including the DT_NEEDED edit.
+PREPARED_SHA256 = {
+    'libproot.so': 'cd893e5243aa0213a4f8dec38c84fb41b24a104605fda71e61d0b2f459f31177',
+    'libproot-loader.so': 'a836b0569c84b1661333d16bacf6b396ff08fea816a5c936a82e08ddeeca8341',
+    'libtalloc.so': '7fa6722a4320495b1b85832fc7fd02de0cb367b45f116c1921b2830a6936da90',
+    'libandroid-shmem.so': '092926060298acd3778e6239033d7aef1280dcb59aebe021a3719612e6a3465f',
+}
+
+
+def prepared_matches(output):
+    return all((output / name).is_file() and
+               hashlib.sha256((output / name).read_bytes()).hexdigest() == sha
+               for name, sha in PREPARED_SHA256.items())
 
 
 def deb_payload(data):
@@ -35,6 +48,9 @@ def deb_payload(data):
 def main():
     cache = ROOT / '.tmp/x86-proot'
     output = ROOT / 'app/app/src/main/prootLibs/x86_64'
+    if prepared_matches(output):
+        print('Pinned Android x86_64 PRoot binaries verified; no download required')
+        return
     cache.mkdir(parents=True, exist_ok=True)
     output.mkdir(parents=True, exist_ok=True)
     found = set()
