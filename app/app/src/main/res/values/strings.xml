@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">ALAS-AOS</string>
+    <string name="notification_channel_alas_error">ALAS 报错与提醒</string>
+    <string name="settings_alas_error_notifications">ALAS 报错通知</string>
+    <string name="settings_alas_error_notifications_hint">在手机通知栏显示 ALAS 报错与提醒，需要允许系统通知权限。关闭不影响 OnePush 远程推送。</string>
     <string name="runtime_architecture_never_show">以后不再提示架构检查</string>
     <string name="runtime_architecture_title">安装包架构不匹配</string>
     <string name="provision_runtime_architecture">运行环境架构</string>

@@ -1,5 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">ALAS-AOS</string>
+    <string name="notification_channel_alas_error">ALAS errors and alerts</string>
+    <string name="settings_alas_error_notifications">ALAS error notifications</string>
+    <string name="settings_alas_error_notifications_hint">Show ALAS errors and alerts in the phone notification bar. System notification permission is required. Disabling this does not affect OnePush remote delivery.</string>
     <string name="runtime_architecture_never_show">Never show this architecture warning again</string>
     <string name="runtime_architecture_title">Incompatible package architecture</string>
     <string name="provision_runtime_architecture">Runtime architecture</string>

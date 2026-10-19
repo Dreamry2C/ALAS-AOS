@@ -59,6 +59,7 @@ class ProotHost(
     private var session: Process? = null
     private var supervisorJob: kotlinx.coroutines.Job? = null
     private var lateReadinessJob: kotlinx.coroutines.Job? = null
+    private val errorNotifications = AlasErrorNotifications(app) { settings.alasErrorNotifications.value }
 
     @Volatile
     private var wantRunning = false
@@ -110,6 +111,7 @@ class ProotHost(
                     }
                 }
                 session = null
+                errorNotifications.stop()
                 updateAttempted = false
                 _state.update { it.copy(phase = ProotPhase.IDLE, detail = "", transfer = null) }
             }
@@ -182,6 +184,7 @@ class ProotHost(
         if (!wantRunning) return@withLock
 
         beginStep(StartupStep.SESSION, ProotPhase.STARTING, "拉起 proot 会话")
+        errorNotifications.start(alasDir)
         val proc = runCatching { spawnSession() }.getOrElse {
             fail("无法启动 proot（${it.javaClass.simpleName}），请查看运行环境")
             return@withLock

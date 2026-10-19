@@ -75,6 +75,9 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     private val _autoCleanLogs = MutableStateFlow(defaults.autoCleanLogs.toBoolean())
     override val autoCleanLogs: StateFlow<Boolean> = _autoCleanLogs.asStateFlow()
 
+    private val _alasErrorNotifications = MutableStateFlow(defaults.alasErrorNotifications.toBoolean())
+    override val alasErrorNotifications: StateFlow<Boolean> = _alasErrorNotifications.asStateFlow()
+
     private val _themeStyle = MutableStateFlow(parseThemeStyle(defaults.themeStyle))
     override val themeStyle: StateFlow<ThemeStyle> = _themeStyle.asStateFlow()
 
@@ -111,6 +114,7 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
                 _overlayControlMode.value = parseOverlayMode(s.overlayControlMode)
                 _screenSaverEnabled.value = s.screenSaverEnabled.toBoolean()
                 _autoCleanLogs.value = s.autoCleanLogs.toBoolean()
+                _alasErrorNotifications.value = s.alasErrorNotifications.toBoolean()
                 _themeStyle.value = parseThemeStyle(s.themeStyle)
                 _updateSource.value = s.updateSource
                 _updateBranch.value = s.updateBranch
@@ -187,6 +191,11 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
 
     override suspend fun setAutoCleanLogs(enabled: Boolean): Unit = with(AppSettingsSchema) {
         context.dataStore.edit { it[autoCleanLogs] = enabled.toString() }
+    }
+
+    override suspend fun setAlasErrorNotifications(enabled: Boolean): Unit = with(AppSettingsSchema) {
+        context.dataStore.edit { it[alasErrorNotifications] = enabled.toString() }
+        _alasErrorNotifications.value = enabled
     }
 
     override suspend fun setThemeStyle(style: ThemeStyle): Unit = with(AppSettingsSchema) {

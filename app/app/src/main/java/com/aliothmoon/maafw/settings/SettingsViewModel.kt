@@ -36,6 +36,8 @@ class SettingsViewModel(
             autoCleanLogs = autoCleanLogs,
             runMode = runMode,
         )
+    }.combine(appSettings.alasErrorNotifications) { state, enabled ->
+        state.copy(alasErrorNotifications = enabled)
     }.combine(appSettings.updateSource) { state, source ->
         state.copy(updateSource = source)
     }.combine(appSettings.updateBranch) { state, branch ->
@@ -48,6 +50,9 @@ class SettingsViewModel(
 
     fun onIntent(intent: SettingsIntent) {
         when (intent) {
+            is SettingsIntent.SetAlasErrorNotifications -> viewModelScope.launch {
+                appSettings.setAlasErrorNotifications(intent.enabled)
+            }
             is SettingsIntent.SetBackend -> viewModelScope.launch {
                 permissionGateway.setBackend(intent.backend)
             }
