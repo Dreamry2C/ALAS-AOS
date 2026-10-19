@@ -24,6 +24,9 @@ interface AppSettingsGateway {
     val autoCleanLogs: StateFlow<Boolean>
     suspend fun setAutoCleanLogs(enabled: Boolean)
 
+    val alasErrorNotifications: StateFlow<Boolean>
+    suspend fun setAlasErrorNotifications(enabled: Boolean)
+
     val themeStyle: StateFlow<ThemeStyle>
     suspend fun setThemeStyle(style: ThemeStyle)
 

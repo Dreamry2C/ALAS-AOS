@@ -47,6 +47,9 @@ data class AppSettings(
     @PrefKey(default = "true")
     val autoCleanLogs: String = "true",
 
+    @PrefKey(default = "true")
+    val alasErrorNotifications: String = "true",
+
     /** ThemeStyle name: Material 3 by default; existing classic and Semi preferences remain valid. */
     @PrefKey(default = "MATERIAL")
     val themeStyle: String = "MATERIAL",

@@ -93,6 +93,8 @@ class UiTextBoundaryTest {
         val EAGER_RESOLVE_ALLOWED = setOf(
             "i18n/UiText.kt",
             "service/RunForegroundService.kt",
+            // Renders an Android notification channel directly, without passing UI text across layers.
+            "proot/AlasErrorNotifications.kt",
             "schedule/ScheduleExecutionService.kt",
             "notification/RunEventNotifier.kt",
         )

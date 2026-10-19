@@ -17,12 +17,14 @@ data class SettingsUiState(
     val themeMode: ThemeMode = ThemeMode.System,
     val themeStyle: ThemeStyle = ThemeStyle.MATERIAL,
     val autoCleanLogs: Boolean = true,
+    val alasErrorNotifications: Boolean = true,
     val runMode: RunMode = RunMode.BACKGROUND,
     val updateSource: String = "",
     val updateBranch: String = "master",
 )
 
 sealed interface SettingsIntent {
+    data class SetAlasErrorNotifications(val enabled: Boolean) : SettingsIntent
     /** 切换 Shizuku / Root 后端；落到 AppSettings.startupBackend 并断开当前特权进程 */
     data class SetBackend(val backend: RemoteBackend) : SettingsIntent
 
