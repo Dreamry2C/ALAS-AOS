@@ -9,6 +9,82 @@ import shutil
 import sys
 
 
+def notification_smoke(alas_root, work):
+    """Exercise installed OnePush offline on both ISAs, outside the ALAS tree."""
+    import importlib.util
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from onepush.__version__ import __version__
+    from onepush.providers.pushplus import PushPlus
+    from onepush import get_notifier
+    from onepush.exceptions import OnePushException
+
+    work.mkdir(parents=True, exist_ok=True)
+    import_root = work / 'imports'
+    if not (import_root / 'module').exists():
+        shutil.copytree(alas_root / 'module', import_root / 'module', symlinks=True)
+    sys.path.insert(0, str(import_root))
+    # The upstream logger changes cwd on import; give it a disposable module copy.
+    from module.logger import logger
+    spec = importlib.util.spec_from_file_location('aos_notify_smoke', alas_root / 'alasaos_notify.py')
+    adapter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(adapter)
+    os.chdir(work)
+    received = []
+    reply = {'code': 200}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            received.append(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(json.dumps(reply).encode())
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    original_url = PushPlus.base_url
+    custom = dict(url=f'http://127.0.0.1:{server.server_port}/send', method='post', datatype='json',
+                  data={'title': 'AOS smoke', 'content': 'Local delivery'})
+    try:
+        PushPlus.base_url = f'http://127.0.0.1:{server.server_port}/send'
+        response = adapter.checked_notifier(get_notifier, 'custom').notify(**custom)
+        assert response.status_code == 200
+        assert received == [{'title': 'AOS smoke', 'content': 'Local delivery'}]
+        for code in (200, 400, 500):
+            reply['code'] = code
+            try:
+                adapter.checked_notifier(get_notifier, 'pushplus').notify(token='local-dummy',
+                    title='AOS smoke', content='Local status check')
+                assert code == 200
+            except OnePushException:
+                assert code != 200
+        events = work / 'log/.alasaos-notifications'
+        before = set(events.glob('*.json'))
+        adapter.local_notify('AOS local only', 'No remote provider required')
+        created = set(events.glob('*.json')) - before
+        assert len(created) == 1
+        event = created.pop()
+        assert json.loads(event.read_text(encoding='utf-8')) == {
+            'title': 'AOS local only', 'content': 'No remote provider required'}
+        event.unlink()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        PushPlus.base_url = original_url
+    try:
+        adapter.checked_notifier(get_notifier, 'custom').notify(**custom)
+        raise AssertionError('Connection failure must not be reported as success')
+    except OnePushException:
+        pass
+    return {'onepush_version': __version__, 'custom_received': True,
+            'pushplus_business_status': True, 'connection_failure': True, 'local_without_provider': True}
+
+
 def smoke(alas_root, work, basic_codecs=False):
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     sys.dont_write_bytecode = True
@@ -86,7 +162,8 @@ def smoke(alas_root, work, basic_codecs=False):
         params = model_root / f'cnocr-v1.2.0-densenet-lite-gru-{epoch:04d}.params'
         ocr_models[name] = {'predictions': predictions, 'alphabet': alphabet,
                             'params_sha256': hashlib.sha256(params.read_bytes()).hexdigest()}
-    return {'numeric': numeric, 'ocr_predictions': ocr_models['azur_lane']['predictions'],
+    notifications = notification_smoke(alas_root, work / 'notifications')
+    return {'notifications': notifications, 'numeric': numeric, 'ocr_predictions': ocr_models['azur_lane']['predictions'],
             'ocr_model_sha256': ocr_models['azur_lane']['params_sha256'], 'ocr_models': ocr_models,
             'versions': {'numpy': np.__version__, 'scipy': scipy.__version__,
                          'cv2': cv2.__version__, 'mxnet': mx.__version__,

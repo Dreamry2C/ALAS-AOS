@@ -273,6 +273,16 @@ private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit
     val scope = rememberCoroutineScope()
     var checkingRoot by remember { mutableStateOf(false) }
     MaaCard(title = stringResource(R.string.settings_section_other), collapsible = true) {
+        MaaLabeledControlRow(
+            label = stringResource(R.string.settings_alas_error_notifications),
+            trailing = {
+                MaaSwitch(checked = state.alasErrorNotifications,
+                    onCheckedChange = { onIntent(SettingsIntent.SetAlasErrorNotifications(it)) })
+            },
+        )
+        Text(stringResource(R.string.settings_alas_error_notifications_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         MaaFieldLabel(stringResource(R.string.permission_backend))
         MaaSingleChoiceFlow(
             options = RemoteBackend.entries.map { it to it.display },
