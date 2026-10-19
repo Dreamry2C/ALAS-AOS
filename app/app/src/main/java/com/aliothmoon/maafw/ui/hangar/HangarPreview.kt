@@ -5,27 +5,37 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.graphics.PixelFormat
+import android.os.Build
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemGestures
+import androidx.compose.foundation.layout.mandatorySystemGestures
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,10 +46,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -49,6 +75,7 @@ import com.aliothmoon.maafw.constant.DefaultDisplayConfig
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * 全屏预览 + 触摸转发链（移植自 m0 TasksPreviewSection，分辨率从会话态简化为
@@ -57,7 +84,7 @@ import kotlinx.coroutines.launch
  * 三段链：
  * - [rememberMovablePreview]：预览面做成 movableContent，在内嵌卡片与全屏宿主之间搬家
  * - [FullscreenPreview]：全屏宿主（挂 AppRoot 顶层），隐藏系统栏、强制横屏、黑底 contain、
- *   右上角 X、BackHandler 退出、触摸 Down/Move/Up 换算后注入虚拟屏
+ *   可拖动返回按钮、BackHandler 退出、触摸 Down/Move/Up 换算后注入虚拟屏
  * - 内嵌卡片（HangarScreen.VdPreview）：单击进全屏，内嵌画面本身不转发触摸（防误触）
  */
 
@@ -217,24 +244,269 @@ fun FullscreenPreview(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .previewTouchInput(onTouch),
+            .background(Color.Black),
         contentAlignment = Alignment.Center,
     ) {
-        content()
-        IconButton(
-            onClick = onExit,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(MaaDesignTokens.Spacing.sm),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Close,
-                contentDescription = stringResource(R.string.hangar_fullscreen_exit),
-                tint = Color.White,
-                modifier = Modifier.size(MaaDesignTokens.IconSize.md),
-            )
+        // Keep the button outside the game's pointer-input ancestry.
+        Box(Modifier.fillMaxSize().previewTouchInput(onTouch)) {
+            content()
         }
+        PreviewExitButton(onExit)
+    }
+}
+
+@Composable
+private fun PreviewExitButton(onExit: () -> Unit) {
+    val context = LocalContext.current
+    val windowView = LocalView.current.rootView
+    DisposableEffect(windowView) {
+        val original = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+            windowView.systemGestureExclusionRects.toList() else emptyList()
+        onDispose {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) windowView.systemGestureExclusionRects = original
+        }
+    }
+    val preferences = remember(context) {
+        context.getSharedPreferences("preview_controls", Context.MODE_PRIVATE)
+    }
+    var fraction by remember {
+        mutableStateOf(Offset(
+            preferences.getFloat("exit_x", 0f).coerceIn(0f, 1f),
+            preferences.getFloat("exit_y", 0.3f).coerceIn(0f, 1f),
+        ))
+    }
+    var dock by remember {
+        mutableStateOf(runCatching {
+            PreviewExitDock.valueOf(preferences.getString("exit_dock", "NONE") ?: "NONE")
+        }.getOrDefault(PreviewExitDock.NONE))
+    }
+    var dragging by remember { mutableStateOf(false) }
+    var pressed by remember { mutableStateOf(false) }
+    var autoHideDock by remember { mutableStateOf(PreviewExitDock.NONE) }
+    val currentExit by rememberUpdatedState(onExit)
+    val description = stringResource(R.string.hangar_fullscreen_exit)
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val gestures = WindowInsets.systemGestures
+    val mandatoryGestures = WindowInsets.mandatorySystemGestures
+
+    fun savePosition() {
+        preferences.edit().putFloat("exit_x", fraction.x).putFloat("exit_y", fraction.y)
+            .putString("exit_dock", dock.name).apply()
+    }
+
+    LaunchedEffect(dock, pressed, dragging, autoHideDock) {
+        if (dock == PreviewExitDock.NONE && !pressed && !dragging && autoHideDock != PreviewExitDock.NONE) {
+            delay(3_000L)
+            dock = autoHideDock
+            autoHideDock = PreviewExitDock.NONE
+            savePosition()
+        }
+    }
+
+    fun activate() {
+        if (dock != PreviewExitDock.NONE) {
+            autoHideDock = dock
+            dock = PreviewExitDock.NONE
+            savePosition()
+        } else {
+            currentExit()
+        }
+    }
+
+    // Use the physical preview bounds: cutout/padding insets leave a visible gap at the edge.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val diameter = with(density) { 30.dp.toPx() }
+        val range = with(density) {
+            Offset((maxWidth - 30.dp).toPx().coerceAtLeast(0f),
+                (maxHeight - 30.dp).toPx().coerceAtLeast(0f))
+        }
+        val threshold = with(density) { 32.dp.toPx() }
+        val revealMargin = with(density) { 32.dp.toPx() }
+        val safeStart = Offset(
+            maxOf(revealMargin, gestures.getLeft(density, layoutDirection).toFloat(),
+                mandatoryGestures.getLeft(density, layoutDirection).toFloat()).coerceAtMost(range.x / 2f),
+            maxOf(revealMargin, gestures.getTop(density).toFloat(),
+                mandatoryGestures.getTop(density).toFloat()).coerceAtMost(range.y / 2f),
+        )
+        val safeEnd = Offset(
+            maxOf(revealMargin, gestures.getRight(density, layoutDirection).toFloat(),
+                mandatoryGestures.getRight(density, layoutDirection).toFloat()).coerceAtMost(range.x / 2f),
+            maxOf(revealMargin, gestures.getBottom(density).toFloat(),
+                mandatoryGestures.getBottom(density).toFloat()).coerceAtMost(range.y / 2f),
+        )
+        val hidden = diameter / 2f
+        Box(
+            Modifier
+                .offset {
+                    val position = previewExitVisibleOffset(fraction, range, dock, hidden, safeStart, safeEnd)
+                    IntOffset(position.x.roundToInt(), position.y.roundToInt())
+                }
+                .size(30.dp)
+                .drawWithContent {
+                    // Hide half at the touchable edge, not beneath an OEM gesture window.
+                    clipRect(
+                        left = if (dock == PreviewExitDock.LEFT) size.width / 2f else 0f,
+                        top = if (dock == PreviewExitDock.TOP) size.height / 2f else 0f,
+                        right = if (dock == PreviewExitDock.RIGHT) size.width / 2f else size.width,
+                        bottom = if (dock == PreviewExitDock.BOTTOM) size.height / 2f else size.height,
+                    ) { this@drawWithContent.drawContent() }
+                }
+                .onGloballyPositioned { coordinates ->
+                    // Compose's clipped bounds can stop short of a cutout/gesture inset.
+                    // Request the actual window position so edge drags reach the control.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val origin = coordinates.positionInWindow()
+                        windowView.systemGestureExclusionRects = listOf(android.graphics.Rect(
+                            origin.x.roundToInt(), origin.y.roundToInt(),
+                            (origin.x + coordinates.size.width).roundToInt(),
+                            (origin.y + coordinates.size.height).roundToInt(),
+                        ))
+                    }
+                }
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = if (dragging) 0.55f else 0.18f))
+                .border(1.dp, Color.White.copy(alpha = if (dragging) 0.8f else 0.25f), CircleShape)
+                .semantics {
+                    contentDescription = description
+                    role = Role.Button
+                    onClick { activate(); true }
+                }
+                .pointerInput(range, threshold, safeStart, safeEnd) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        // Match the circular visible control, including when only a sliver is shown.
+                        if (!previewExitHit(down.position, Offset(size.width.toFloat(), size.height.toFloat()), dock)) {
+                            return@awaitEachGesture
+                        }
+                        down.consume()
+                        pressed = true
+                        // Reveal on press: the OS may cancel an edge gesture before its release.
+                        // That same press must never also close the preview.
+                        val revealedOnPress = dock != PreviewExitDock.NONE
+                        if (revealedOnPress) {
+                            autoHideDock = dock
+                            dock = PreviewExitDock.NONE
+                            savePosition()
+                        }
+                        var motion = Offset.Zero
+                        var movingPosition = previewExitVisibleOffset(fraction, range, dock, hidden, safeStart, safeEnd)
+                        // A thumb can drift across the narrow edge tab during a tap.
+                        val dragSlop = if (revealedOnPress) maxOf(viewConfiguration.touchSlop, diameter / 2f)
+                            else viewConfiguration.touchSlop
+                        var released = false
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (change.isConsumed) break
+                                val delta = change.position - change.previousPosition
+                                motion += delta
+                                if (!dragging && motion.getDistance() > dragSlop) {
+                                    dragging = true
+                                    autoHideDock = PreviewExitDock.NONE
+                                    dock = PreviewExitDock.NONE
+                                    movingPosition += motion
+                                } else if (dragging) {
+                                    movingPosition += delta
+                                }
+                                if (dragging) {
+                                    movingPosition = Offset(movingPosition.x.coerceIn(0f, range.x),
+                                        movingPosition.y.coerceIn(0f, range.y))
+                                    fraction = Offset(
+                                        if (range.x > 0f) movingPosition.x / range.x else 0f,
+                                        if (range.y > 0f) movingPosition.y / range.y else 0f,
+                                    )
+                                }
+                                change.consume()
+                                if (!change.pressed) {
+                                    released = true
+                                    break
+                                }
+                            }
+                            if (released) {
+                                if (dragging) {
+                                    dock = previewExitDock(fraction, range, threshold)
+                                    fraction = when (dock) {
+                                        PreviewExitDock.LEFT -> fraction.copy(x = 0f)
+                                        PreviewExitDock.RIGHT -> fraction.copy(x = 1f)
+                                        PreviewExitDock.TOP -> fraction.copy(y = 0f)
+                                        PreviewExitDock.BOTTOM -> fraction.copy(y = 1f)
+                                        PreviewExitDock.NONE -> fraction
+                                    }
+                                    savePosition()
+                                } else if (!revealedOnPress) {
+                                    activate()
+                                }
+                            }
+                        } finally {
+                            dragging = false
+                            pressed = false
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Outlined.Close, contentDescription = null,
+                tint = Color.White.copy(alpha = if (dragging) 1f else 0.5f),
+                modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+internal enum class PreviewExitDock { NONE, LEFT, RIGHT, TOP, BOTTOM }
+
+/** Only nearby edges dock. At a corner use the closest edge, so one half stays visible. */
+internal fun previewExitDock(fraction: Offset, range: Offset, threshold: Float): PreviewExitDock {
+    val distances = listOf(
+        PreviewExitDock.LEFT to fraction.x * range.x,
+        PreviewExitDock.RIGHT to (1f - fraction.x) * range.x,
+        PreviewExitDock.TOP to fraction.y * range.y,
+        PreviewExitDock.BOTTOM to (1f - fraction.y) * range.y,
+    ).filter { (edge, _) ->
+        if (edge == PreviewExitDock.LEFT || edge == PreviewExitDock.RIGHT) range.x > 0f else range.y > 0f
+    }
+    return distances.minByOrNull { it.second }?.takeIf { it.second <= threshold }?.first
+        ?: PreviewExitDock.NONE
+}
+
+internal fun previewExitOffset(fraction: Offset, range: Offset, dock: PreviewExitDock, hidden: Float): Offset =
+    Offset(fraction.x * range.x, fraction.y * range.y) + when (dock) {
+        PreviewExitDock.LEFT -> Offset(-hidden, 0f)
+        PreviewExitDock.RIGHT -> Offset(hidden, 0f)
+        PreviewExitDock.TOP -> Offset(0f, -hidden)
+        PreviewExitDock.BOTTOM -> Offset(0f, hidden)
+        PreviewExitDock.NONE -> Offset.Zero
+    }
+
+/** Both expanded controls and the visible docked half must avoid OS-owned touch strips. */
+internal fun previewExitVisibleOffset(
+    fraction: Offset, range: Offset, dock: PreviewExitDock, hidden: Float,
+    safeStart: Offset, safeEnd: Offset,
+): Offset {
+    val position = previewExitOffset(fraction, range, dock, hidden)
+    val safePosition = Offset(
+        position.x.coerceIn(safeStart.x, range.x - safeEnd.x),
+        position.y.coerceIn(safeStart.y, range.y - safeEnd.y),
+    )
+    return when (dock) {
+        PreviewExitDock.LEFT -> safePosition.copy(x = safeStart.x - hidden)
+        PreviewExitDock.RIGHT -> safePosition.copy(x = range.x - safeEnd.x + hidden)
+        PreviewExitDock.TOP -> safePosition.copy(y = safeStart.y - hidden)
+        PreviewExitDock.BOTTOM -> safePosition.copy(y = range.y - safeEnd.y + hidden)
+        PreviewExitDock.NONE -> safePosition
+    }
+}
+
+internal fun previewExitHit(position: Offset, size: Offset, dock: PreviewExitDock): Boolean {
+    val center = size / 2f
+    if ((position - center).getDistance() > minOf(size.x, size.y) / 2f) return false
+    return when (dock) {
+        PreviewExitDock.LEFT -> position.x >= center.x
+        PreviewExitDock.RIGHT -> position.x <= center.x
+        PreviewExitDock.TOP -> position.y >= center.y
+        PreviewExitDock.BOTTOM -> position.y <= center.y
+        PreviewExitDock.NONE -> true
     }
 }
 
