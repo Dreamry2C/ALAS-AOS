@@ -308,8 +308,7 @@
 
     <!-- Hangar tab: virtual display preview + run config + control panel -->
     <string name="nav_hangar">Home</string>
-    <string name="hangar_env_down">Environment not started — no preview</string>
-    <string name="hangar_env_start">Start environment</string>
+    <string name="hangar_permission_required">Please grant Shizuku or Root permission first</string>
     <string name="hangar_preview_waiting">Connecting preview…</string>
     <string name="hangar_config_label">Run config</string>
     <string name="hangar_config_switch">Switch</string>

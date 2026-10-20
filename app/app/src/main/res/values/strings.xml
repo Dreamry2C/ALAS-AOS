@@ -304,8 +304,7 @@
 
     <!-- 挂机 tab：虚拟屏画面 + 运行配置 + 控制面板 -->
     <string name="nav_hangar">主页</string>
-    <string name="hangar_env_down">环境未启动，暂无画面</string>
-    <string name="hangar_env_start">启动环境</string>
+    <string name="hangar_permission_required">请先授予 Shizuku 或 Root 权限</string>
     <string name="hangar_preview_waiting">正在接入画面…</string>
     <string name="hangar_config_label">运行配置</string>
     <string name="hangar_config_switch">切换</string>
