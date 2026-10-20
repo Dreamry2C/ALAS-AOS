@@ -39,7 +39,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,12 +59,10 @@ import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.AlasControlPanel
-import com.aliothmoon.maafw.ui.components.MaaButton
 import com.aliothmoon.maafw.ui.components.ToolSlotButton
 import com.aliothmoon.maafw.ui.components.MaaCard
 import com.aliothmoon.maafw.ui.components.MaaOutlinedButton
 import com.aliothmoon.maafw.ui.components.maaClickable
-import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -88,7 +85,6 @@ fun HangarScreen(
 ) {
     val snapshot by hostState.snapshot.collectAsStateWithLifecycle()
     val alas by alasController.state.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
     val configuration = LocalConfiguration.current
     val landscape = configuration.screenWidthDp > configuration.screenHeightDp
 
@@ -126,7 +122,6 @@ fun HangarScreen(
                 ) {
                     VdPreview(
                         envUp = snapshot.vdDisplayId != DefaultDisplayConfig.DISPLAY_NONE,
-                        onStartEnv = { scope.launch { hostState.ensureEnvironmentStarted() } },
                         content = previewContent,
                         onEnterFullscreen = onEnterFullscreen,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -163,9 +158,8 @@ fun HangarScreen(
         ) {
             VdPreview(
                 // 判据只看虚拟屏存在性：桥 ping 抖动不拆预览（预览不走桥 TCP，
-                // 桥挂了画面照渲染）；屏真没了（特权断线快照清零）才给「启动环境」
+                // 桥挂了画面照渲染）；屏真没了（特权断线快照清零）才给权限提示
                 envUp = snapshot.vdDisplayId != DefaultDisplayConfig.DISPLAY_NONE,
-                onStartEnv = { scope.launch { hostState.ensureEnvironmentStarted() } },
                 content = previewContent,
                 onEnterFullscreen = onEnterFullscreen,
                 modifier = Modifier.fillMaxWidth(),
@@ -193,11 +187,11 @@ fun HangarScreen(
 }
 
 /**
- * 虚拟屏画面卡：环境在跑显示实时预览，没跑给占位 + 一键拉起
+ * 虚拟屏画面卡：环境在跑显示实时预览，没跑给权限提示
  *
  * [envUp] 的判据是虚拟屏存在性（vdDisplayId），不含桥 ping——分支一切换
  * content 就离开 composition、SurfaceView 整体销毁重建，桥探测抖动会把
- * 亚秒级的重挂放大成秒级黑屏 + 「启动环境」闪现
+ * 亚秒级的重挂放大成秒级黑屏 + 权限提示闪现
  *
  * 内嵌画面只响应「单击进全屏」，不转发触摸（防误触）；
  * [content] 为 null 表示画面已搬去全屏宿主，显示占位
@@ -205,7 +199,6 @@ fun HangarScreen(
 @Composable
 private fun VdPreview(
     envUp: Boolean,
-    onStartEnv: () -> Unit,
     content: (@Composable () -> Unit)?,
     onEnterFullscreen: () -> Unit,
     modifier: Modifier = Modifier,
@@ -235,17 +228,7 @@ private fun VdPreview(
                 textRes = R.string.hangar_preview_moved,
             )
 
-            else -> {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
-                ) {
-                    PreviewPlaceholder(textRes = R.string.hangar_env_down)
-                    MaaButton(onClick = onStartEnv) {
-                        Text(stringResource(R.string.hangar_env_start))
-                    }
-                }
-            }
+            else -> PreviewPlaceholder(textRes = R.string.hangar_permission_required)
         }
     }
 }
@@ -259,15 +242,13 @@ private fun PreviewPlaceholder(textRes: Int) {
         Icon(
             imageVector = Icons.Outlined.OndemandVideo,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                .copy(alpha = MaaDesignTokens.Alpha.disabledContent),
+            tint = Color.White.copy(alpha = 0.7f),
             modifier = Modifier.size(MaaDesignTokens.IconSize.lg),
         )
         Text(
             text = stringResource(textRes),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-                .copy(alpha = MaaDesignTokens.Alpha.disabledContent),
+            color = Color.White.copy(alpha = 0.7f),
         )
     }
 }
