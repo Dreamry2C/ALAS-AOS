@@ -99,6 +99,8 @@ object BridgeServer {
 
     @Synchronized
     fun stop() {
+        runCatching { BridgeUiAutomation.close() }
+            .onFailure { Ln.w("$TAG: UI automation disconnect failed: ${it.message}") }
         val socket = serverSocket ?: return
         serverSocket = null
         runCatching { socket.close() }
@@ -180,6 +182,7 @@ object BridgeServer {
                 "click" -> handleClick(request, ::reply)
                 "swipe" -> handleSwipe(request, ::reply)
                 "shell" -> handleShell(request, ::reply)
+                "ui" -> reply(BridgeUiAutomation.handle(request))
                 "display_info" -> reply(
                     JSONObject()
                         .put("ok", true)
