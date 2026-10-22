@@ -225,7 +225,13 @@ class Connection(ConnectionAttr):
             if stream and not recvall:
                 raise NotImplementedError('AOS bridge does not provide an interactive shell socket')
             command = cmd if isinstance(cmd, str) else shlex.join(map(str, cmd))
-            result = self.alasaos_shell_output(command, timeout=timeout)
+            response = self.alasaos_shell(command, timeout=timeout)
+            # adbutils.shell returns command output even for a nonzero exit
+            # (for example, mkdir on an existing directory).
+            # Keep transport/timeouts exceptional, matching a real ADB shell.
+            if not response.get('ok') and 'code' not in response:
+                raise ScriptError(f'AlasAos shell failed: {response.get("error", "unknown error")}')
+            result = response.get('stdout', '') + response.get('stderr', '')
             if stream:
                 return result.encode('utf-8')
             return result.rstrip() if rstrip else result
@@ -718,6 +724,26 @@ class Connection(ConnectionAttr):
         Returns:
             str:
         """
+        if str(self.serial).startswith('alasaos'):
+            import base64
+            import shlex
+            import uuid
+            # File uploads must use the privileged bridge as well. Write beside
+            # the destination and rename only after every chunk succeeds.
+            temporary = str(remote) + '.alasaos-' + uuid.uuid4().hex + '.tmp'
+            source = shlex.quote(temporary)
+            try:
+                with open(local, 'rb') as stream:
+                    self.alasaos_shell_output(f': > {source}', timeout=30)
+                    while True:
+                        chunk = stream.read(24 * 1024)
+                        if not chunk:
+                            break
+                        encoded = base64.b64encode(chunk).decode('ascii')
+                        self.alasaos_shell_output(f'printf %s {encoded} | base64 -d >> {source}', timeout=30)
+                return self.alasaos_shell_output(f'mv -f {source} {shlex.quote(str(remote))}', timeout=30)
+            finally:
+                self.alasaos_shell_output(f'rm -f {source}', timeout=30)
         cmd = ['push', local, remote]
         return self.adb_command(cmd)
 
@@ -968,6 +994,9 @@ class Connection(ConnectionAttr):
         Minitouch supports only one connection at a time.
         Restart ATX to kick the existing one.
         """
+        if str(self.serial).startswith('alasaos'):
+            logger.info('AOS UI automation uses the privileged bridge; no ATX agent to restart')
+            return
         logger.info('Restart ATX')
         atx_agent_path = '/data/local/tmp/atx-agent'
         self.adb_shell([atx_agent_path, 'server', '--stop'])
