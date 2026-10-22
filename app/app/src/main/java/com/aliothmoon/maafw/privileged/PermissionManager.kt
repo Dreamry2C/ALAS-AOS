@@ -231,6 +231,16 @@ class PermissionManager(
         }.onFailure { Timber.w(it, "Failed to open Shizuku") }.getOrDefault(false)
     }
 
+    /** 系统浏览器打开外部链接（下载引导）；设备没有浏览器等场景返回 false */
+    fun openUrl(context: Context, url: String): Boolean {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching {
+            context.startActivity(intent)
+            true
+        }.onFailure { Timber.w(it, "Failed to open url: %s", url) }.getOrDefault(false)
+    }
+
     private suspend fun resolveReadiness(
         remoteState: RemoteAccessState,
         skipCheck: Boolean,

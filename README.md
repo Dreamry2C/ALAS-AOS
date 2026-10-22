@@ -43,20 +43,20 @@
 ### 前置条件
 
 - 📱 一台 **arm64 Android 手机**（root 与否皆可）
-- 🔑 已安装并激活 **Shizuku**（第 1 步有详细指引）
+- 🔑 已安装并激活 **shizuku-m**（第 1 步有详细指引）
 - ⚓ 已安装《碧蓝航线》国服（包名 `com.bilibili.azurlane`）
 
-### 第 1 步：安装并启动 Shizuku
+### 第 1 步：安装并启动 shizuku-m
 
-Shizuku 是开源的特权桥接工具，让普通 App 也能使用系统级能力（本项目用它创建后台虚拟屏、截屏和模拟触控），**全程无需 root**。
+Shizuku 是开源的特权桥接工具，让普通 App 也能使用系统级能力（本项目用它创建后台虚拟屏、截屏和模拟触控），**全程无需 root**。本 App 配套的是魔改版 **[shizuku-m](https://github.com/Shinarin/shizuku-m)**：在官方版基础上加了端口重新挂载，重启 Shizuku 不必再走无线调试，**没连 WLAN 也能启动**。
 
-1. 前往官方仓库下载安装 👉 [RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku)。
-2. 按 [Shizuku 官方使用指南](https://shizuku.rikka.app/zh-hans/guide/setup/) 激活，三种方式任选：
+1. 前往 👉 [Shinarin/shizuku-m Releases](https://github.com/Shinarin/shizuku-m/releases) 下载安装。
+   > ⚠️ **已装官方 Shizuku？** 两者包名相同、签名不同，无法共存——请先卸载官方版再装 shizuku-m（不卸直接开本 App，也会弹窗引导你卸载）。
+2. 首次激活与官方版相同（[Shizuku 官方使用指南](https://shizuku.rikka.app/zh-hans/guide/setup/)），三种方式任选：
    - 📶 **Android 11 及以上（推荐）**：开启「无线调试」配对激活，全程在手机上完成，不用电脑；
    - 💻 **Android 10 及以下**：连接电脑执行一条 adb 命令激活；
-   - 🔓 **已 root 设备**：打开 Shizuku 直接点「启动」即可。
-
-> 💡 **嫌每次启动 Shizuku 都要连 WiFi 走无线调试？** 可以试试社区 fork 👉 [Shinarin/shizuku-m](https://github.com/Shinarin/shizuku-m)：在官方版基础上加了端口重新挂载，重启 Shizuku 不必再走无线调试，**没连 WLAN 也能启动**（手机重启后的第一次激活仍需按官方方式完成一次）。
+   - 🔓 **已 root 设备**：打开 shizuku-m 直接点「启动」即可。
+3. 之后每次使用：打开 shizuku-m 点「启动」即可离线自连，无需 WLAN 或电脑（手机重启后的第一次激活仍需按上方方式完成一次）。
 
 ### 第 2 步：安装 ALAS-AOS
 
@@ -94,7 +94,7 @@ Shizuku 是开源的特权桥接工具，让普通 App 也能使用系统级能�
 ### 两个重要提醒
 
 - ⚠️ **控制台里的启动/停止按钮已被锁定**：为防止 WebUI 与挂机页双跑抢设备，ALAS 原生启停通道已关闭（点了只会在日志里留一条警告）。**启停请一律走挂机页或悬浮窗。**
-- 🔁 **手机重启之后**：需要按官方方式重新启动 Shizuku（已 root：App 内点「启动」；未 root：重新走一次无线调试或电脑激活），再打开 ALAS-AOS 即可自动恢复环境。这是免 root 方案物理上不可省略的一步，请知悉。🙏
+- 🔁 **手机重启之后**：需要重新激活一次 shizuku-m（已 root：App 内点「启动」；未 root：按官方方式走一次无线调试或电脑激活），再打开 ALAS-AOS 即可自动恢复环境。这是免 root 方案物理上不可省略的一步，请知悉。🙏
 
 ## 📱 支持机型
 

@@ -93,8 +93,14 @@
 
     <!-- 服务状态行：连接态 / 项目加载 / 运行态归约成一句 -->
     <string name="dialog_shizuku_not_installed_title">未检测到 shizuku-m</string>
-    <string name="dialog_shizuku_not_installed_message">本应用依赖 shizuku-m（修改版 Shizuku）提供的特权服务，检测到设备未安装。请先安装 shizuku-m（获取方式见项目 README），装完后点下方按钮重新检测。</string>
+    <string name="dialog_shizuku_not_installed_message">本应用依赖 shizuku-m（修改版 Shizuku）提供的特权服务，检测到设备未安装。点「去下载」选择下载源；装完返回本应用会自动重新检测，也可点「我已安装，重新检测」手动触发。</string>
+    <string name="dialog_shizuku_go_download">去下载</string>
     <string name="dialog_shizuku_install_confirm">我已安装，重新检测</string>
+    <!-- NotInstalled 档的下载源选择弹窗 -->
+    <string name="dialog_shizuku_download_title">下载 Shizuku</string>
+    <string name="dialog_shizuku_download_mod">shizuku-m Releases（推荐 · 本应用配套）</string>
+    <string name="dialog_shizuku_download_official">官方 Shizuku Releases（备选）</string>
+    <string name="dialog_shizuku_download_note">两个地址均在 GitHub：国内直连若打不开，请自备网络环境。装了官方版也不要紧，本应用会引导你卸载后换装 shizuku-m。</string>
     <string name="dialog_shizuku_switch_to_root">切换至 Root 模式</string>
     <string name="dialog_shizuku_skip_check">跳过检查（不推荐）</string>
     <string name="dialog_shizuku_not_running_title">Shizuku 未启动</string>
@@ -103,7 +109,7 @@
     <string name="dialog_sui_detected_title">检测到 Sui</string>
     <string name="dialog_sui_detected_message">当前由 Sui 提供 Shizuku 服务。Sui 以 Root 身份运行，本应用可能无法正常工作，请以实际测试为准。</string>
     <string name="dialog_shizuku_need_auth_title">Shizuku 未授权</string>
-    <string name="dialog_shizuku_need_auth_message">Shizuku 服务正在运行但尚未授权本应用，请完成授权。授权成功前会持续提示。</string>
+    <string name="dialog_shizuku_need_auth_message">Shizuku 服务正在运行但尚未授权本应用，请完成授权。授权成功前会持续提示。若授权弹窗曾被永久拒绝或不再出现，点「打开 Shizuku」到 shizuku-m 的已授权应用列表里手动开启。</string>
     <string name="dialog_shizuku_official_conflict_title">检测到官方版 Shizuku</string>
     <string name="dialog_shizuku_official_conflict_message">本应用配套的特权服务是魔改版 shizuku-m：重启手机后可离线自连，无需 WLAN 或电脑。它与官方 Shizuku 包名相同但签名不同，无法覆盖安装——请先在系统中卸载官方 Shizuku，再安装 shizuku-m（获取方式见项目 README）。卸载官方版不影响本应用的数据。</string>
     <string name="dialog_shizuku_uninstall_confirm">去卸载官方版</string>

@@ -27,6 +27,12 @@ enum class ShizukuFlavor {
     MOD,
 }
 
+/** shizuku-m 下载页：本项目的配套分发，下载引导的首选源 */
+const val SHIZUKU_M_RELEASES_URL = "https://github.com/Shinarin/shizuku-m/releases"
+
+/** 官方 Shizuku 下载页：备选（装上会被判 OfficialConflict，再引导卸载换装 shizuku-m） */
+const val SHIZUKU_OFFICIAL_RELEASES_URL = "https://github.com/RikkaApps/Shizuku/releases"
+
 data class ShizukuReadiness(
     val stage: ShizukuReadinessStage = ShizukuReadinessStage.Ready,
     val canSwitchToRoot: Boolean = false,

@@ -27,6 +27,8 @@ fun MaaPromptDialog(
     dismissText: String? = null,
     neutralText: String? = null,
     onNeutralClick: () -> Unit = {},
+    secondaryText: String? = null,
+    onSecondaryClick: () -> Unit = {},
     dismissOnOutsideClick: Boolean = false,
 ) {
     AlertDialog(
@@ -42,10 +44,13 @@ fun MaaPromptDialog(
             TextButton(onClick = onConfirm) { Text(confirmText) }
         },
         dismissButton = {
-            if (neutralText != null || dismissText != null) {
+            if (neutralText != null || secondaryText != null || dismissText != null) {
                 Row {
                     neutralText?.let {
                         TextButton(onClick = onNeutralClick) { Text(it) }
+                    }
+                    secondaryText?.let {
+                        TextButton(onClick = onSecondaryClick) { Text(it) }
                     }
                     dismissText?.let {
                         TextButton(onClick = onDismissRequest) { Text(it) }

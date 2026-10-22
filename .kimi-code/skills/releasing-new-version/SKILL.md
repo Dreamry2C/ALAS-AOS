@@ -57,7 +57,7 @@ date +%F                              # CHANGELOG 日期
    HTTPS_PROXY=$P gh release upload vX.Y.Z .tmp/release/ALAS-AOS-vX.Y.Z-android-arm64.apk --repo Shinarin/ALAS-AOS   # 重试遇残留资产加 --clobber
    HTTPS_PROXY=$P gh release view vX.Y.Z --repo Shinarin/ALAS-AOS --json assets --jq '.assets[0].size'   # 须 == 第 7 步 stat 字节数
    ```
-   notes 结构：安装说明置顶（覆盖安装 or 迁移路径）→ 用户向小节（同 CHANGELOG）→ CHANGELOG 链接。
+   notes 结构：安装说明置顶（覆盖安装 or 迁移路径；固定附一行 shizuku-m 下载链接 https://github.com/Shinarin/shizuku-m/releases）→ 用户向小节（同 CHANGELOG）→ CHANGELOG 链接。
    **tag 已推但构建/badging 失败的回滚**：`git push origin :refs/tags/vX.Y.Z`（带代理参数）删远端 tag + `git tag -d vX.Y.Z` 删本地 → 修复 → 重打重推。
 9. **收官账册**：devlog 顶部加发布条目（提交/badging/发布链接/网络坑）；新建 `handoff/YYYY-MM-DD-release-vXXX.md`（发版事实/本版内容/坑点/遗留）；`docs: vX.Y.Z 发布收官——...` commit + push（代理打法同第 4 步）。**没有收官 commit + push 不算发版完成。**
 

@@ -1,5 +1,13 @@
 # Debug · 坑点记录
 
+## [2026-10-22] 半自动点击（daemon）"不走图"不是故障：走图从来是游戏内置「自动寻敌」的活，新图没这个按钮就原地罚站
+
+- **现象**：用户报半自动点击在新活动图（轻量化复刻，限时倒计时+追猎迎击机制）上战后舰队原地不动；日志每战后刷 `No enemy searching in map.`，截图 78 秒两帧逐像素相同。
+- **根本原因**：上游 daemon 设计上**从不负责走图**（`module/daemon/daemon.py` 只有战斗/结算/弹窗/进图，官方说明"你只需要手动选择敌人"）；旧图上看到的自动走=游戏「自动寻敌」（周回解锁后游戏代走），ALAS 只是兼容它（`combat_status(expected_end='no_searching')` 对有无寻敌都能收场）。新图实测**无自动寻敌按钮**（AUTO_SEARCH_MAP_OPTION 区域 (1205-1275,549-566) 是纯地图格子）→ 游戏不走 → daemon 无可接管。无按钮原因二选一：关卡未通关周回未解锁，或限时追猎图本身禁用寻敌——都是游戏侧，非移植缺陷（桌面版同代码同表现）。
+- **解决方案**：想自动刷这张图走**挂机模式**（该批复刻上游已适配、地图文件随热更新到设备，挂机由 ALAS 自己寻路点格，不依赖游戏寻敌）；继续半自动则通关一次开周回后看寻敌按钮是否出现，追猎图没有就只能手动选敌/等迎击上门（daemon 照常接管战斗结算）。
+- **取证手法（可复用）**：`adb forward tcp:22300 tcp:22300` 后按桥协议（行分隔 JSON + screencap 裸 BGR 帧，见 `BridgeServer.kt`）抓虚拟屏帧——`.tmp/grab_screen.py`（.venv 有 cv2/numpy，系统 python 没有）；daemon 静默≠死了，先 `wrapper /status` 看 `tool_alive` 再抓帧看画面。
+
+
 > 本文件记录新阶段踩过的坑（现象 / 根本原因 / 解决方案）。
 > **历史坑点（m0 阶段，全真机实证）见 `m0-archive/docs/debug.md` 与 `m0-archive/docs/devlog/`。** 高频索引：
 > WebView `vh` 塌缩（注入 innerHeight 修复）｜幻影进程查杀（`max_phantom_processes` / `settings_enable_monitor_phantom_procs`）｜mDNS `_adb-tls-connect` 端口过期但广播残留｜MaaFW PP-OCR 对 2D 单通道静默返空（堆叠 3ch）｜MaaFW 截图 BGR↔ALAS RGB 翻转｜RUN_COMMAND 权限只授清单声明方｜`am force-stop` 杀不掉 shell uid 残留（须显式 kill）｜桥 30s 无流量判死（10s 心跳）。

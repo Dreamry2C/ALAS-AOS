@@ -93,8 +93,14 @@
 
     <!-- Service status line -->
     <string name="dialog_shizuku_not_installed_title">shizuku-m Not Detected</string>
-    <string name="dialog_shizuku_not_installed_message">This app relies on the privileged service provided by shizuku-m (a modified Shizuku), which was not detected on this device. Install shizuku-m first (see the project README), then tap below to re-check.</string>
+    <string name="dialog_shizuku_not_installed_message">This app relies on the privileged service provided by shizuku-m (a modified Shizuku), which was not detected on this device. Tap Download to pick a source. Returning to this app after installation re-checks automatically, or tap \"Installed, re-check\" to trigger it manually.</string>
+    <string name="dialog_shizuku_go_download">Download</string>
     <string name="dialog_shizuku_install_confirm">Installed, re-check</string>
+    <!-- Download source picker for the NotInstalled stage -->
+    <string name="dialog_shizuku_download_title">Download Shizuku</string>
+    <string name="dialog_shizuku_download_mod">shizuku-m Releases (recommended · bundled companion)</string>
+    <string name="dialog_shizuku_download_official">Official Shizuku Releases (alternative)</string>
+    <string name="dialog_shizuku_download_note">Both links are on GitHub — use a proxy if they are unreachable on your network. Installing the official build is fine too: this app will guide you to uninstall it and switch to shizuku-m.</string>
     <string name="dialog_shizuku_switch_to_root">Switch to Root</string>
     <string name="dialog_shizuku_skip_check">Skip check (not recommended)</string>
     <string name="dialog_shizuku_not_running_title">Shizuku Not Running</string>
@@ -103,7 +109,7 @@
     <string name="dialog_sui_detected_title">Sui Detected</string>
     <string name="dialog_sui_detected_message">Sui is providing the Shizuku service with root privileges. This app may not work correctly; please verify by actual testing.</string>
     <string name="dialog_shizuku_need_auth_title">Shizuku Not Authorized</string>
-    <string name="dialog_shizuku_need_auth_message">Shizuku is running but has not authorized this app yet. Please grant access. This prompt keeps showing until access is granted.</string>
+    <string name="dialog_shizuku_need_auth_message">Shizuku is running but has not authorized this app yet. Please grant access. This prompt keeps showing until access is granted. If the prompt was permanently denied or no longer appears, tap \"Open Shizuku\" and enable this app in the shizuku-m authorized app list.</string>
     <string name="dialog_shizuku_official_conflict_title">Official Shizuku Detected</string>
     <string name="dialog_shizuku_official_conflict_message">This app works with shizuku-m, a modified Shizuku that reconnects offline after every reboot without WLAN or a computer. It shares the official package name but uses a different signature, so it cannot be installed over the official build — uninstall the official Shizuku first, then install shizuku-m (see the project README). Uninstalling it does not affect this app data.</string>
     <string name="dialog_shizuku_uninstall_confirm">Uninstall official build</string>
