@@ -77,6 +77,7 @@ import com.aliothmoon.maafw.provision.ProvisionViewModel
 import com.aliothmoon.maafw.provision.RootfsProvisioner
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.SettingsViewModel
+import com.aliothmoon.maafw.settings.AppSettingsManager
 import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.theme.MaaDesignTokens
@@ -84,6 +85,7 @@ import com.aliothmoon.maafw.theme.MaaFwTheme
 import com.aliothmoon.maafw.ui.components.clearFocusOnBlankTap
 import com.aliothmoon.maafw.ui.alas.AlasScreen
 import com.aliothmoon.maafw.ui.components.ShizukuReadinessDialog
+import com.aliothmoon.maafw.ui.components.LowPrecisionRecognitionDialog
 import com.aliothmoon.maafw.ui.hangar.FullscreenPreview
 import com.aliothmoon.maafw.ui.hangar.HangarScreen
 import com.aliothmoon.maafw.ui.hangar.PreviewTouchAction
@@ -148,6 +150,22 @@ fun AppRoot(
     provisionViewModel: ProvisionViewModel = koinViewModel(),
 ) {
     val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+    val appSettings: AppSettingsManager = koinInject()
+    val recognitionChoiceMade by appSettings.recognitionChoiceMade.collectAsStateWithLifecycle()
+    val darkTheme = when (settingsState.themeMode) {
+        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+    }
+    if (!recognitionChoiceMade) {
+        LaunchedEffect(darkTheme) { onDarkThemeChanged(darkTheme) }
+        MaaFwTheme(themeStyle = settingsState.themeStyle, darkTheme = darkTheme) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                LowPrecisionRecognitionDialog(onDecision = appSettings::setLowPrecisionRecognition)
+            }
+        }
+        return
+    }
     val readiness by permissionManager.readiness.collectAsStateWithLifecycle()
     val isGranting by permissionManager.isGranting.collectAsStateWithLifecycle()
 
@@ -165,11 +183,6 @@ fun AppRoot(
     }
 
     val context = LocalContext.current
-    val darkTheme = when (settingsState.themeMode) {
-        ThemeMode.System -> isSystemInDarkTheme()
-        ThemeMode.Light -> false
-        ThemeMode.Dark -> true
-    }
     LaunchedEffect(darkTheme) {
         onDarkThemeChanged(darkTheme)
         withContext(MaaDispatchers.IO) {

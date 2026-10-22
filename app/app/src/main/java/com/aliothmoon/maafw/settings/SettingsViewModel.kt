@@ -38,6 +38,8 @@ class SettingsViewModel(
         )
     }.combine(appSettings.alasErrorNotifications) { state, enabled ->
         state.copy(alasErrorNotifications = enabled)
+    }.combine(appSettings.lowPrecisionRecognition) { state, enabled ->
+        state.copy(lowPrecisionRecognition = enabled)
     }.combine(appSettings.updateSource) { state, source ->
         state.copy(updateSource = source)
     }.combine(appSettings.updateBranch) { state, branch ->

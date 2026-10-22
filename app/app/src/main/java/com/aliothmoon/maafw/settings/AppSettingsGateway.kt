@@ -27,6 +27,9 @@ interface AppSettingsGateway {
     val alasErrorNotifications: StateFlow<Boolean>
     suspend fun setAlasErrorNotifications(enabled: Boolean)
 
+    val lowPrecisionRecognition: StateFlow<Boolean>
+    suspend fun setLowPrecisionRecognition(enabled: Boolean)
+
     val themeStyle: StateFlow<ThemeStyle>
     suspend fun setThemeStyle(style: ThemeStyle)
 

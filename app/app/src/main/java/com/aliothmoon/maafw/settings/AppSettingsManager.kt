@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * app 设置的唯一读写入口
@@ -78,6 +80,11 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     private val _alasErrorNotifications = MutableStateFlow(defaults.alasErrorNotifications.toBoolean())
     override val alasErrorNotifications: StateFlow<Boolean> = _alasErrorNotifications.asStateFlow()
 
+    private val _lowPrecisionRecognition = MutableStateFlow(false)
+    override val lowPrecisionRecognition: StateFlow<Boolean> = _lowPrecisionRecognition.asStateFlow()
+    private val _recognitionChoiceMade = MutableStateFlow(false)
+    val recognitionChoiceMade: StateFlow<Boolean> = _recognitionChoiceMade.asStateFlow()
+
     private val _themeStyle = MutableStateFlow(parseThemeStyle(defaults.themeStyle))
     override val themeStyle: StateFlow<ThemeStyle> = _themeStyle.asStateFlow()
 
@@ -115,6 +122,8 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
                 _screenSaverEnabled.value = s.screenSaverEnabled.toBoolean()
                 _autoCleanLogs.value = s.autoCleanLogs.toBoolean()
                 _alasErrorNotifications.value = s.alasErrorNotifications.toBoolean()
+                _lowPrecisionRecognition.value = s.lowPrecisionRecognition.toBoolean()
+                _recognitionChoiceMade.value = s.lowPrecisionRecognition in listOf("true", "false")
                 _themeStyle.value = parseThemeStyle(s.themeStyle)
                 _updateSource.value = s.updateSource
                 _updateBranch.value = s.updateBranch
@@ -200,6 +209,15 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
 
     override suspend fun setThemeStyle(style: ThemeStyle): Unit = with(AppSettingsSchema) {
         context.dataStore.edit { it[themeStyle] = style.name }
+    }
+
+    override suspend fun setLowPrecisionRecognition(enabled: Boolean): Unit = with(AppSettingsSchema) {
+        context.dataStore.edit { it[lowPrecisionRecognition] = enabled.toString() }
+        _lowPrecisionRecognition.value = enabled
+        withContext(MaaDispatchers.IO) {
+            LowPrecisionRecognition.write(File(context.filesDir, "proot-tmp/shm"), enabled)
+        }
+        _recognitionChoiceMade.value = true
     }
 
     /** 盘上是历史遗留或手改的非法值时回落默认，不让设置读取本身抛异常 */

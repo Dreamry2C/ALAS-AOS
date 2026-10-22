@@ -1,3 +1,5 @@
+import os
+
 from module.base.button import Button
 from module.base.decorator import cached_property
 from module.base.timer import Timer
@@ -215,6 +217,14 @@ class ModuleBase:
                 self.device.dump_hierarchy()
             yield self.device.image, self.device.hierarchy
 
+    def _log_low_precision_match(self, button):
+        logged = getattr(self, '_low_precision_logged_targets', None)
+        if logged is None:
+            logged = self._low_precision_logged_targets = set()
+        if button.name not in logged:
+            logger.info(f'低精度识别：{button.name}')
+            logged.add(button.name)
+
     def appear(self, button, offset=0, interval=0, similarity=0.85, threshold=10):
         """
         Args:
@@ -253,17 +263,30 @@ class ModuleBase:
             if not self.interval_timer[button.name].reached():
                 return False
 
+        low_precision = (not isinstance(button, HierarchyButton)
+                         and os.path.isfile('/dev/shm/alasaos-low-precision'))
         if isinstance(button, HierarchyButton):
             appear = bool(button)
         elif offset:
             if isinstance(offset, bool):
                 offset = self.config.BUTTON_OFFSET
             appear = button.match(self.device.image, offset=offset, similarity=similarity)
-            if not appear and similarity == 0.85 and hasattr(button, 'color') and button.color:
-                if button.match(self.device.image, offset=offset, similarity=0.70) and button.appear_on(self.device.image, threshold=threshold):
+            if (not appear and similarity == 0.85 and hasattr(button, 'color') and button.color
+                    and low_precision):
+                failures = getattr(self, '_low_precision_failures', None)
+                if failures is None:
+                    failures = self._low_precision_failures = {}
+                failures[button.name] = min(failures.get(button.name, 0) + 1, 3)
+                if (failures[button.name] >= 3
+                        and button.match(self.device.image, offset=offset, similarity=0.70)
+                        and button.appear_on(self.device.image, threshold=threshold)):
                     appear = True
+                    self._log_low_precision_match(button)
+            else:
+                getattr(self, '_low_precision_failures', {}).pop(button.name, None)
         else:
             appear = button.appear_on(self.device.image, threshold=threshold)
+            getattr(self, '_low_precision_failures', {}).pop(button.name, None)
 
         if appear and interval:
             self.interval_timer[button.name].reset()
@@ -296,6 +319,8 @@ class ModuleBase:
 
         appear = button.match_template_color(
             self.device.image, offset=offset, similarity=similarity, threshold=threshold)
+        if appear:
+            getattr(self, '_low_precision_failures', {}).pop(button.name, None)
 
         if appear and interval:
             self.interval_timer[button.name].reset()

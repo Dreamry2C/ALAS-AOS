@@ -8,6 +8,7 @@ import com.aliothmoon.maafw.MaaDispatchers
 import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.service.RunForegroundService
 import com.aliothmoon.maafw.settings.AppSettingsManager
+import com.aliothmoon.maafw.settings.LowPrecisionRecognition
 import com.aliothmoon.maafw.settings.AlasSourceRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -292,6 +293,7 @@ class ProotHost(
     private fun spawnSession(): Process {
         prootTmpDir.mkdirs()
         check(prootShmDir.isDirectory || prootShmDir.mkdirs()) { "Cannot prepare proot shared memory" }
+        LowPrecisionRecognition.write(prootShmDir, settings.lowPrecisionRecognition.value)
         sessionLog.parentFile?.mkdirs()
         val cmd = listOf(
             prootFile.absolutePath,
