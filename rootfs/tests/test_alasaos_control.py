@@ -251,8 +251,10 @@ class BridgeShellTests(unittest.TestCase):
         scope={'remove_shell_warning':lambda v:v}
         exec(compile(ast.Module(body=[func],type_ignores=[]),'bridge-shell','exec'),scope)
         self.call=scope['adb_shell']; self.seen=[]
-        def bridge(cmd, timeout): self.seen.append((cmd,timeout)); return 'aarch64\n'
-        self.device=SimpleNamespace(serial='alasaos',alasaos_shell_output=bridge)
+        def bridge(cmd, timeout):
+            self.seen.append((cmd,timeout))
+            return {'ok':True,'code':0,'stdout':'aarch64\n','stderr':''}
+        self.device=SimpleNamespace(serial='alasaos',alasaos_shell=bridge)
     def test_text_shell_uses_bridge_and_preserves_strip_contract(self):
         self.assertEqual(self.call(self.device,'uname -m'),'aarch64')
         self.assertEqual(self.call(self.device,'uname -m',rstrip=False),'aarch64\n')
