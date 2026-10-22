@@ -58,6 +58,8 @@ import com.aliothmoon.maafw.MaaDispatchers
 import com.aliothmoon.maafw.settings.AlasSource
 import com.aliothmoon.maafw.settings.AlasSourceRepository
 import com.aliothmoon.maafw.settings.AppSettingsManager
+import com.aliothmoon.maafw.settings.AppSettingsGateway
+import com.aliothmoon.maafw.ui.components.LowPrecisionRecognitionDialog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -269,10 +271,35 @@ private fun LogCard(
 @Composable
 private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
     val accessPort = koinInject<RemoteAccessPort>()
+    val appSettings = koinInject<AppSettingsGateway>()
     val permissionManager = koinInject<PermissionManager>()
     val scope = rememberCoroutineScope()
     var checkingRoot by remember { mutableStateOf(false) }
+    var showRecognitionDialog by remember { mutableStateOf(false) }
+    if (showRecognitionDialog) {
+        LowPrecisionRecognitionDialog { enabled ->
+            if (enabled) appSettings.setLowPrecisionRecognition(true)
+            showRecognitionDialog = false
+        }
+    }
     MaaCard(title = stringResource(R.string.settings_section_other), collapsible = true) {
+        MaaLabeledControlRow(
+            label = stringResource(R.string.settings_low_precision_recognition),
+            trailing = {
+                MaaSwitch(
+                    checked = state.lowPrecisionRecognition,
+                    onCheckedChange = { enabled ->
+                        if (enabled) showRecognitionDialog = true
+                        else scope.launch { appSettings.setLowPrecisionRecognition(false) }
+                    },
+                )
+            },
+        )
+        Text(
+            stringResource(R.string.settings_low_precision_recognition_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         MaaLabeledControlRow(
             label = stringResource(R.string.settings_alas_error_notifications),
             trailing = {
@@ -283,7 +310,11 @@ private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit
         Text(stringResource(R.string.settings_alas_error_notifications_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        MaaFieldLabel(stringResource(R.string.permission_backend))
+        Text(
+            stringResource(R.string.permission_backend),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(top = MaaDesignTokens.Spacing.md),
+        )
         MaaSingleChoiceFlow(
             options = RemoteBackend.entries.map { it to it.display },
             selected = state.remoteAccess.configuredBackend,
