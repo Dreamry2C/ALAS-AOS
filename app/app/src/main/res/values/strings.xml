@@ -715,4 +715,16 @@
     <string name="alas_config_delete_last">至少需要保留一个配置</string>
     <string name="alas_config_delete_failed">删除失败，请刷新页面后重试</string>
     <string name="provision_archive_url_hint">首次下载不要输入 ALAS 仓库链接（国内源、GitHub 或 Gitee 仓库均不适用）。请填写 rootfs.tar.xz 环境包文件直链；同目录需有 BUILD_MANIFEST。</string>
+    <string name="settings_low_precision_recognition">低精度识别模式</string>
+    <string name="settings_low_precision_recognition_hint">放宽按钮图像匹配以兼容部分手机 ROM。关闭后恢复严格判定，开关立即生效；两种模式都可能出现识别或点击异常。</string>
+    <string name="recognition_dialog_title">低精度识别模式</string>
+    <string name="recognition_dialog_message">不同手机 ROM 的字体和渲染方式可能使文字或按钮识别不稳定。推荐开启低精度识别模式，通过更宽松的按钮图像匹配兼容这些差异；此模式不会提高 OCR 模型本身的准确率。</string>
+    <string name="recognition_dialog_risk">风险提示：开启后可能误识别、漏识别、点击错误或任务报错，严重时可能误花费钻石等游戏内资源。请了解风险后再开启。</string>
+    <string name="recognition_dialog_disclaimer">免责声明：手机 ROM、字体、显示缩放、性能及运行状态存在差异，关闭此模式也不能保证不会出现识别或操作异常。请自行评估使用风险，并留意运行过程。</string>
+    <string name="recognition_settings_location">之后可在「设置 → 其他设置 → 低精度识别模式」中随时开关。</string>
+    <string name="recognition_enable_recommended">开启（推荐）</string>
+    <string name="recognition_enable_countdown">开启（推荐，%1$d 秒）</string>
+    <string name="recognition_cancel_native_android">取消（原生安卓可选）</string>
+    <string name="recognition_cancel_countdown">取消（原生安卓可选，%1$d 秒）</string>
+    <string name="recognition_save_failed">设置保存失败，请重试。</string>
 </resources>

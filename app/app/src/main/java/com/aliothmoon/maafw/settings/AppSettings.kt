@@ -50,6 +50,10 @@ data class AppSettings(
     @PrefKey(default = "true")
     val alasErrorNotifications: String = "true",
 
+    /** Empty until the user explicitly chooses on the first launch. */
+    @PrefKey(default = "")
+    val lowPrecisionRecognition: String = "",
+
     /** ThemeStyle name: Material 3 by default; existing classic and Semi preferences remain valid. */
     @PrefKey(default = "MATERIAL")
     val themeStyle: String = "MATERIAL",

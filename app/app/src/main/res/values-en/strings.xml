@@ -720,4 +720,16 @@
     <string name="alas_config_delete_last">Keep at least one configuration</string>
     <string name="alas_config_delete_failed">Could not delete configuration. Refresh the page and try again</string>
     <string name="provision_archive_url_hint">Do not enter an ALAS repository URL during initial setup, including domestic, GitHub or Gitee repositories. Enter a direct rootfs.tar.xz runtime archive URL with BUILD_MANIFEST in the same directory.</string>
+    <string name="settings_low_precision_recognition">Low precision recognition</string>
+    <string name="settings_low_precision_recognition_hint">Relax button image matching for some phone ROMs. Switching takes effect immediately; disabling restores strict matching. Recognition or tap errors remain possible in either mode.</string>
+    <string name="recognition_dialog_title">Low precision recognition</string>
+    <string name="recognition_dialog_message">Fonts and rendering differ between phone ROMs and may affect text or button recognition. Enabling low precision recognition is recommended to accommodate these differences with more permissive button image matching. It does not improve the OCR model itself.</string>
+    <string name="recognition_dialog_risk">Warning: Enabling this mode may cause incorrect or missed recognition, wrong taps, or task errors. Wrong taps may spend gems or other in-game resources. Understand these risks before enabling it.</string>
+    <string name="recognition_dialog_disclaimer">Disclaimer: Phone ROMs, fonts, display scaling, performance, and runtime conditions vary. Errors in recognition or actions can still occur with this mode disabled. Assess the risks yourself and monitor operation.</string>
+    <string name="recognition_settings_location">You can change this later in Settings → Other settings → Low precision recognition.</string>
+    <string name="recognition_enable_recommended">Enable (recommended)</string>
+    <string name="recognition_enable_countdown">Enable (recommended, %1$d s)</string>
+    <string name="recognition_cancel_native_android">Cancel (optional for stock Android)</string>
+    <string name="recognition_cancel_countdown">Cancel (stock Android, %1$d s)</string>
+    <string name="recognition_save_failed">Could not save the setting. Please retry.</string>
 </resources>

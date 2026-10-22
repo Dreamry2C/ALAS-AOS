@@ -18,6 +18,7 @@ data class SettingsUiState(
     val themeStyle: ThemeStyle = ThemeStyle.MATERIAL,
     val autoCleanLogs: Boolean = true,
     val alasErrorNotifications: Boolean = true,
+    val lowPrecisionRecognition: Boolean = false,
     val runMode: RunMode = RunMode.BACKGROUND,
     val updateSource: String = "",
     val updateBranch: String = "master",
