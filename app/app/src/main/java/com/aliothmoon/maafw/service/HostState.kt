@@ -59,6 +59,7 @@ class HostState(
     /** 周期与按需探测共用一把锁，防并发探测挤在同一端口上 */
     private val probeMutex = Mutex()
     private val envMutex = Mutex()
+    private val previewClickMutex = Mutex()
     private val pingSeq = AtomicInteger(0)
 
     private val started = AtomicBoolean(false)
@@ -204,6 +205,29 @@ class HostState(
      * 直通 AIDL 同名方法（oneway，内部带虚拟屏 displayId 注入，见 RemoteServiceImpl）。
      * 高频（一次滑动几十条），失败静默——特权断线时快照清零，注入也随之失去目标
      */
+    fun touchClick(x: Int, y: Int) {
+        // The host gesture is complete before the bridge focuses the game and
+        // injects its down/up pair. Serialize taps without blocking the UI.
+        scope.launch(MaaDispatchers.IO) {
+            previewClickMutex.withLock {
+                runCatching {
+                    Socket().use { socket ->
+                        socket.connect(InetSocketAddress(BRIDGE_HOST, BRIDGE_PORT), BRIDGE_CONNECT_TIMEOUT_MS)
+                        socket.soTimeout = 6_000
+                        val request = JSONObject()
+                            .put("id", pingSeq.incrementAndGet())
+                            .put("method", "click")
+                            .put("x", x)
+                            .put("y", y)
+                        socket.getOutputStream().write((request.toString() + "\n").toByteArray(Charsets.UTF_8))
+                        val reply = JSONObject(readLine(BufferedInputStream(socket.getInputStream())))
+                        check(reply.optBoolean("ok", false)) { "Preview click injection failed" }
+                    }
+                }.onFailure { Timber.w(it, "touchClick failed") }
+            }
+        }
+    }
+
     fun touchDown(x: Int, y: Int) {
         runCatching { servicePort.serviceOrNull()?.touchDown(x, y) }
             .onFailure { Timber.w(it, "touchDown failed") }

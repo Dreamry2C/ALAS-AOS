@@ -69,5 +69,28 @@ if [ -d .git ] && git cat-file -e "HEAD:$webui_file" 2>/dev/null; then
       || mark "WARN webui/utils.py restore failed"
   fi
 fi
+# Restore retired image overlays and their generated Button metadata from the
+# configured ALAS source. Keep active AOS code overlays and user config intact.
+for asset_file in \
+  assets/cn/daily/DAILY_SKIP.png \
+  assets/cn/handler/AUTO_SEARCH_TITLE.png \
+  assets/cn/handler/CLEAR_MODE_TITLE.png \
+  assets/cn/map/MAP_PREPARATION.png \
+  assets/cn/retire/SORT_ASC.png \
+  assets/cn/retire/SORT_DESC.png \
+  assets/cn/storage/MATERIAL_CHECK.png \
+  assets/cn/ui/SHOP_CHECK.png \
+  module/daily/assets.py \
+  module/map/assets.py \
+  module/retire/assets.py \
+  module/ui/assets.py; do
+  if [ -d .git ] && git --git-dir=.git --work-tree=. cat-file -e "HEAD:$asset_file" 2>/dev/null; then
+    if ! git --git-dir=.git --work-tree=. diff --quiet HEAD -- "$asset_file" 2>/dev/null; then
+      git --git-dir=.git --work-tree=. checkout HEAD -- "$asset_file" 2>/dev/null \
+        && mark "$asset_file retired overlay restored" \
+        || mark "WARN $asset_file restore failed"
+    fi
+  fi
+done
 mark "done imageio=${now:-?} template=$tstate"
 exit 0

@@ -75,7 +75,6 @@ require_file "$ASSETS/overlays/alasaos_control.py"
 require_file "$ASSETS/overlays/alasaos_u2.py"
 require_file "$ASSETS/overlays/alasaos_notify.py"
 require_file "$ASSETS/overlays/runner.py"
-require_file "$ASSETS/patches/assets_fix.py"
 require_file "$ASSETS/seeds/deploy.yaml"
 require_file "$ASSETS/seeds/alasaos_update.sh"
 require_file "$ASSETS/seeds/update_progress.py"
@@ -233,13 +232,8 @@ else
 fi
 
 # ---------- 6. 应用本仓资产（宿主侧拷入 $ROOTFS_DIR/opt/alas） ----------
-# m0 补丁集：module/ 与 assets/ 子树整层覆盖上游同名文件
+# AOS runtime code overlays; image templates and Button metadata stay upstream.
 cp -rf "$ASSETS/patches/module/." "$ROOTFS_DIR/opt/alas/module/"
-cp -rf "$ASSETS/patches/assets/." "$ROOTFS_DIR/opt/alas/assets/"
-
-# assets_fix.py 改的是 **ALAS 树内** 文件（argv[1]=ALAS 根目录）：按 Button 名就地重写
-# module/*/assets.py 里的 cn area/color/button，非整文件覆盖（上游资产更新后可重放，见脚本 docstring）
-python3 "$ASSETS/patches/assets_fix.py" "$ROOTFS_DIR/opt/alas"
 
 # OCR：保留 ALAS 上游自带的 module/ocr/rpc.py（zerorpc 客户端；zerorpc 为惰性 import，
 # UseOcrServer:false 时不触发）。原版 OCR 走 models.OCR_MODEL=cnocr+mxnet，不覆盖 rpc.py。

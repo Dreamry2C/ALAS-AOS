@@ -177,7 +177,6 @@ class ProotHost(
             fail("更新后运行文件覆盖失败，请重试")
             return@withLock
         }
-        if (!runAssetsFix()) finishStep(StepStatus.WARNING)
 
         beginStep(StartupStep.ARGUMENTS, ProotPhase.PREPARING, "再生 args 配置")
         // The helper starts the upstream generator in a separate, normal Python.
@@ -455,7 +454,7 @@ class ProotHost(
         val timedOut: Boolean,
     )
 
-    /** 带默认环境的 [runGuestRaw]（seed/assets_fix 用） */
+    /** 带默认环境的 [runGuestRaw]（seed 用） */
     private suspend fun runGuest(
         guestCmd: List<String>,
         timeoutMs: Long,
@@ -513,21 +512,6 @@ class ProotHost(
             if (proc.isAlive) proc.destroyForcibly()
             runCatching { proc.inputStream.close() }
         }
-    }
-
-    /** assets_fix：幂等 + 漂移自检（Button 找不到会非零退出），失败只记警告 */
-    private suspend fun runAssetsFix(): Boolean {
-        val r = runGuest(listOf("/usr/bin/python3", "-S", "seeds/assets_fix.py", GUEST_ALAS_ROOT), SHORT_EXEC_MS)
-            ?: return false
-        if (r.exit == 0 && !r.timedOut) {
-            Timber.d("assets_fix OK")
-            return true
-        }
-        Timber.w("assets_fix drift detected exit=%s", r.exit)
-        _state.update {
-            it.copy(updateResult = (it.updateResult ?: "") + " | assets_fix 漂移，建议重下整包")
-        }
-        return false
     }
 
     // ------------------------------------------------------------------ 自愈清理与 DNS
