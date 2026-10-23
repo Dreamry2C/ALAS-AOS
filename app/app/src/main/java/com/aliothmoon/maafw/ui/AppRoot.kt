@@ -449,6 +449,7 @@ fun AppRoot(
                 onExit = { previewFullscreen = false },
                 onTouch = { x, y, action ->
                     when (action) {
+                        PreviewTouchAction.Click -> hostState.touchClick(x, y)
                         PreviewTouchAction.Down -> hostState.touchDown(x, y)
                         PreviewTouchAction.Move -> hostState.touchMove(x, y)
                         PreviewTouchAction.Up -> hostState.touchUp(x, y)

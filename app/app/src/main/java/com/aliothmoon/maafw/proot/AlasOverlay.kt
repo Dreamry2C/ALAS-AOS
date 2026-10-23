@@ -10,13 +10,12 @@ import java.io.File
  * 两份职责：
  * - wrapper/runner/seed/alasaos_update.sh 随 App 版本演进，改它们不必重烘焙 rootfs
  *   （rootfs.tar.xz 里那份只是兜底；每次启动都被这里盖成 App 当前版本）
- * - 热更新 `git reset --hard` 会把上游跟踪文件打回原版：patches（module/ 与 assets/）
+ * - 热更新 `git reset --hard` 会把上游跟踪文件打回原版：patches（module/）
  *   与 in-proc OCR rpc.py 必须在 UPDATED 后重放
  *
  * 覆盖方式是按字节比对的幂等拷贝；STALE_FILES 在拷贝后删除——断代更名
  * （如 maaal→alasaos）留下的旧名文件只删不盖，防旧码被误加载。
- * assets_fix.py 只铺到 seeds/（执行要 python，
- * 由 ProotHost 经 proot 另行触发——它幂等且带漂移自检，找不到 Button 会非零退出）
+ * 图片模板与 Button 元数据使用当前 ALAS 源的原版。
  */
 class AlasOverlay(private val context: Context) {
 
@@ -76,12 +75,11 @@ class AlasOverlay(private val context: Context) {
         val MAPPINGS = listOf(
             "alas/overlay" to "",
             "alas/patches/module" to "module",
-            "alas/patches/assets" to "assets",
-            "alas/patches/assets_fix.py" to "seeds/assets_fix.py",
         )
 
         /** 断代遗留的旧名文件（烘焙 tar 仍带 maaal 时代命名）：覆盖后删除，幂等 */
         val STALE_FILES = listOf(
+            "seeds/assets_fix.py",
             "module/device/method/maaal.py",
             "seeds/maaal_update.sh",
             // AOS 自研 OCR 引擎（numpy azur_lane + PP-OCR）随换源 AlasToFox 退役：

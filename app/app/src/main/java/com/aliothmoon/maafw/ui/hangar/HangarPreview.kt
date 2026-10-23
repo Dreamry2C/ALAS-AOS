@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.SystemClock
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -50,7 +51,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -87,9 +87,6 @@ import kotlin.math.roundToInt
  *   可拖动返回按钮、BackHandler 退出、触摸 Down/Move/Up 换算后注入虚拟屏
  * - 内嵌卡片（HangarScreen.VdPreview）：单击进全屏，内嵌画面本身不转发触摸（防误触）
  */
-
-/** 全屏预览上的手动操作；坐标由 UI 换算到虚拟屏坐标系后随动作一起上报 */
-enum class PreviewTouchAction { Down, Move, Up }
 
 /**
  * `setFixedSize` 必须延后一拍（m0 MaaPreviewSurface 同款处理）：
@@ -519,32 +516,58 @@ internal fun previewExitHit(position: Offset, size: Offset, dock: PreviewExitDoc
 private fun Modifier.previewTouchInput(
     onTouch: (x: Int, y: Int, action: PreviewTouchAction) -> Unit,
 ): Modifier = pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) {
-            val event = awaitPointerEvent()
-            val change = event.changes.firstOrNull() ?: continue
-            val action = when (event.type) {
-                PointerEventType.Press -> PreviewTouchAction.Down
-                PointerEventType.Move -> if (change.pressed) PreviewTouchAction.Move else null
-                PointerEventType.Release -> PreviewTouchAction.Up
-                else -> null
-            }
-            if (action != null) {
-                val scale = minOf(
-                    size.width / DefaultDisplayConfig.WIDTH.toFloat(),
-                    size.height / DefaultDisplayConfig.HEIGHT.toFloat(),
-                )
-                val offsetX = (size.width - DefaultDisplayConfig.WIDTH * scale) / 2f
-                val offsetY = (size.height - DefaultDisplayConfig.HEIGHT * scale) / 2f
-                val vx = ((change.position.x - offsetX) / scale).toInt()
-                val vy = ((change.position.y - offsetY) / scale).toInt()
-                if (vx in 0 until DefaultDisplayConfig.WIDTH &&
-                    vy in 0 until DefaultDisplayConfig.HEIGHT
-                ) {
-                    onTouch(vx, vy, action)
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val scale = minOf(
+            size.width / DefaultDisplayConfig.WIDTH.toFloat(),
+            size.height / DefaultDisplayConfig.HEIGHT.toFloat(),
+        )
+        if (scale <= 0f) return@awaitEachGesture
+        val offsetX = (size.width - DefaultDisplayConfig.WIDTH * scale) / 2f
+        val offsetY = (size.height - DefaultDisplayConfig.HEIGHT * scale) / 2f
+        fun virtualPosition(position: Offset) = Offset(
+            (position.x - offsetX) / scale,
+            (position.y - offsetY) / scale,
+        )
+        val origin = virtualPosition(down.position)
+        if (origin.x < 0 || origin.x >= DefaultDisplayConfig.WIDTH ||
+            origin.y < 0 || origin.y >= DefaultDisplayConfig.HEIGHT
+        ) return@awaitEachGesture
+
+        val gesture = PreviewTouchGesture(origin, viewConfiguration.touchSlop / scale) { position, action ->
+            onTouch(
+                position.x.toInt().coerceIn(0, DefaultDisplayConfig.WIDTH - 1),
+                position.y.toInt().coerceIn(0, DefaultDisplayConfig.HEIGHT - 1),
+                action,
+            )
+        }
+        down.consume()
+        var waitingForHold = true
+        try {
+            while (true) {
+                val event = if (waitingForHold) {
+                    val remaining = down.uptimeMillis + viewConfiguration.longPressTimeoutMillis - SystemClock.uptimeMillis()
+                    withTimeoutOrNull(remaining.coerceAtLeast(1)) { awaitPointerEvent() }
+                } else awaitPointerEvent()
+                if (event == null) {
+                    gesture.hold()
+                    waitingForHold = false
+                    continue
                 }
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                val position = virtualPosition(change.position)
+                if (!change.pressed) {
+                    if (position.x < 0 || position.x >= DefaultDisplayConfig.WIDTH ||
+                        position.y < 0 || position.y >= DefaultDisplayConfig.HEIGHT
+                    ) gesture.cancel() else gesture.up(position)
+                    change.consume()
+                    break
+                }
+                gesture.move(position)
+                change.consume()
             }
-            change.consume()
+        } finally {
+            gesture.cancel()
         }
     }
 }
