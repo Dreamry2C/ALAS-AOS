@@ -44,6 +44,28 @@ def install_config_writer():
     ConfigUpdater.write_file = staticmethod(write)
 
 
+def install_config_import():
+    """Use the native add dialog's cancellation flow for configuration imports."""
+    from importlib import import_module
+    webui = import_module('module.webui.app')
+    original_upload = webui.file_upload
+    if getattr(original_upload, '_alasaos_cancelable', False):
+        return
+
+    @functools.wraps(original_upload)
+    def upload(*args, **kwargs):
+        if ('name' in kwargs or kwargs.get('accept') != '.json' or
+                kwargs.get('label') != webui.t('Gui.AppManage.Import')):
+            return original_upload(*args, **kwargs)
+        field = original_upload(*args, name='alasaos_config_file', **kwargs)
+        result = webui.input_group(label=kwargs['label'], inputs=[field], cancelable=True)
+        # The upstream callback already returns without writing on None.
+        return result.get('alasaos_config_file') if result else None
+
+    upload._alasaos_cancelable = True
+    webui.file_upload = upload
+
+
 class Control:
     def __init__(self, managers, state, console_factory):
         self.managers = managers
@@ -247,6 +269,7 @@ def install():
     def init(cls):
         nonlocal server
         original_init()
+        install_config_import()
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args):
