@@ -50,6 +50,7 @@ class ProotHost(
     private val app: Application,
     private val scope: CoroutineScope,
     private val settings: AppSettingsManager,
+    private val prepareAutomation: suspend () -> Boolean = { true },
 ) {
 
     private val _state = MutableStateFlow(ProotSnapshot())
@@ -184,6 +185,13 @@ class ProotHost(
         if (!wantRunning) return@withLock
 
         beginStep(StartupStep.SESSION, ProotPhase.STARTING, "拉起 proot 会话")
+        // Native deploy.Webui.Run starts inside the GUI, so the bridge and VD
+        // must be ready before spawning it, including when no Activity exists.
+        val autoRun = runCatching { AlasSourceRepository(alasDir).readRunConfig() }.getOrDefault("")
+        if (autoRun.isNotEmpty() && !prepareAutomation()) {
+            fail("自动运行需要 Root 或已启动并授权的 Shizuku，请检查权限后重试")
+            return@withLock
+        }
         errorNotifications.start(alasDir)
         val proc = runCatching { spawnSession() }.getOrElse {
             fail("无法启动 proot（${it.javaClass.simpleName}），请查看运行环境")

@@ -12,10 +12,14 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.aliothmoon.maafw.MainActivity
+import com.aliothmoon.maafw.MaaFwApp
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.constant.DefaultDisplayConfig
 import com.aliothmoon.maafw.proot.ProotHost
 import com.aliothmoon.maafw.proot.ProotSnapshot
+import com.aliothmoon.maafw.provision.RootfsProvisioner
+import com.aliothmoon.maafw.provision.ProvisionState
+import com.aliothmoon.maafw.settings.AppSettingsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,6 +28,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.CancellationException
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 
@@ -47,9 +54,13 @@ class RunForegroundService : Service() {
 
     private val hostState: HostState by inject()
     private val prootHost: ProotHost by inject()
+    private val settings: AppSettingsManager by inject()
+    private val provisioner: RootfsProvisioner by inject()
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var observeJob: Job? = null
+    private var bootJob: Job? = null
+    private var bootStarting = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -59,11 +70,8 @@ class RunForegroundService : Service() {
         // 必须先 startForeground 再判终态：慢一步就是 ForegroundServiceDidNotStartInTimeException
         val initial = hostState.snapshot.value to prootHost.state.value
         startAsForeground(buildNotification(initial.first, initial.second))
-        if (isTerminal(initial.first, initial.second)) {
-            stopNow()
-            return
-        }
-        observe()
+        // onStartCommand knows whether this is a boot launch. Do not stop the
+        // service in onCreate while its initial runtime snapshots are idle.
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -71,12 +79,52 @@ class RunForegroundService : Service() {
         val snapshot = hostState.snapshot.value
         val proot = prootHost.state.value
         startAsForeground(buildNotification(snapshot, proot))
+        if (intent?.action == ACTION_BOOT) {
+            if (bootJob == null) {
+                bootStarting = true
+                observe()
+                bootJob = serviceScope.launch { bootRuntime() }
+            }
+            return START_NOT_STICKY
+        }
         if (isTerminal(snapshot, proot)) {
             stopNow()
         } else {
             observe()
         }
         return START_NOT_STICKY
+    }
+
+    private suspend fun bootRuntime() {
+        try {
+            withTimeout(180_000) {
+                (application as MaaFwApp).startupReady.await()
+                if (!settings.startOnBoot.value || !settings.recognitionChoiceMade.value) return@withTimeout
+                Timber.i("Boot startup: preparing AOS runtime")
+                provisioner.start()
+                val provision = provisioner.state.first {
+                    it !is ProvisionState.Checking && it !is ProvisionState.Extracting && it !is ProvisionState.Downloading
+                }
+                if (provision !is ProvisionState.Ready) {
+                    Timber.w("Boot startup: runtime needs setup in AOS")
+                    return@withTimeout
+                }
+                if (!hostState.ensureEnvironmentStarted()) {
+                    Timber.w("Boot startup: privileged environment unavailable")
+                    return@withTimeout
+                }
+                prootHost.ensureStarted()
+                prootHost.state.first { it.sessionActive }
+                Timber.i("Boot startup: AOS runtime requested")
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (e: Exception) {
+            Timber.w("Boot startup failed: %s", e.javaClass.simpleName)
+        } finally {
+            bootStarting = false
+            if (isTerminal(hostState.snapshot.value, prootHost.state.value)) stopNow()
+        }
     }
 
     override fun onDestroy() {
@@ -102,7 +150,7 @@ class RunForegroundService : Service() {
 
     /** 终态：虚拟屏撤了且 proot 会话也不在活跃阶段，保活没有存在意义 */
     private fun isTerminal(snapshot: HostSnapshot, proot: ProotSnapshot): Boolean =
-        snapshot.vdDisplayId == DefaultDisplayConfig.DISPLAY_NONE && !proot.sessionActive
+        !bootStarting && snapshot.vdDisplayId == DefaultDisplayConfig.DISPLAY_NONE && !proot.sessionActive
 
     private fun stopNow() {
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -178,6 +226,7 @@ class RunForegroundService : Service() {
     }
 
     companion object {
+        private const val ACTION_BOOT = "com.aliothmoon.maafw.action.START_ON_BOOT"
         private const val CHANNEL_ID = "run_execution"
         private const val NOTIFICATION_ID = 1001
 
@@ -185,6 +234,12 @@ class RunForegroundService : Service() {
             runCatching {
                 context.startForegroundService(Intent(context, RunForegroundService::class.java))
             }.onFailure { Timber.w(it, "Failed to start foreground service") }
+        }
+
+        fun startOnBoot(context: Context) {
+            runCatching {
+                context.startForegroundService(Intent(context, RunForegroundService::class.java).setAction(ACTION_BOOT))
+            }.onFailure { Timber.w("Boot startup: foreground service unavailable") }
         }
     }
 }

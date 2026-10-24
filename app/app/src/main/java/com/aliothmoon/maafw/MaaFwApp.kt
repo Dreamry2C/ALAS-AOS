@@ -23,6 +23,7 @@ import com.aliothmoon.maafw.proot.AlasRunController
 import com.aliothmoon.maafw.service.HostState
 import com.aliothmoon.maafw.settings.AppSettingsManager
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -37,6 +38,7 @@ import org.koin.core.qualifier.named
 import timber.log.Timber
 
 class MaaFwApp : Application() {
+    val startupReady = CompletableDeferred<Unit>()
 
     private val writer by inject<AppLogWriter>()
     private val settings by inject<AppSettingsManager>()
@@ -82,5 +84,6 @@ class MaaFwApp : Application() {
         koin.get<AlasRunController>().start()
         koin.get<OverlayController>().setup()
         koin.get<ScreenSaverOverlayManager>().setup()
+        startupReady.complete(Unit)
     }
 }

@@ -1,6 +1,9 @@
 package com.aliothmoon.maafw.settings
 
 import android.content.Context
+import android.content.ComponentName
+import android.content.pm.PackageManager
+import com.aliothmoon.maafw.service.BootReceiver
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -53,6 +56,9 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
      * 一初始化就同步读 startupBackend）
      */
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
+
+    private val _startOnBoot = MutableStateFlow(false)
+    val startOnBoot: StateFlow<Boolean> = _startOnBoot.asStateFlow()
 
     private val _startupBackend = MutableStateFlow(parseBackend(defaults.startupBackend))
     val startupBackend: StateFlow<RemoteBackend> = _startupBackend.asStateFlow()
@@ -113,6 +119,8 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
         // 那样 loaded 置位与各字段拿到首值是两件并发的事，早读的人仍可能读到默认值
         scope.launch {
             settings.collect { s ->
+                _startOnBoot.value = s.startOnBoot.toBoolean()
+                configureBootReceiver(_startOnBoot.value)
                 _startupBackend.value = parseBackend(s.startupBackend)
                 _skipShizukuCheck.value = s.skipShizukuCheck.toBoolean()
                 _skipArchitectureCheck.value = s.skipArchitectureCheck.toBoolean()
@@ -140,6 +148,19 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
 
     suspend fun setStartupBackend(backend: RemoteBackend) = with(AppSettingsSchema) {
         context.dataStore.edit { it[startupBackend] = backend.name }
+    }
+
+    suspend fun setStartOnBoot(enabled: Boolean) = with(AppSettingsSchema) {
+        context.dataStore.edit { it[startOnBoot] = enabled.toString() }
+    }
+
+    private fun configureBootReceiver(enabled: Boolean) {
+        val component = ComponentName(context, BootReceiver::class.java)
+        val state = if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        if (context.packageManager.getComponentEnabledSetting(component) != state) {
+            context.packageManager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
+        }
     }
 
     suspend fun setSkipArchitectureCheck(skip: Boolean) = with(AppSettingsSchema) {

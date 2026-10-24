@@ -52,6 +52,7 @@ import com.aliothmoon.maafw.ui.components.MaaNavigationRow
 import com.aliothmoon.maafw.ui.components.MaaSingleChoiceFlow
 import com.aliothmoon.maafw.ui.components.MaaSwitch
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import com.aliothmoon.maafw.MaaDispatchers
@@ -114,9 +115,112 @@ fun SettingsScreen(
             DisplayCard(state, onIntent)
             LogCard(state, onIntent, onOpenAppLog, onOpenAlasLog, onExportAlasLogs, onExportLauncherLogs)
             OtherCard(state, onIntent)
+            StartupCard(state, onIntent)
             UpdateCard()
             AboutCard()
         }
+    }
+}
+
+@Composable
+private fun StartupCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
+    val accessPort = koinInject<RemoteAccessPort>()
+    val permissionManager = koinInject<PermissionManager>()
+    var checkingRoot by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val settings: AppSettingsManager = koinInject()
+    val boot by settings.startOnBoot.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val repository = remember { AlasSourceRepository(File(context.filesDir, "rootfs/opt/alas")) }
+    var configs by remember { mutableStateOf<List<String>>(emptyList()) }
+    var selected by remember { mutableStateOf("") }
+    var available by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    LaunchedEffect(repository) {
+        withContext(MaaDispatchers.IO) {
+            runCatching { repository.readRunConfig() to repository.runConfigs() }
+        }.onSuccess { (run, names) ->
+            selected = run
+            configs = names
+            available = true
+        }.onFailure { failed = true }
+    }
+    MaaCard(title = stringResource(R.string.settings_section_startup), collapsible = true) {
+        Text(
+            stringResource(R.string.permission_backend),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(top = MaaDesignTokens.Spacing.md),
+        )
+        MaaSingleChoiceFlow(
+            options = RemoteBackend.entries.map { it to it.display },
+            selected = state.remoteAccess.configuredBackend,
+            onSelect = { onIntent(SettingsIntent.SetBackend(it)) },
+            optionEnabled = { state.remoteAccess.canSelect(it) && !checkingRoot },
+        )
+        if (!state.remoteAccess.rootGranted) {
+            Text(
+                text = stringResource(if (state.remoteAccess.rootAvailable)
+                    R.string.root_permission_required else R.string.root_unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(
+                enabled = !checkingRoot,
+                onClick = {
+                    checkingRoot = true
+                    scope.launch {
+                        try { accessPort.request(RemoteBackend.ROOT) }
+                        finally { checkingRoot = false; permissionManager.refresh() }
+                    }
+                },
+            ) { Text(stringResource(if (checkingRoot) R.string.permission_requesting else R.string.root_check_permission)) }
+        }
+        Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
+        Text(
+            stringResource(R.string.settings_autorun_config),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(top = MaaDesignTokens.Spacing.md),
+        )
+        MaaSingleChoiceFlow(
+            options = listOf("" to stringResource(R.string.settings_autorun_none)) +
+                (configs + listOf(selected).filter { it.isNotEmpty() }).distinct().map { it to it },
+            selected = selected,
+            enabled = available && !saving,
+            onSelect = { name ->
+                saving = true
+                scope.launch {
+                    try {
+                        withContext(MaaDispatchers.IO) { repository.saveRunConfig(name) }
+                        selected = name
+                        failed = false
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        failed = true
+                    } finally { saving = false }
+                }
+            },
+        )
+        Text(stringResource(R.string.settings_autorun_desc), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        MaaLabeledControlRow(
+            label = stringResource(R.string.settings_start_on_boot),
+            trailing = {
+                MaaSwitch(checked = boot, onCheckedChange = { enabled ->
+                    scope.launch {
+                        try {
+                            settings.setStartOnBoot(enabled)
+                        } catch (cancelled: CancellationException) { throw cancelled
+                        } catch (_: Exception) { failed = true }
+                    }
+                })
+            },
+        )
+        Text(stringResource(R.string.settings_start_on_boot_desc), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (failed) Text(stringResource(R.string.settings_startup_save_failed),
+            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -265,16 +369,11 @@ private fun LogCard(
     }
 }
 
-/**
- * 运行模式 + 启动模式（特权后端）：「跑起来之前得先定」的环境选项（对齐 MaaMeow 的「其他设置」）
- */
+/** Recognition and notification preferences. */
 @Composable
 private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit) {
-    val accessPort = koinInject<RemoteAccessPort>()
     val appSettings = koinInject<AppSettingsGateway>()
-    val permissionManager = koinInject<PermissionManager>()
     val scope = rememberCoroutineScope()
-    var checkingRoot by remember { mutableStateOf(false) }
     var showRecognitionDialog by remember { mutableStateOf(false) }
     if (showRecognitionDialog) {
         LowPrecisionRecognitionDialog { enabled ->
@@ -310,35 +409,7 @@ private fun OtherCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Unit
         Text(stringResource(R.string.settings_alas_error_notifications_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            stringResource(R.string.permission_backend),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(top = MaaDesignTokens.Spacing.md),
-        )
-        MaaSingleChoiceFlow(
-            options = RemoteBackend.entries.map { it to it.display },
-            selected = state.remoteAccess.configuredBackend,
-            onSelect = { onIntent(SettingsIntent.SetBackend(it)) },
-            optionEnabled = { state.remoteAccess.canSelect(it) && !checkingRoot },
-        )
-        if (!state.remoteAccess.rootGranted) {
-            Text(
-                text = stringResource(if (state.remoteAccess.rootAvailable)
-                    R.string.root_permission_required else R.string.root_unavailable),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            TextButton(
-                enabled = !checkingRoot,
-                onClick = {
-                    checkingRoot = true
-                    scope.launch {
-                        try { accessPort.request(RemoteBackend.ROOT) }
-                        finally { checkingRoot = false; permissionManager.refresh() }
-                    }
-                },
-            ) { Text(stringResource(if (checkingRoot) R.string.permission_requesting else R.string.root_check_permission)) }
-        }
+
     }
 }
 
