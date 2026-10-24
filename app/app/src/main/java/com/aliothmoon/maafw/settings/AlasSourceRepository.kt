@@ -78,7 +78,9 @@ internal object AlasDeployCodec {
         return Scalar(value, raw.substring(token.length), style)
     }
 
-    private fun fields(text: String): Map<String, MatchResult> {
+    private fun fields(text: String, section: String = "Git",
+                       keys: Set<String> = setOf("Repository", "Branch"),
+                       allowMissing: Boolean = false): Map<String, MatchResult> {
         val mapping = Regex("""^( *)([A-Za-z_]\w*):[ \t]*(.*)$""")
         val parents = mutableListOf<Pair<Int, String>>()
         val positions = mutableSetOf<Int>()
@@ -99,18 +101,47 @@ internal object AlasDeployCodec {
             val key = match.groupValues[2]
             val value = match.groupValues[3]
             val path = parents.map { it.second }
-            if (path == listOf("Deploy", "Git") && key in setOf("Repository", "Branch")) positions += start
+            if (path == listOf("Deploy", section) && key in keys) positions += start
             if (value.isBlank() || value.startsWith('#')) {
                 if (key == "Deploy" && path.isEmpty()) deployCount++
-                if (key == "Git" && path == listOf("Deploy")) gitCount++
+                if (key == section && path == listOf("Deploy")) gitCount++
                 parents += indent to key
             } else if (value.startsWith('|') || value.startsWith('>')) scalarIndent = indent
         }
-        val matches = keyLine.findAll(text).filter { it.range.first in positions }.toList()
-        require(deployCount == 1 && gitCount == 1 && matches.size == 2 &&
-            matches.map { it.groupValues[2] }.toSet().size == 2) { "Missing or ambiguous deploy source" }
+        val pattern = if (section == "Git") keyLine
+            else Regex("(?m)^([ \\t]*)(Run)(:[ \\t]*)([^\\r\\n]*)(\\r?)$")
+        val matches = pattern.findAll(text).filter { it.range.first in positions }.toList()
+        require(deployCount == 1 && gitCount == 1 &&
+            (allowMissing || matches.size == keys.size) &&
+            matches.map { it.groupValues[2] }.toSet().size == matches.size) { "Missing or ambiguous deploy field" }
         return matches.associateBy { it.groupValues[2] }
     }
+
+    fun readRun(text: String): String {
+        val match = fields(text, "Webui", setOf("Run"), allowMissing = true)["Run"] ?: return ""
+        val value = scalar(match.groupValues[4])
+        return if (value.quote == null && value.value in setOf("null", "~", "")) "" else value.value
+    }
+
+    fun replaceRun(text: String, config: String): String {
+        require(config.isEmpty() || validRunConfig(config)) { "Invalid startup configuration" }
+        val match = fields(text, "Webui", setOf("Run"), allowMissing = true)["Run"]
+        val value = if (config.isEmpty()) "null" else "'$config'"
+        if (match != null) {
+            val old = scalar(match.groupValues[4])
+            val replacement = match.groupValues[1] + "Run" + match.groupValues[3] + value +
+                old.suffix + match.groupValues[5]
+            return text.replaceRange(match.range, replacement)
+        }
+        val header = Regex("(?m)^([ ]*)Webui:[ \\t]*(?:#[^\\r\\n]*)?(\\r?)$").find(text)
+            ?: error("Webui unavailable")
+        val newline = if (text.contains("\r\n")) "\r\n" else "\n"
+        return text.replaceRange(header.range, header.value.removeSuffix("\r") + newline +
+            header.groupValues[1] + "  Run: $value" + header.groupValues[2])
+    }
+
+    fun validRunConfig(config: String): Boolean = Regex("[A-Za-z0-9_-]+").matches(config) &&
+        !config.startsWith('-') && !config.startsWith("template")
 
     fun read(text: String): AlasSource {
         val fields = fields(text)
@@ -182,6 +213,24 @@ class AlasSourceRepository(private val alasDir: File) {
         val match = pattern.find(text)
         match?.groupValues?.get(1)?.trim('\'', '"') ?: "default"
     }
+
+    /** ALAS owns Run; both its WebUI and AOS settings read the same deploy field. */
+    fun readRunConfig(): String = locked {
+        check(deploy.isFile && !Files.isSymbolicLink(deploy.toPath())) { "Deploy unavailable" }
+        AlasDeployCodec.readRun(decode(deploy.readBytes()))
+    }
+
+    fun saveRunConfig(config: String) = locked {
+        check(config.isEmpty() || config in runConfigs()) { "Configuration unavailable" }
+        val current = deploy.readBytes()
+        val bytes = AlasDeployCodec.replaceRun(decode(current), config).toByteArray(Charsets.UTF_8)
+        if (!bytes.contentEquals(current)) atomicReplace(deploy, bytes, current)
+    }
+
+    fun runConfigs(): List<String> = File(alasDir, "config").listFiles().orEmpty()
+        .filter { it.isFile && !Files.isSymbolicLink(it.toPath()) && it.extension == "json" &&
+            AlasDeployCodec.validRunConfig(it.nameWithoutExtension) }
+        .map { it.nameWithoutExtension }.sorted()
 
     fun updateTheme(theme: String): Boolean {
         require(theme == "dark" || theme == "default") { "Invalid theme: $theme" }
