@@ -62,6 +62,17 @@ set APP_HOME=%DIRNAME%
 @rem Resolve any "." and ".." in APP_HOME to make it shorter.
 for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 
+@rem Reuse a persistent installation only when it matches this wrapper's version.
+if not defined GRADLE_HOME goto useWrapper
+if not exist "%GRADLE_HOME%\bin\gradle.bat" goto useWrapper
+for /f "tokens=2 delims==" %%u in ('findstr /b "distributionUrl=" "%APP_HOME%\gradle\wrapper\gradle-wrapper.properties"') do set "AOS_GRADLE_DISTRIBUTION=%%u"
+set "AOS_GRADLE_VERSION=%AOS_GRADLE_DISTRIBUTION:*gradle-=%"
+set "AOS_GRADLE_VERSION=%AOS_GRADLE_VERSION:-bin.zip=%"
+set "AOS_GRADLE_VERSION=%AOS_GRADLE_VERSION:-all.zip=%"
+if not exist "%GRADLE_HOME%\lib\gradle-launcher-%AOS_GRADLE_VERSION%.jar" goto useWrapper
+endlocal & call "%GRADLE_HOME%\bin\gradle.bat" %* & call :exitWithErrorLevel & goto exitWithErrorLevel
+
+:useWrapper
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
