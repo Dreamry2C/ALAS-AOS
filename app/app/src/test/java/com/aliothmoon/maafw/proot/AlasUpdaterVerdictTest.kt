@@ -12,7 +12,7 @@ class AlasUpdaterVerdictTest {
         assertTrue(summary("PHASE fetch\nUPDATED $sha\n").updated)
         assertEquals("UNCHANGED $sha (cdn)", summary("UNCHANGED $sha (cdn)\n").summary)
         assertFalse(summary("UPDATED $sha", exit = 1).updated)
-        assertEquals("SKIPPED backoff-until-tomorrow",
+        assertEquals("SKIPPED invalid-verdict",
             summary("UNCHANGED backoff-until-tomorrow current=$sha").summary)
     }
 

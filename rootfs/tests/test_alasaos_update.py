@@ -159,12 +159,15 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(self.git(self.alas, 'symbolic-ref', '--short', 'HEAD'), 'zenko')
         self.assertEqual(self.git(self.alas, 'rev-parse', '--verify', 'origin/zenko'), self.sha)
 
-    def test_failed_new_source_backs_off_on_second_attempt(self):
+    def test_failed_update_retries_on_every_start_and_ignores_old_marker(self):
         self.assertEqual(self.update(FAIL_PROBE='1', FAIL_FETCH='1').returncode, 1)
+        marker = self.alas / '.alasaos_update_fail_date'
+        marker.write_text('2099-01-01\n')
         p = self.update(FAIL_PROBE='1', FAIL_FETCH='1')
-        self.assertEqual(p.returncode, 0, p.stdout)
-        self.assertIn('backoff-until-tomorrow', p.stdout)
-        p = self.update(branch='master')
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn('PHASE fetch', p.stdout)
+        self.assertFalse(marker.exists())
+        p = self.update()
         self.assertEqual(p.returncode, 0, p.stdout)
         self.assertNotIn('backoff-until-tomorrow', p.stdout)
 

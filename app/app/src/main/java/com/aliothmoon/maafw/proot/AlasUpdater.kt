@@ -29,7 +29,6 @@ class AlasUpdater(
         const val TIMEOUT_MS = 360_000L
         private val commit = Regex("(UPDATED|UNCHANGED) ([0-9a-f]{40}|[0-9a-f]{64})( \\(cdn\\))?")
         private val failed = Regex("FAILED (deploy-config|workdir|invalid-branch|source-marker|git-init|remote|remote-ref|fetch|revision|checkout|reset|cdn-reset)")
-        private val backoff = Regex("UNCHANGED backoff-until-tomorrow current=(unknown|[0-9a-f]{40}|[0-9a-f]{64})")
 
         internal fun summarize(result: ProotHost.ExecResult): Result {
             if (result.timedOut) return Result(false, "SKIPPED timeout")
@@ -37,7 +36,6 @@ class AlasUpdater(
             val line = result.output.takeLast(256).lineSequence().lastOrNull { it.isNotBlank() }
                 ?: return Result(false, "SKIPPED no-verdict")
             if (result.exit == 0 && commit.matches(line)) return Result(line.startsWith("UPDATED "), line)
-            if (result.exit == 0 && backoff.matches(line)) return Result(false, "SKIPPED backoff-until-tomorrow")
             if (result.exit != 0 && failed.matches(line)) return Result(false, "SKIPPED $line")
             return Result(false, "SKIPPED invalid-verdict")
         }
