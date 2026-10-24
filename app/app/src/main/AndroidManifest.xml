@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Shizuku 后端：由 Shizuku 服务校验，未装时无副作用 -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
@@ -82,6 +83,12 @@
           specialUse：现有 FGS 类型没有一个对得上「守护另一块屏上的运行环境」，
           dataSync / mediaProjection 都不是这回事，硬套会在 34+ 被判类型不符
         -->
+        <receiver android:name=".service.BootReceiver" android:exported="true" android:enabled="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".service.RunForegroundService"
             android:exported="false"

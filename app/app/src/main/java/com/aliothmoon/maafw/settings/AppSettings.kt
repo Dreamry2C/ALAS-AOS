@@ -17,6 +17,10 @@ private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
  */
 @PrefSchema
 data class AppSettings(
+    /** Start the foreground runtime after the system's unlocked boot broadcast. */
+    @PrefKey(default = "false")
+    val startOnBoot: String = "false",
+
     /** [com.aliothmoon.maafw.domain.RemoteBackend] 的 name */
     @PrefKey(default = "SHIZUKU")
     val startupBackend: String = "SHIZUKU",
