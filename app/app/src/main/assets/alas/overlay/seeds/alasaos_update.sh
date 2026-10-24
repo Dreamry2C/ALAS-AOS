@@ -2,7 +2,7 @@
 # ALAS source-only update. Repository/Branch are read ONLY from config/deploy.yaml.
 # Legacy argv / ALASAOS_UPDATE_REPO / ALASAOS_UPDATE_BRANCH never override deploy.
 # Host injects static system proxy env into this process only; no pip/TLS/global changes.
-# A real HEAD, origin refs, same-SHA branch checkout and per-source backoff are retained.
+# A real HEAD, origin refs and same-SHA branch checkout are retained.
 # Public output is limited to phase labels and fixed verdicts; never echo raw tool output.
 set -uo pipefail
 umask 077
@@ -16,7 +16,7 @@ SOURCE_FILE="$ALAS_DIR/.alasaos_update_source"
 DEPLOY_YAML="$ALAS_DIR/config/deploy.yaml"
 DEFAULT_REPO="git://git.lyoko.io/AzurLaneAutoScript"
 
-fail() { date +%F > "$FAIL_FILE" 2>/dev/null; echo "FAILED $1"; exit 1; }
+fail() { echo "FAILED $1"; exit 1; }
 # Do not expose shell-generated paths or tool diagnostics (including credentials).
 exec 2>/dev/null
 cd "$ALAS_DIR" || fail "workdir"
@@ -53,11 +53,9 @@ fi
 source_changed=0
 [[ "$want_source" != "$last_source" ]] && source_changed=1
 
-today="$(date +%F)"
-if [[ "$source_changed" -eq 0 && -f "$FAIL_FILE" && "$(cat "$FAIL_FILE" 2>/dev/null)" == "$today" ]]; then
-  echo "UNCHANGED backoff-until-tomorrow current=${current:-unknown}"
-  exit 0
-fi
+# Old versions wrote a daily failure marker. A failed update must never suppress
+# the next explicit AOS startup, including after an APK upgrade.
+rm -f "$FAIL_FILE"
 if [[ "$source_changed" -eq 1 ]]; then
   echo "PHASE source-changed"
   rm -f "$FAIL_FILE"
@@ -112,7 +110,13 @@ fi
 if [[ ! -f .git/FETCH_HEAD && ! -f .git/shallow ]]; then DEPTH=1; fi
 
 echo "PHASE fetch"
-timeout "$TIMEOUT" python3 -S seeds/update_progress.py -- git fetch --progress --depth "$DEPTH" origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" >/dev/null 2>&1 || fail "fetch"
+fetch_options=(--progress --depth "$DEPTH")
+# A shallow base from another source/branch may negotiate unusable thin deltas.
+# Refetch without negotiating that old base; keep the existing repository/config.
+if [[ "$source_changed" -eq 1 || "$current_branch" != "$BRANCH" ]]; then
+  fetch_options+=(--refetch)
+fi
+timeout "$TIMEOUT" python3 -S seeds/update_progress.py -- git fetch "${fetch_options[@]}" origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" >/dev/null 2>&1 || fail "fetch"
 new="$(git rev-parse --verify 'FETCH_HEAD^{commit}' 2>/dev/null)" || fail "revision"
 if [[ "$new" == "$current" && "$source_changed" -eq 0 && "$current_branch" == "$BRANCH" ]]; then
   echo "$new" > "$STATE_FILE"
