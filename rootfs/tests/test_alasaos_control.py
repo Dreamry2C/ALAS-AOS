@@ -37,6 +37,63 @@ class NativeManager:
     def stop(self):
         self.alive=False; self.state=2; self.renderables.append('Manual stop')
 
+class ConfigImportDialogTests(unittest.TestCase):
+    def setUp(self):
+        self.webui = ModuleType('module.webui.app')
+        self.webui.t = lambda key: key
+        self.upload_calls = []
+        self.group_calls = []
+        self.response = None
+
+        def file_upload(*args, **kwargs):
+            self.upload_calls.append((args, kwargs))
+            return {'file_field': kwargs}
+
+        def input_group(**kwargs):
+            self.group_calls.append(kwargs)
+            return self.response
+
+        self.webui.file_upload = file_upload
+        self.webui.input_group = input_group
+        self.modules = patch.dict(sys.modules, {'module.webui.app': self.webui})
+        self.modules.start()
+        self.addCleanup(self.modules.stop)
+        self.options = dict(label='Gui.AppManage.Import', placeholder='Choose file',
+                            help_text='Overwrite warning', accept='.json', required=False, max_size='1M')
+        module.install_config_import()
+
+    def test_cancel_returns_none_to_the_upstream_no_write_path(self):
+        self.assertIsNone(self.webui.file_upload(**self.options))
+        group = self.group_calls[0]
+        self.assertTrue(group['cancelable'])
+        self.assertEqual(group['label'], self.options['label'])
+        self.assertEqual(group['inputs'][0]['file_field'],
+                         dict(self.options, name='alasaos_config_file'))
+
+    def test_submit_preserves_the_original_uploaded_file_object(self):
+        file = {'filename': 'test.json', 'content': b'{"Alas": {"keep": true}}'}
+        self.response = {'alasaos_config_file': file}
+        self.assertIs(self.webui.file_upload(**self.options), file)
+
+    def test_empty_submit_keeps_native_no_file_behavior(self):
+        self.response = {'alasaos_config_file': None}
+        self.assertIsNone(self.webui.file_upload(**self.options))
+
+    def test_other_uploads_and_existing_group_fields_are_unchanged(self):
+        for options in [dict(self.options, name='existing_field'),
+                        dict(self.options, label='Other upload'), dict(self.options, accept='.zip')]:
+            result = self.webui.file_upload(**options)
+            self.assertEqual(result['file_field'], options)
+        self.assertEqual(self.group_calls, [])
+
+    def test_reinitializing_does_not_nest_the_dialog(self):
+        wrapped = self.webui.file_upload
+        module.install_config_import()
+        self.assertIs(self.webui.file_upload, wrapped)
+        self.webui.file_upload(**self.options)
+        self.assertEqual(len(self.group_calls), 1)
+
+
 class SharedControlTests(unittest.TestCase):
     def setUp(self):
         base=ROOT/'.tmp/control-tests'; base.mkdir(parents=True,exist_ok=True)
