@@ -140,8 +140,11 @@ internal object AlasDeployCodec {
             header.groupValues[1] + "  Run: $value" + header.groupValues[2])
     }
 
-    fun validRunConfig(config: String): Boolean = Regex("[A-Za-z0-9_-]+").matches(config) &&
-        !config.startsWith('-') && !config.startsWith("template")
+    fun validRunConfig(config: String): Boolean =
+        config.isNotEmpty() &&
+        !config.startsWith('-') &&
+        !config.startsWith("template") &&
+        config.none { it.isWhitespace() || it in ".\\/:*?\"'<>|\u0000" || it.isISOControl() }
 
     fun read(text: String): AlasSource {
         val fields = fields(text)
