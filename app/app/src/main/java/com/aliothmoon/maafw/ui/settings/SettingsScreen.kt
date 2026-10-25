@@ -3,10 +3,13 @@ package com.aliothmoon.maafw.ui.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -150,7 +153,6 @@ private fun StartupCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Un
         Text(
             stringResource(R.string.permission_backend),
             style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(top = MaaDesignTokens.Spacing.md),
         )
         MaaSingleChoiceFlow(
             options = RemoteBackend.entries.map { it to it.display },
@@ -174,13 +176,14 @@ private fun StartupCard(state: SettingsUiState, onIntent: (SettingsIntent) -> Un
                         finally { checkingRoot = false; permissionManager.refresh() }
                     }
                 },
+                contentPadding = PaddingValues(horizontal = MaaDesignTokens.Spacing.sm, vertical = 0.dp),
+                modifier = Modifier.heightIn(min = MaaDesignTokens.RowHeight.compact),
             ) { Text(stringResource(if (checkingRoot) R.string.permission_requesting else R.string.root_check_permission)) }
         }
-        Spacer(Modifier.height(MaaDesignTokens.Spacing.sm))
+        Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
         Text(
             stringResource(R.string.settings_autorun_config),
             style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(top = MaaDesignTokens.Spacing.md),
         )
         MaaSingleChoiceFlow(
             options = listOf("" to stringResource(R.string.settings_autorun_none)) +
