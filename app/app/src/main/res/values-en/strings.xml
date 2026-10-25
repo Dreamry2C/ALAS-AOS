@@ -735,7 +735,7 @@
     <string name="settings_section_startup">Startup</string>
     <string name="settings_autorun_config">Auto-run</string>
     <string name="settings_autorun_none">Do not run automatically</string>
-    <string name="settings_autorun_desc">The selected configuration runs the next time the ALAS environment starts. The current task continues unchanged.</string>
+    <string name="settings_autorun_desc">The selected configuration runs the next time the ALAS environment starts, and the current task continues unchanged. Restart to refresh configuration files.</string>
     <string name="settings_start_on_boot">Start AOS on boot</string>
     <string name="settings_start_on_boot_desc">Start the AOS environment and the configuration selected above after boot and unlock. Requires authorized Root, or Shizuku already running and authorized. Some systems also require permission to auto-start AOS.</string>
     <string name="settings_startup_save_failed">Startup settings are unavailable or could not be saved. Set up the runtime and try again.</string>

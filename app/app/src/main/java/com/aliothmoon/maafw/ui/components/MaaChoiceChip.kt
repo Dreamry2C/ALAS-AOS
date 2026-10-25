@@ -2,6 +2,7 @@ package com.aliothmoon.maafw.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -73,16 +74,19 @@ fun MaaChoiceChip(
             .then(interactionModifier),
     ) {
         Row(
-            modifier = Modifier.padding(
-                horizontal = MaaDesignTokens.Spacing.md,
-                vertical = MaaDesignTokens.Spacing.sm,
-            ),
+            modifier = Modifier
+                .defaultMinSize(minHeight = MaaDesignTokens.RowHeight.compact)
+                .padding(
+                    horizontal = MaaDesignTokens.Spacing.md,
+                    vertical = MaaDesignTokens.Spacing.xs,
+                ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs),
         ) {
             leading?.invoke()
             Text(
                 text = label,
+                maxLines = 1,
                 // Shared metrics keep option bounds stable across selection and theme changes.
                 style = LegacyTypography.bodySmall.copy(
                     fontWeight = FontWeight.Medium,

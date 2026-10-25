@@ -730,7 +730,7 @@
     <string name="settings_section_startup">启动设置</string>
     <string name="settings_autorun_config">自动运行</string>
     <string name="settings_autorun_none">不自动运行</string>
-    <string name="settings_autorun_desc">保存后，下次启动 ALAS 环境时自动运行所选配置。当前任务保持不变。</string>
+    <string name="settings_autorun_desc">保存后，下次启动 ALAS 环境时自动运行所选配置，当前任务保持不变。重启可刷新配置文件。</string>
     <string name="settings_start_on_boot">开机启动 AOS</string>
     <string name="settings_start_on_boot_desc">设备开机并解锁后自动启动 AOS 环境，并运行上方所选配置。需要已授权的 Root，或已启动并授权的 Shizuku；部分系统还需允许 AOS 自启动。</string>
     <string name="settings_startup_save_failed">启动设置暂不可用或保存失败，请确认运行环境已部署后重试。</string>
