@@ -108,7 +108,7 @@ class SharedControlTests(unittest.TestCase):
         managers=SimpleNamespace(get_manager=get,
             running_instances=lambda: [m for m in self.instances.values() if m.alive])
         self.control=module.Control(managers, SimpleNamespace(), Console)
-        self.control.configs=lambda: ['alas','other']
+        self.control.configs=lambda: ['alas','other','B服小开']
         self.native=get('alas')
     def test_native_start_and_stop_are_immediately_visible(self):
         self.native.start('alas')
@@ -143,9 +143,15 @@ class SharedControlTests(unittest.TestCase):
         other.stop()
         self.assertIn('other task',self.control.logs())
     def test_invalid_config_does_not_start(self):
-        for config in ['../config','unknown']:
+        for config in ['../config','unknown','-invalid']:
             with self.assertRaises(ValueError): self.control.start(config)
         self.assertEqual(self.native.starts,0)
+
+    def test_unicode_and_chinese_config_starts_successfully(self):
+        self.control.start('B服小开')
+        chinese = self.instances['B服小开']
+        self.assertEqual(chinese.starts, 1)
+        self.assertEqual(self.control.status()['config'], 'B服小开')
 
     def prepare_configs(self):
         Path('config').mkdir()
