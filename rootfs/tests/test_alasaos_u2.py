@@ -10,6 +10,16 @@ spec=importlib.util.spec_from_file_location('aos_u2',ROOT/'rootfs/overlays/alasa
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 
 class OptionalU2Tests(TestCase):
+    def test_exists_preserves_query_failures(self):
+        selector=m.BridgeU2().xpath('//*')
+        for error in (ConnectionError('bridge unavailable'), TimeoutError('bridge timeout'),
+                      RuntimeError('UI automation already registered'), ValueError('invalid query')):
+            with self.subTest(error=type(error).__name__):
+                with mock.patch.object(selector,'_nodes',side_effect=error):
+                    with self.assertRaises(type(error)) as raised:
+                        _=selector.exists
+                    self.assertIs(raised.exception,error)
+
     def test_bridge_optional_construction_does_not_open_adb(self):
         connect=mock.Mock(return_value='real-device')
         u2=SimpleNamespace(connect=connect)
@@ -149,3 +159,12 @@ class SelectorTests(TestCase):
     def test_reset_uses_bridge(self):
         self.device.reset_uiautomator()
         self.device._call.assert_called_once_with(method='ui',action='reset')
+
+    def test_malformed_hierarchy_and_xpath_are_reported(self):
+        from lxml import etree
+        self.device.dump_hierarchy.return_value='<hierarchy'
+        with self.assertRaises(etree.XMLSyntaxError):
+            _=self.device(text='missing').exists
+        self.device.dump_hierarchy.return_value=self.XML
+        with self.assertRaises(etree.XPathError):
+            _=self.device.xpath('//*[').exists

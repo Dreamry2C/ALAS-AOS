@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
 import android.graphics.Rect
 import android.os.Bundle
+import android.os.DeadObjectException
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
@@ -15,6 +16,7 @@ import com.aliothmoon.maafw.bridge.InputControlUtils
 import org.json.JSONObject
 import org.xmlpull.v1.XmlSerializer
 import java.io.StringWriter
+import java.lang.reflect.InvocationTargetException
 
 /** UiAutomator2-compatible UI access over the privileged bridge; initialized lazily. */
 object BridgeUiAutomation {
@@ -45,8 +47,17 @@ object BridgeUiAutomation {
         } catch (error: Exception) {
             runCatching { ui?.let { UiAutomation::class.java.getMethod("disconnect").invoke(it) } }
             thread.quitSafely()
-            throw error
+            throw unwrap(error)
         }
+    }
+
+    private fun unwrap(error: Throwable): Throwable =
+        if (error is InvocationTargetException && error.targetException != null) unwrap(error.targetException) else error
+
+    internal fun isDisconnected(error: Throwable): Boolean {
+        val cause = unwrap(error)
+        return cause is DeadObjectException || (cause is IllegalStateException &&
+            cause.message?.startsWith("UiAutomation not connected") == true)
     }
 
     @Synchronized
@@ -79,6 +90,18 @@ object BridgeUiAutomation {
             close()
             return JSONObject().put("ok", true)
         }
+        try {
+            return handleConnected(request)
+        } catch (error: Exception) {
+            // Discard only our stale session. Never replay a click or text action.
+            if (isDisconnected(error)) {
+                runCatching { close() }.exceptionOrNull()?.let(error::addSuppressed)
+            }
+            throw unwrap(error)
+        }
+    }
+
+    private fun handleConnected(request: JSONObject): JSONObject {
         val ui = connect()
         val windows = windows(ui)
         try {

@@ -40,4 +40,11 @@ class AlasStartupSettingsTest {
             assertThrows(IllegalArgumentException::class.java) { AlasDeployCodec.replaceRun(deploy, name) }
         }
     }
+
+    @Test fun unicodeAndChineseConfigurationsAreSupported() {
+        for (name in listOf("B服小开", "碧蓝航线", "alas_2", "config-1")) {
+            val updated = AlasDeployCodec.replaceRun(deploy, name)
+            assertEquals(name, AlasDeployCodec.readRun(updated))
+        }
+    }
 }

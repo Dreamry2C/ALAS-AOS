@@ -193,8 +193,9 @@ object BridgeServer {
             }
         } catch (e: Exception) {
             // 单请求失败不能拖垮服务：记日志 + 错误帧，连接保持
-            Ln.e("$TAG: request '$method' failed", e)
-            runCatching { reply(err(e.message ?: e.toString())) }
+            val rootCause = if (e is java.lang.reflect.InvocationTargetException) e.targetException ?: e else e
+            Ln.e("$TAG: request '$method' failed", rootCause)
+            runCatching { reply(err(rootCause.message ?: rootCause.toString())) }
         }
     }
 

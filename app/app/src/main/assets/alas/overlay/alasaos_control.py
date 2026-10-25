@@ -195,7 +195,8 @@ class Control:
             return {'theme': theme}
 
     def start(self, config, func=None):
-        if not re.fullmatch(r'[A-Za-z0-9_-]+', config) or config not in self.configs():
+        if (not config or any(c in config for c in '.\\/:*?"\'<>|\x00') or config.startswith('-')
+                or config not in self.configs()):
             raise ValueError('Unknown configuration')
         manager = self.managers.get_manager(config)
         manager.start(func=func, ev=self.stop_event())
