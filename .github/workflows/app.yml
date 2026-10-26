@@ -146,7 +146,7 @@ jobs:
 
           src = release_apk()
           version = settings()['app.versionName']
-          dst = Path(f'dist/apk/ALAS-AOS-v{version}-{os.environ["RUNTIME_ABI"]}-lite-release.apk')
+          dst = Path(f'dist/apk/ALAS-AOS-v{version}-{os.environ["RUNTIME_ABI"]}-lite.apk')
 
           with zipfile.ZipFile(src) as archive:
               names = archive.namelist()
@@ -193,7 +193,7 @@ jobs:
 
           src = release_apk()
           version = settings()['app.versionName']
-          dst = Path(f'dist/apk/ALAS-AOS-v{version}-{os.environ["RUNTIME_ABI"]}-release.apk')
+          dst = Path(f'dist/apk/ALAS-AOS-v{version}-{os.environ["RUNTIME_ABI"]}-full.apk')
 
           assets = Path('app/app/src/main/assets/rootfs')
           with (assets / 'rootfs.tar.xz').open('rb') as stream:
@@ -265,8 +265,8 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7
         with:
-          name: ALAS-AOS-${{ matrix.abi }}-release
-          path: dist/apk/ALAS-AOS-*-${{ matrix.abi }}-release.apk
+          name: ALAS-AOS-${{ matrix.abi }}-full
+          path: dist/apk/ALAS-AOS-*-${{ matrix.abi }}-full.apk
           compression-level: 0
           if-no-files-found: error
           retention-days: 30
@@ -275,8 +275,8 @@ jobs:
         if: github.event_name != 'pull_request' && matrix.abi == 'arm64-v8a'
         uses: actions/upload-artifact@v7
         with:
-          name: ALAS-AOS-universal-lite-release
-          path: dist/apk/ALAS-AOS-*-universal-lite-release.apk
+          name: ALAS-AOS-universal-lite
+          path: dist/apk/ALAS-AOS-*-universal-lite.apk
           compression-level: 0
           if-no-files-found: error
           retention-days: 30
@@ -300,7 +300,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          pattern: ALAS-AOS-*-release
+          pattern: ALAS-AOS-*
           path: dist/apk
           merge-multiple: true
       - uses: actions/download-artifact@v8
