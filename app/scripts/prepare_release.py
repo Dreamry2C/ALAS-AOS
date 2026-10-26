@@ -28,8 +28,8 @@ def prepare(tag, version, changelog, apk_dir, rootfs_dir, output, notes_override
     for abi in abis:
         if abi not in ('arm64-v8a', 'x86_64'):
             raise ValueError('Unsupported release ABI')
-        apks = [apk_dir / f'ALAS-AOS-v{version}-{abi}-release.apk',
-                apk_dir / f'ALAS-AOS-v{version}-universal-lite-release.apk']
+        apks = [apk_dir / f'ALAS-AOS-v{version}-{abi}-full.apk',
+                apk_dir / f'ALAS-AOS-v{version}-universal-lite.apk']
         suffix = '-amd64' if abi == 'x86_64' else ''
         archive, manifest = rootfs_dir / f'rootfs{suffix}.tar.xz', rootfs_dir / f'BUILD_MANIFEST{suffix}'
         inputs = [*apks, archive, manifest]

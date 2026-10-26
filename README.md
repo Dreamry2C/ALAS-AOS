@@ -62,7 +62,7 @@ Shizuku 是开源的特权桥接工具，让普通 App 也能使用系统级能�
 
 ### 第 2 步：安装 ALAS-AOS
 
-1. 到 [Release 页](https://github.com/Dreamry2C/ALAS-AOS/releases) 下载：大多数手机选择 `arm64-v8a-release.apk` 完整版，x86_64 安卓设备或模拟器选择 `x86_64-release.apk` 完整版；也可选择支持两种架构的 `universal-lite-release.apk`，首次启动在线下载运行环境。
+1. 到 [Release 页](https://github.com/Dreamry2C/ALAS-AOS/releases) 下载：大多数手机选择 `arm64-v8a-full.apk` 完整版，x86_64 安卓设备或模拟器选择 `x86_64-full.apk` 完整版；也可选择支持两种架构的 `universal-lite.apk`，首次启动在线下载运行环境。
 2. 安装并打开，阅读低精度识别模式的风险提示；确认和取消都需等待 5 秒，之后可在「设置 → 其他设置」中随时开关。按引导完成 **Shizuku 授权**，如有授权 root 则可直接使用 Root 模式。
 3. 耐心等待首启部署（解压运行环境 + 热更新检查），完成后自动进入主页。🎊
 

@@ -148,9 +148,10 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     // Debug / nonMinified / benchmark do not produce OBFUSCATION_MAPPING_FILE.
                     // Wiring the task there leaves mapping unconfigured and configure fails.
                     if (variant.name == "release") {
+                        val edition = if (file("src/main/assets/rootfs/rootfs.tar.xz").isFile) "full" else "lite"
                         variant.outputs.forEach { output ->
                             output.outputFileName.set(output.versionName.map {
-                                "ALAS-AOS-v$it-$runtimeAbi-release.apk"
+                                "ALAS-AOS-v$it-$runtimeAbi-$edition.apk"
                             })
                         }
                         val verify = tasks.register<VerifyR8KeepsTask>("verifyReleaseR8Keeps") {

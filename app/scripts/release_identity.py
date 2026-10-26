@@ -29,7 +29,8 @@ def java_tool(name):
 def release_apk():
     version = settings()['app.versionName']
     abi = os.environ.get('RUNTIME_ABI', 'arm64-v8a')
-    return ROOT / f'app/app/build/outputs/apk/release/ALAS-AOS-v{version}-{abi}-release.apk'
+    edition = 'full' if (ROOT / 'app/app/src/main/assets/rootfs/rootfs.tar.xz').is_file() else 'lite'
+    return ROOT / f'app/app/build/outputs/apk/release/ALAS-AOS-v{version}-{abi}-{edition}.apk'
 
 
 def prepare():
