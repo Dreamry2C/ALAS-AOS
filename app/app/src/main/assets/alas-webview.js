@@ -29,6 +29,19 @@
       overflow-y: auto;
       overscroll-behavior: contain;
     }
+    /* Older WebViews show a separate opaque form page. */
+    @supports not selector(:has(form)) {
+      body.alasaos-manage #input-container {
+        display: none;
+        background: #fff;
+      }
+      body.alasaos-manage #input-container.alasaos-form-open {
+        display: flex;
+      }
+      body.alasaos-manage.webio-theme-dark #input-container {
+        background: #0d1117;
+      }
+    }
     body.alasaos-manage #end-space { height: 0 !important; }
     body.alasaos-manage #pywebio-scope-config_table button { white-space: nowrap; }
     body.alasaos-manage #pywebio-scope-config_table th:last-child { text-align: center; }
@@ -52,6 +65,13 @@
   window.addEventListener('resize', resize);
   window.visualViewport?.addEventListener('resize', resize);
   window.visualViewport?.addEventListener('scroll', resize);
+
+  const legacyForms = !window.CSS?.supports('selector(:has(form))');
+  const syncLegacyForm = () => {
+    if (!legacyForms || !document.body.classList.contains('alasaos-manage')) return;
+    const panel = document.getElementById('input-container');
+    panel?.classList.toggle('alasaos-form-open', !!panel.querySelector('form'));
+  };
 
   // PyWebIO exports an in-memory Blob through FileSaver, not an HTTP download.
   // A prompt supplies the frame origin to WebChromeClient without exposing a
@@ -108,6 +128,7 @@
   };
   const mutations = new MutationObserver(records => {
     addDeleteButtons();
+    syncLegacyForm();
     const current = document.getElementById('pywebio-scope-schedulers');
     if (current !== scheduler) {
       bind(current);
@@ -129,5 +150,6 @@
   });
   bind(document.getElementById('pywebio-scope-schedulers'));
   addDeleteButtons();
+  syncLegacyForm();
   mutations.observe(document.body, {childList: true, subtree: true});
 })();
