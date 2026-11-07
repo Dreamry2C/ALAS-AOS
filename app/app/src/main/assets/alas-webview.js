@@ -47,6 +47,17 @@
     body.alasaos-manage #pywebio-scope-config_table th:last-child { text-align: center; }
     .alasaos-config-actions { display: flex; align-items: center; justify-content: center; gap: 6px; }
     .alasaos-config-actions button { margin: 0 !important; }
+    .alasaos-log-accessible-summary {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      user-select: none;
+      pointer-events: none;
+    }
   `;
   document.head.appendChild(style);
   if (new URL(location.href).searchParams.get('app') === 'manage') {
@@ -108,6 +119,45 @@
     });
   };
 
+  // Keep rich logs out of WebView's expensive accessibility traversal. A bounded
+  // label preserves recent text without adding duplicate selectable content.
+  let logScope = null, logSummary = null, logSummaryTimer = null;
+  const updateLogSummary = () => {
+    if (!logScope || !logSummary) return;
+    const text = logScope.textContent.slice(-512).split(/\r?\n/).slice(-8).join('\n').trim();
+    if (logSummary.getAttribute('aria-label') !== text) logSummary.setAttribute('aria-label', text);
+  };
+  const syncLogAccessibility = (records = []) => {
+    const current = document.getElementById('pywebio-scope-log');
+    if (current !== logScope || (current && !logSummary?.isConnected)) {
+      clearTimeout(logSummaryTimer);
+      logSummaryTimer = null;
+      logSummary?.remove();
+      logScope = current;
+      logSummary = null;
+      if (current) {
+        current.setAttribute('aria-hidden', 'true');
+        logSummary = document.createElement('span');
+        logSummary.className = 'alasaos-log-accessible-summary';
+        logSummary.setAttribute('role', 'log');
+        logSummary.setAttribute('aria-live', 'off');
+        current.parentElement.appendChild(logSummary);
+        updateLogSummary();
+      }
+      return;
+    }
+    if (current && logSummaryTimer === null && records.some(record => current.contains(record.target))) {
+      logSummaryTimer = setTimeout(() => {
+        logSummaryTimer = null;
+        updateLogSummary();
+      }, 1000);
+    }
+  };
+  window.addEventListener('pagehide', () => {
+    clearTimeout(logSummaryTimer);
+    logSummaryTimer = null;
+  });
+
   // Task scopes are cleared and refilled by separate server messages. Keep the
   // last grid tracks until that short burst settles, so empty lists do not
   // redistribute all of the mobile overview's space between messages.
@@ -127,6 +177,7 @@
     grids.forEach(el => sizes.observe(el));
   };
   const mutations = new MutationObserver(records => {
+    syncLogAccessibility(records);
     addDeleteButtons();
     syncLegacyForm();
     const current = document.getElementById('pywebio-scope-schedulers');
@@ -151,5 +202,6 @@
   bind(document.getElementById('pywebio-scope-schedulers'));
   addDeleteButtons();
   syncLegacyForm();
+  syncLogAccessibility();
   mutations.observe(document.body, {childList: true, subtree: true});
 })();
