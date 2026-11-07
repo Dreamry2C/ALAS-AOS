@@ -222,8 +222,8 @@ rm -f "$ROOTFS_DIR/tmp/$WHL_BASE"
 # 该 whl 把 libmxnet.so 装进 data scheme（如 /usr/local/mxnet/），mxnet 包目录里没有它，
 # `import mxnet` 会报 "Cannot find the MXNet library"（find_lib_path 先查包目录）。
 # 把真实 .so 软链进包目录，避免重复占用约 102MB；strip 仍作用于真实文件。
-REAL_SO="$(find "$ROOTFS_DIR" -type f -name libmxnet.so | head -1)"
-MX_PKG_DIR="$(find "$ROOTFS_DIR" -type d -path '*/dist-packages/mxnet' | head -1)"
+REAL_SO="$(find "$ROOTFS_DIR" -xdev -type f -name libmxnet.so | head -1)"
+MX_PKG_DIR="$(find "$ROOTFS_DIR" -xdev -type d -path '*/dist-packages/mxnet' | head -1)"
 if [[ -n "$REAL_SO" && -n "$MX_PKG_DIR" && ! -e "$MX_PKG_DIR/libmxnet.so" ]]; then
   ln -sf "${REAL_SO#"$ROOTFS_DIR"}" "$MX_PKG_DIR/libmxnet.so"
   log "symlink libmxnet.so → $MX_PKG_DIR/libmxnet.so -> ${REAL_SO#"$ROOTFS_DIR"}"
@@ -288,7 +288,7 @@ install -D -m 0755 "$ASSETS/seeds/alasaos_restore.sh" "$ROOTFS_DIR/opt/alas/seed
 
 # strip libmxnet.so 瘦身：whl 内是未 strip 的 aarch64 .so（~102MB）；--strip-unneeded 去掉调试/
 # 符号表但保留动态导出符号（mxnet 靠动态符号加载，安全）。site-packages 内是符号链接，取真实文件。
-MXNET_SO="$(find "$ROOTFS_DIR" -type f -name libmxnet.so | head -1)"
+MXNET_SO="$(find "$ROOTFS_DIR" -xdev -type f -name libmxnet.so | head -1)"
 if [[ "$ROOTFS_ARCH" == arm64 ]]; then
 if [[ -n "$MXNET_SO" ]]; then
   before=$(stat -c %s "$MXNET_SO")
@@ -313,7 +313,7 @@ log "谁硬依赖 gdal/mesa/llvm/openblas（rdepends --installed）:"
 chroot_run bash -c "for p in libgdal34t64 mesa-libgallium libllvm20 libopenblas0-pthread; do echo \"  [\$p] <- \$(apt-cache rdepends --installed --no-recommends \$p 2>/dev/null | tail -n +3 | tr -d ' ' | tr '\n' ',')\"; done"
 log "模拟移除 gdal/mesa/llvm（--simulate 不真删），看是否连带 opencv:"
 chroot_run bash -c "apt-get remove --purge --auto-remove --simulate libgdal34t64 mesa-libgallium libllvm20 2>&1 | grep -iE 'Remv|opencv|mxnet|imgcodecs' | sed 's/^/  /' | head -40 || echo '  (simulate 无输出)'"
-IMGC="$(find "$ROOTFS_DIR" -name 'libopencv_imgcodecs.so.406' | head -1)"
+IMGC="$(find "$ROOTFS_DIR" -xdev -name 'libopencv_imgcodecs.so.406' | head -1)"
 if [[ -n "$IMGC" ]]; then
   log "libopencv_imgcodecs.so.406 DT_NEEDED（全部，勿删这些）:"
   chroot_run bash -c "readelf -d '${IMGC#"$ROOTFS_DIR"}' 2>/dev/null | grep NEEDED | sed 's/^/  /'"
@@ -426,7 +426,7 @@ strip_alas_tree(Path(sys.argv[2]))
 PY
 log "ALAS 跟踪工作区已剥离，镜像只带 .git pack + AOS untracked 资产"
 fi
-find "$ROOTFS_DIR" -type d -name __pycache__ -prune -exec rm -rf {} +
+find "$ROOTFS_DIR" -xdev -type d -name __pycache__ -prune -exec rm -rf {} +
 rm -rf "$ROOTFS_DIR/root/.cache" "$ROOTFS_DIR/var/lib/apt/lists"/*
 
 OUT="$DIST_DIR/rootfs.tar.xz"
