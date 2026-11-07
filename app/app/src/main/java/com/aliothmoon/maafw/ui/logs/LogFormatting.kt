@@ -12,6 +12,9 @@ import java.util.Locale
  */
 internal fun logTimestamp(atMillis: Long): String = TIMESTAMP.format(Date(atMillis))
 
+internal fun alasErrorTitle(directoryName: String): String =
+    directoryName.toLongOrNull()?.let { "${logTimestamp(it)} ($directoryName)" } ?: directoryName
+
 internal fun formatFileSize(bytes: Long): String = when {
     bytes < KB -> "$bytes B"
     bytes < MB -> "${bytes / KB} KB"

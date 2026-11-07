@@ -131,7 +131,7 @@ private fun AlasLogSectionHeader(title: String) {
 @Composable
 private fun AlasErrorDirRow(dir: AlasErrorDirInfo, onClick: () -> Unit) {
     AlasLogRow(
-        title = logTimestamp(dir.timestamp),
+        title = alasErrorTitle(dir.name),
         subtitle = stringResource(R.string.alas_log_error_meta, dir.fileCount),
         onClick = onClick,
     )

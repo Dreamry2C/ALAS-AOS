@@ -75,7 +75,7 @@ fun AlasErrorDetailScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
-                title = { Text(logTimestamp(dirName.toLongOrNull() ?: 0L)) },
+                title = { Text(alasErrorTitle(dirName)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

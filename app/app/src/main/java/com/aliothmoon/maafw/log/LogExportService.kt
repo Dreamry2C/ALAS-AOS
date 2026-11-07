@@ -26,6 +26,15 @@ enum class LogExportKind(val filePrefix: String) {
     LAUNCHER("launcher_logs_"),
 }
 
+/** One selectable file, or a complete ALAS error record including its attachments. */
+data class LogExportItem(
+    val id: String,
+    val files: List<File>,
+    val errorTimestamp: String? = null,
+    val sizeBytes: Long = files.sumOf { it.length() },
+    val lastModified: Long = files.maxOfOrNull { it.lastModified() } ?: 0L,
+)
+
 /**
  * 把日志打成 zip 交出去
  *
@@ -43,13 +52,36 @@ class LogExportService(
     private val alasLogDir: () -> File,
 ) {
 
-    /** 返回 null = 没有可导出的日志，或打包失败 */
-    suspend fun exportZip(kind: LogExportKind): File? = withContext(MaaDispatchers.IO) {
+    suspend fun availableItems(kind: LogExportKind): List<LogExportItem> = withContext(MaaDispatchers.IO) {
+        collectItems(kind)
+    }
+
+    private fun collectItems(kind: LogExportKind): List<LogExportItem> {
         val now = System.currentTimeMillis()
         val files = when (kind) {
             LogExportKind.ALAS -> LogExportCollector.collectAlas(alasLogDir(), now)
             LogExportKind.LAUNCHER -> LogExportCollector.collect(launcherRoots(), now)
         }
+        return files.groupBy { file ->
+            val path = entryName(kind, file)
+            if (kind == LogExportKind.ALAS && path.startsWith("log/error/")) {
+                path.split('/').take(3).joinToString("/")
+            } else path
+        }.map { (id, members) ->
+            LogExportItem(
+                id = id,
+                files = members,
+                errorTimestamp = if (kind == LogExportKind.ALAS && id.startsWith("log/error/")) {
+                    id.substringAfterLast('/')
+                } else null,
+            )
+        }.sortedByDescending { it.errorTimestamp?.toLongOrNull() ?: it.lastModified }
+    }
+
+    /** Recheck eligible files at export time; an empty selection never means export all. */
+    suspend fun exportZip(kind: LogExportKind, selectedIds: Set<String>): File? = withContext(MaaDispatchers.IO) {
+        if (selectedIds.isEmpty()) return@withContext null
+        val files = collectItems(kind).filter { it.id in selectedIds }.flatMap { it.files }
         if (files.isEmpty()) {
             Timber.w("没有可导出的日志：%s", kind)
             return@withContext null
@@ -67,11 +99,12 @@ class LogExportService(
         }.onFailure { Timber.w(it, "导出日志失败：%s", kind) }.getOrNull()
     }
 
-    suspend fun shareIntent(kind: LogExportKind): Intent? = exportZip(kind)?.let(::createShareIntent)
+    suspend fun shareIntent(kind: LogExportKind, selectedIds: Set<String>): Intent? =
+        exportZip(kind, selectedIds)?.let(::createShareIntent)
 
     /** 写进用户经 SAF 选的位置；成功返回显示名 */
-    suspend fun exportTo(kind: LogExportKind, target: Uri): String? = withContext(MaaDispatchers.IO) {
-        val zip = exportZip(kind) ?: return@withContext null
+    suspend fun exportTo(kind: LogExportKind, selectedIds: Set<String>, target: Uri): String? = withContext(MaaDispatchers.IO) {
+        val zip = exportZip(kind, selectedIds) ?: return@withContext null
         runCatching {
             context.contentResolver.openOutputStream(target)?.use { out ->
                 zip.inputStream().use { it.copyTo(out) }

@@ -7,6 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
 import kotlin.io.path.createTempDirectory
 
 class LogExportCollectorTest {
@@ -100,5 +102,24 @@ class LogExportCollectorTest {
             .map { it.name }.toSet()
 
         assertEquals(setOf("gui.out", "env_fix.txt"), kept)
+    }
+
+    @Test
+    fun `ALAS daily and error logs use the supplied seven day window`() {
+        val today = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate()
+        val keptDay = "${today.minusDays(7)}_alas.txt"
+        val oldDay = "${today.minusDays(8)}_alas.txt"
+        val keptError = now - 7 * day
+        val oldError = keptError - 1
+        write("alas/log/$keptDay")
+        write("alas/log/$oldDay")
+        write("alas/log/error/$keptError/log.txt")
+        write("alas/log/error/$oldError/log.txt")
+        write("alas/log/error/invalid/log.txt")
+
+        val logDir = File(base, "alas/log")
+        val kept = LogExportCollector.collectAlas(logDir, now)
+            .map { it.relativeTo(logDir).invariantSeparatorsPath }.toSet()
+        assertEquals(setOf(keptDay, "error/$keptError/log.txt"), kept)
     }
 }

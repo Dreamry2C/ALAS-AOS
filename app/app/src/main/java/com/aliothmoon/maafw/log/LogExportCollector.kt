@@ -1,7 +1,9 @@
 package com.aliothmoon.maafw.log
 
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
@@ -51,7 +53,8 @@ object LogExportCollector {
      */
     fun collectAlas(alasLogDir: File, now: Long): List<File> {
         val cutoffMillis = now - ROLLING_KEEP_DAYS * MS_PER_DAY
-        val cutoffDay = LocalDate.now().minusDays(ROLLING_KEEP_DAYS)
+        val cutoffDay = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault())
+            .toLocalDate().minusDays(ROLLING_KEEP_DAYS)
         val dated = alasLogDir.listFiles()
             ?.filter { it.isFile && (it.name.endsWith(".txt") || it.name == "gui.out") }
             ?.filter { file ->

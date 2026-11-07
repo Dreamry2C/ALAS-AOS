@@ -457,7 +457,12 @@
     <string name="log_export_share">分享</string>
     <string name="log_export_save">保存到设备</string>
     <string name="log_export_running">正在打包…</string>
-    <string name="log_export_failed">导出失败：没有可导出的日志</string>
+    <string name="log_export_failed">导出失败：无法读取或写入所选日志</string>
+    <string name="log_export_empty">没有可导出的日志</string>
+    <string name="log_export_selected">已选择 %1$d / %2$d 项</string>
+    <string name="log_export_select_all">全选</string>
+    <string name="log_export_select_none">取消全选</string>
+    <string name="log_export_error_meta">错误记录 · %1$d 个文件 · %2$s</string>
     <string name="log_export_saved">已保存为 %1$s</string>
     <string name="log_export_subject">ALAS-AOS 日志</string>
 
@@ -465,8 +470,8 @@
     <string name="settings_section_log">日志</string>
     <string name="settings_log_launcher_desc">查看启动器运行日志与崩溃记录</string>
     <string name="settings_log_alas_desc">查看 ALAS 按天日志与错误现场</string>
-    <string name="settings_log_export_alas_desc">打包近 7 天的 ALAS 日志（官方 issue 格式）</string>
-    <string name="settings_log_export_launcher_desc">打包启动器全部日志与设备属性</string>
+    <string name="settings_log_export_alas_desc">勾选近 7 天的 ALAS 日志并导出（官方 issue 格式）</string>
+    <string name="settings_log_export_launcher_desc">勾选启动器日志并导出，附带设备属性</string>
     <string name="settings_auto_clean_logs">自动清理日志</string>
     <string name="settings_auto_clean_logs_desc">冷启动时自动删除 7 天前的 ALAS 日志，并截断过期的会话日志</string>
     <string name="dialog_disable_auto_clean_title">关闭自动清理</string>

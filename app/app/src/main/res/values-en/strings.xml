@@ -461,7 +461,12 @@
     <string name="log_export_share">Share</string>
     <string name="log_export_save">Save to device</string>
     <string name="log_export_running">Packing…</string>
-    <string name="log_export_failed">Export failed: nothing to export</string>
+    <string name="log_export_failed">Export failed: unable to read or write the selected logs</string>
+    <string name="log_export_empty">No logs available to export</string>
+    <string name="log_export_selected">Selected %1$d / %2$d items</string>
+    <string name="log_export_select_all">Select all</string>
+    <string name="log_export_select_none">Deselect all</string>
+    <string name="log_export_error_meta">Error record · %1$d files · %2$s</string>
     <string name="log_export_saved">Saved as %1$s</string>
     <string name="log_export_subject">ALAS-AOS logs</string>
 
@@ -469,8 +474,8 @@
     <string name="settings_section_log">Logs</string>
     <string name="settings_log_launcher_desc">View launcher run logs and crash records</string>
     <string name="settings_log_alas_desc">View ALAS daily logs and error captures</string>
-    <string name="settings_log_export_alas_desc">Pack the last 7 days of ALAS logs (official issue format)</string>
-    <string name="settings_log_export_launcher_desc">Pack all launcher logs with device properties</string>
+    <string name="settings_log_export_alas_desc">Select ALAS logs from the last 7 days to export (official issue format)</string>
+    <string name="settings_log_export_launcher_desc">Select launcher logs to export with device properties</string>
     <string name="settings_auto_clean_logs">Auto-clean logs</string>
     <string name="settings_auto_clean_logs_desc">On cold start, deletes ALAS logs older than 7 days and truncates stale session logs</string>
     <string name="dialog_disable_auto_clean_title">Disable auto-clean</string>
